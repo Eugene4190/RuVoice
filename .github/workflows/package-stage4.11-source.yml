@@ -1,5 +1,6 @@
 name: Package RuVoice Improved Stage 4.11 source
 # Keep the source archive in sync with the latest project tree on main.
+# This workflow also restores any legacy #U-codepoint asset names before archiving.
 
 on:
   push:
