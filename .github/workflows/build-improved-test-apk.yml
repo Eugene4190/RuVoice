@@ -161,10 +161,34 @@ jobs:
           git push origin HEAD:main
 
       - name: Run Android unit tests and build separate RuVoice Improved APK
+        id: android-build
         working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          set +e
+          LOG="$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
+          gradle --no-daemon --stacktrace :app:testFullDebugUnitTest :app:assembleFullDebug 2>&1 | tee "$LOG"
+          STATUS=${PIPESTATUS[0]}
+          cp "$LOG" "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
+          echo "Android Gradle build exit code: $STATUS"
+          exit "$STATUS"
+
+      - name: Preserve Android Gradle diagnostics after failure
+        if: failure()
+        shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon :app:testFullDebugUnitTest :app:assembleFullDebug
+          test -s "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
+          mkdir -p private-files
+          DIAGNOSTIC="private-files/ruvoice-gradle-diagnostics-${GITHUB_RUN_ID}.log"
+          cp "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log" "$DIAGNOSTIC"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$DIAGNOSTIC"
+          git commit -m "Save Android Gradle diagnostics for run ${GITHUB_RUN_ID}"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
 
       - name: Verify APK package, TTS engine, and ARM64 native libraries
         working-directory: project/ruvoice-1.1.3-stage4.9
@@ -287,7 +311,11 @@ jobs:
           git add private-files/ruvoice-1.1.3-stage4.11.zip \
             private-files/ruvoice-pack-ru_voices.zip \
             project/ruvoice-1.1.3-stage4.9/PHASE4_11_STATUS_RU.md
-          git commit -m "Package RuVoice Improved Stage 4.11 APK and project"
+          if ! git diff --cached --quiet; then
+            git commit -m "Package RuVoice Improved Stage 4.11 APK and project"
+          fi
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
 
       - name: Publish private test release with APK and source archives
