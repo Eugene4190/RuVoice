@@ -115,23 +115,33 @@ jobs:
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
-          set -euo pipefail
-          NDK_ROOT="$ANDROID_HOME/ndk/28.2.13676358"
-          TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          LINKER="$TOOLCHAIN/aarch64-linux-android23-clang"
-          test -x "$LINKER"
-          rustup target add aarch64-linux-android
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$LINKER"
-          export CC_aarch64_linux_android="$LINKER"
-          export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
-          cargo build --manifest-path native/Cargo.toml --target aarch64-linux-android --release --verbose
-          LIB="native/target/aarch64-linux-android/release/libruvoice_tokenizers.so"
-          test -s "$LIB"
-          mkdir -p app/src/main/jniLibs/arm64-v8a
-          install -m 0644 "$LIB" app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
-          file app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
-          readelf -h app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | grep -E 'Class:|Machine:'
-          readelf -h app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | grep -q 'Machine:.*AArch64'
+          set +e
+          LOG="$RUNNER_TEMP/ruvoice-rust-android-build-final.log"
+          {
+            set -x
+            rustc --version --verbose
+            cargo --version
+            NDK_ROOT="$ANDROID_HOME/ndk/28.2.13676358"
+            TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            LINKER="$TOOLCHAIN/aarch64-linux-android23-clang"
+            test -x "$LINKER" || exit 21
+            rustup target add aarch64-linux-android || exit 22
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$LINKER"
+            export CC_aarch64_linux_android="$LINKER"
+            export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+            cargo build --manifest-path native/Cargo.toml --target aarch64-linux-android --release --verbose || exit $?
+            LIB="native/target/aarch64-linux-android/release/libruvoice_tokenizers.so"
+            test -s "$LIB" || exit 23
+            mkdir -p app/src/main/jniLibs/arm64-v8a
+            install -m 0644 "$LIB" app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so || exit $?
+            file app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
+            readelf -h app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | grep -E 'Class:|Machine:'
+            readelf -h app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | grep -q 'Machine:.*AArch64' || exit 24
+          } 2>&1 | tee "$LOG"
+          STATUS=${PIPESTATUS[0]}
+          cp "$LOG" "$RUNNER_TEMP/ruvoice-rust-android-build-final.log"
+          echo "Rust/NDK build exit code: $STATUS"
+          exit "$STATUS"
 
       - name: Preserve Rust/NDK diagnostic log after failure
         if: failure()
