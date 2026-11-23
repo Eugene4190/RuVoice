@@ -110,43 +110,28 @@ jobs:
           unzip -l app/libs/executorch-1.5.0-xnnpack.aar | grep -q 'classes.jar'
           echo "ExecuTorch AAR downloaded and ZIP-validated"
 
-      - name: Build Rust Hugging Face tokenizers for Android ARM64
+      - name: Cross-compile Rust Hugging Face tokenizers for Android ARM64
         id: rust-tokenizers
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
-          set +e
-          LOG="$RUNNER_TEMP/ruvoice-rust-android-build.log"
-          {
-            echo "=== Toolchain ==="
-            rustc --version --verbose
-            cargo --version
-            rustup show
-            echo "ANDROID_HOME=$ANDROID_HOME"
-            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
-            test -d "$ANDROID_HOME/ndk/28.2.13676358" && echo "NDK directory exists" || echo "NDK directory missing"
-            find "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt" -maxdepth 3 -type f -name 'aarch64-linux-android23-clang' -print 2>/dev/null
-            echo "=== cargo-ndk install ==="
-          } > "$LOG" 2>&1
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
-          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/28.2.13676358"
-          cargo install cargo-ndk --locked -vv 2>&1 | tee -a "$LOG"
-          STATUS=${PIPESTATUS[0]}
-          if [[ "$STATUS" -eq 0 ]]; then
-            echo "=== Rust ARM64 cross compilation ===" | tee -a "$LOG"
-            bash -x tools/build_ruvoice_tokenizers.sh 2>&1 | tee -a "$LOG"
-            STATUS=${PIPESTATUS[0]}
-          fi
-          if [[ "$STATUS" -eq 0 ]]; then
-            test -s app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
-            STATUS=$?
-          fi
-          if [[ "$STATUS" -eq 0 ]]; then
-            file app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | tee -a "$LOG"
-          fi
-          cp "$LOG" "$RUNNER_TEMP/ruvoice-rust-android-build-final.log"
-          echo "Rust/NDK build exit code: $STATUS"
-          exit "$STATUS"
+          set -euo pipefail
+          NDK_ROOT="$ANDROID_HOME/ndk/28.2.13676358"
+          TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          LINKER="$TOOLCHAIN/aarch64-linux-android23-clang"
+          test -x "$LINKER"
+          rustup target add aarch64-linux-android
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$LINKER"
+          export CC_aarch64_linux_android="$LINKER"
+          export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+          cargo build --manifest-path native/Cargo.toml --target aarch64-linux-android --release --verbose
+          LIB="native/target/aarch64-linux-android/release/libruvoice_tokenizers.so"
+          test -s "$LIB"
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          install -m 0644 "$LIB" app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
+          file app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
+          readelf -h app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | grep -E 'Class:|Machine:'
+          readelf -h app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | grep -q 'Machine:.*AArch64'
 
       - name: Preserve Rust/NDK diagnostic log after failure
         if: failure()
