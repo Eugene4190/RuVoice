@@ -57,7 +57,8 @@ internal class RuAccentModelInstaller(context: Context) {
                 put("revision", RuAccentInt8ModelManifest.revision)
                 put("files", JSONObject().apply {
                     RuAccentInt8ModelManifest.files.forEach { relative ->
-                        put(relative, sha256(File(staging, relative)))
+                        // validateFile() already compared downloaded bytes with this pinned digest.
+                        put(relative, RuAccentInt8ModelManifest.expectedSha256.getValue(relative))
                     }
                 })
             }
@@ -103,6 +104,7 @@ internal class RuAccentModelInstaller(context: Context) {
                 revision = json.optString("revision"),
                 expectedRevision = RuAccentInt8ModelManifest.revision,
                 expectedFiles = RuAccentInt8ModelManifest.files,
+                expectedHashes = RuAccentInt8ModelManifest.expectedSha256,
                 recordedHashes = recordedHashes,
             )) return@runCatching false
         RuAccentInt8ModelManifest.files.all { relative ->
@@ -129,6 +131,11 @@ internal class RuAccentModelInstaller(context: Context) {
                 "Словарь токенизатора неполный: $relative"
             }
             else -> check(file.length() > 0L) { "Пустой файл: $relative" }
+        }
+        val expected = RuAccentInt8ModelManifest.expectedSha256[relative]
+            ?: error("Нет закреплённого SHA-256 для $relative")
+        check(sha256(file) == expected) {
+            "SHA-256 файла модели не совпадает с закреплённой ревизией: $relative"
         }
     }
 
