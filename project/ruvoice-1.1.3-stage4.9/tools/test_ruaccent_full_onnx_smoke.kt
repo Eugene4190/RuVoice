@@ -66,7 +66,7 @@ fun main() {
                 val prediction = corrector.correct(sample)
                     ?: error("RUAccent returned null for smoke sample ${index + 1}")
                 check(prediction.text.isNotEmpty()) { "RUAccent returned empty text for sample ${index + 1}" }
-                check(prediction.decisions.size == Regex("[\\\\p{L}\\\\u0301]+").findAll(sample).count()) {
+                check(prediction.decisions.size == Regex("[\\p{L}\\u0301]+").findAll(sample).count()) {
                     "Stress decisions do not align with source words in sample ${index + 1}"
                 }
                 println("INFERENCE ${index + 1}: ${prediction.text}")
