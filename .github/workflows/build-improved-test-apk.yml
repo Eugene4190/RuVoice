@@ -111,16 +111,56 @@ jobs:
           echo "ExecuTorch AAR downloaded and ZIP-validated"
 
       - name: Build Rust Hugging Face tokenizers for Android ARM64
+        id: rust-tokenizers
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
+          LOG="$RUNNER_TEMP/ruvoice-rust-android-build.log"
+          {
+            echo "=== Toolchain ==="
+            rustc --version --verbose
+            cargo --version
+            rustup show
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            test -d "$ANDROID_HOME/ndk/28.2.13676358" && echo "NDK directory exists" || echo "NDK directory missing"
+            find "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt" -maxdepth 3 -type f -name 'aarch64-linux-android23-clang' -print 2>/dev/null
+            echo "=== cargo-ndk install ==="
+          } > "$LOG" 2>&1
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
           export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/28.2.13676358"
-          cargo install cargo-ndk --locked
-          bash tools/build_ruvoice_tokenizers.sh
-          test -s app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
-          file app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
+          cargo install cargo-ndk --locked -vv 2>&1 | tee -a "$LOG"
+          STATUS=${PIPESTATUS[0]}
+          if [[ "$STATUS" -eq 0 ]]; then
+            echo "=== Rust ARM64 cross compilation ===" | tee -a "$LOG"
+            bash -x tools/build_ruvoice_tokenizers.sh 2>&1 | tee -a "$LOG"
+            STATUS=${PIPESTATUS[0]}
+          fi
+          if [[ "$STATUS" -eq 0 ]]; then
+            test -s app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so
+            STATUS=$?
+          fi
+          if [[ "$STATUS" -eq 0 ]]; then
+            file app/src/main/jniLibs/arm64-v8a/libruvoice_tokenizers.so | tee -a "$LOG"
+          fi
+          cp "$LOG" "$RUNNER_TEMP/ruvoice-rust-android-build-final.log"
+          echo "Rust/NDK build exit code: $STATUS"
+          exit "$STATUS"
+
+      - name: Preserve Rust/NDK diagnostic log after failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/ruvoice-rust-android-build-final.log"
+          mkdir -p private-files
+          cp "$RUNNER_TEMP/ruvoice-rust-android-build-final.log" private-files/ruvoice-build-diagnostics-latest.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add private-files/ruvoice-build-diagnostics-latest.log
+          git commit -m "Save private Rust Android build diagnostics"
+          git push origin HEAD:main
 
       - name: Run Android unit tests and build separate RuVoice Improved APK
         working-directory: project/ruvoice-1.1.3-stage4.9
