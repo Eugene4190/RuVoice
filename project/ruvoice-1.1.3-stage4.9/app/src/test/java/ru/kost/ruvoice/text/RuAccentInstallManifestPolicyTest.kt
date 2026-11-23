@@ -28,13 +28,16 @@ class RuAccentInstallManifestPolicyTest {
 
     @Test fun acceptsOnlyExactCompletionMarkerWithSha256Values() {
         assertTrue(RuAccentInstallManifestPolicy.isValidCompletionMarker(
-            "owner/repo", "owner/repo", "a".repeat(40), "a".repeat(40), files, hashes,
+            "owner/repo", "owner/repo", "a".repeat(40), "a".repeat(40),
+            files, hashes, hashes,
         ))
         assertFalse(RuAccentInstallManifestPolicy.isValidCompletionMarker(
-            "owner/repo", "owner/repo", "a".repeat(40), "a".repeat(40), files, hashes - files.last(),
+            "owner/repo", "owner/repo", "a".repeat(40), "a".repeat(40),
+            files, hashes, hashes - files.last(),
         ))
         assertFalse(RuAccentInstallManifestPolicy.isValidCompletionMarker(
-            "owner/repo", "owner/repo", "a".repeat(40), "a".repeat(40), files, hashes + (files.last() to "bad"),
+            "owner/repo", "owner/repo", "a".repeat(40), "a".repeat(40),
+            files, hashes, hashes + (files.last() to "bad"),
         ))
     }
 }
