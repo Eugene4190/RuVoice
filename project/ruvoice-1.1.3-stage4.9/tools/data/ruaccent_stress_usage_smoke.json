@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "name": "RUAccent nn_stress_usage Russian NO_STRESS smoke set",
+  "purpose": "A small diagnostic set for the STRESS/NO_STRESS classifier only. It is not a comprehensive gold corpus and does not score vowel placement or homograph readings.",
+  "source_note": "The selected function words are named in stressonnx docs/models.md as words the classifier labels NO_STRESS in most contexts. A mismatch is a diagnostic observation, not by itself proof that the model or runtime is broken.",
+  "cases": [
+    {
+      "id": "no_stress_if",
+      "text": "Если утром будет дождь, останемся дома.",
+      "expect": [{"word": "Если", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_she",
+      "text": "Она сказала, что вернётся позже.",
+      "expect": [{"word": "Она", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_between",
+      "text": "Между станциями ходит автобус.",
+      "expect": [{"word": "Между", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_through",
+      "text": "Через несколько минут начнётся фильм.",
+      "expect": [{"word": "Через", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_before",
+      "text": "Перед спектаклем мы встретились у входа.",
+      "expect": [{"word": "Перед", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_only",
+      "text": "Только сегодня магазин закрывается раньше.",
+      "expect": [{"word": "Только", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_this_was",
+      "text": "Это было неожиданно.",
+      "expect": [
+        {"word": "Это", "occurrence": 0, "label": "NO_STRESS"},
+        {"word": "было", "occurrence": 0, "label": "NO_STRESS"}
+      ]
+    },
+    {
+      "id": "no_stress_his",
+      "text": "Его попросили подождать.",
+      "expect": [{"word": "Его", "occurrence": 0, "label": "NO_STRESS"}]
+    },
+    {
+      "id": "no_stress_or_twice",
+      "text": "Или мы едем сейчас, или ждём до вечера.",
+      "expect": [
+        {"word": "Или", "occurrence": 0, "label": "NO_STRESS"},
+        {"word": "или", "occurrence": 1, "label": "NO_STRESS"}
+      ]
+    },
+    {
+      "id": "no_stress_he",
+      "text": "Он уже вернулся.",
+      "expect": [{"word": "Он", "occurrence": 0, "label": "NO_STRESS"}]
+    }
+  ]
+}

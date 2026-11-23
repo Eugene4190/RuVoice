@@ -1,0 +1,17 @@
+[package]
+name = "ruvoice-tokenizers"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ruvoice_tokenizers"
+crate-type = ["cdylib"]
+
+[package.metadata.ndk]
+platform = 23
+targets = ["arm64-v8a"]
+
+[dependencies]
+jni = "0.21.1"
+# Pure-Rust regex engine avoids cross-compiling the native Oniguruma dependency for Android.
+tokenizers = { version = "0.22.1", default-features = false, features = ["fancy-regex"] }

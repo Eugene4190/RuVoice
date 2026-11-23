@@ -1,0 +1,8 @@
+[
+  {"word": "электростанция", "purpose": "char-model smoke input; no gold label"},
+  {"word": "интерпретация", "purpose": "char-model smoke input; no gold label"},
+  {"word": "достопримечательность", "purpose": "char-model smoke input; no gold label"},
+  {"word": "аэродинамика", "purpose": "char-model smoke input; no gold label"},
+  {"word": "сверхъестественный", "purpose": "char-model smoke input; no gold label"},
+  {"word": "параллелепипед", "purpose": "char-model smoke input; no gold label"}
+]

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "RUAccent ё classifier smoke set",
+  "description": "Small diagnostic set for contextual YO/NO_YO token predictions; not a general accuracy benchmark.",
+  "cases": [
+    {
+      "id": "all-people-no-yo",
+      "text": "Все люди пришли вовремя.",
+      "expect": [{"word": "все", "label": "NO_YO"}]
+    },
+    {
+      "id": "everything-yo",
+      "text": "Он все знает.",
+      "expect": [{"word": "все", "label": "YO"}]
+    },
+    {
+      "id": "about-what-yo",
+      "text": "О чем ты думаешь?",
+      "expect": [{"word": "чем", "label": "YO"}]
+    },
+    {
+      "id": "with-what-no-yo",
+      "text": "Чем ты занят?",
+      "expect": [{"word": "чем", "label": "NO_YO"}]
+    },
+    {
+      "id": "yellow-yo",
+      "text": "Желтый лист лежал на земле.",
+      "expect": [{"word": "желтый", "label": "YO"}]
+    },
+    {
+      "id": "birch-yo",
+      "text": "У березы стояла скамейка.",
+      "expect": [{"word": "березы", "label": "YO"}]
+    },
+    {
+      "id": "beet-yo",
+      "text": "Купили свеклу для борща.",
+      "expect": [{"word": "свеклу", "label": "YO"}]
+    },
+    {
+      "id": "normal-e-no-yo",
+      "text": "Это совсем не тот ответ.",
+      "expect": [{"word": "совсем", "label": "NO_YO"}]
+    }
+  ]
+}

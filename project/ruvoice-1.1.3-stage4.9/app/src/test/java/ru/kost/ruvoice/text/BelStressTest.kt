@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Белорусский текстовый слой для RuVoice TTS (см. LICENSE репозитория).
+package ru.kost.ruvoice.text
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import ru.kost.ruvoice.TestData
+
+/** Язык текста ударений: белорусский конвейер включается слоем пака, русский остаётся по умолчанию. */
+class BelStressTest {
+    private val d = TestData.data()
+
+    /** Акцентор-заглушка: одно слово — вероятности по его гласным (так отдаёт accentor.ptl). */
+    private class Fake(private val probs: Array<FloatArray>) : StressModels {
+        var asked: List<String> = emptyList()
+        override fun accentor(words: List<String>): Pair<Array<FloatArray>, Array<FloatArray>> {
+            asked = words
+            return Pair(probs, emptyArray())
+        }
+        override fun homo(ids: List<LongArray>, starts: LongArray, ends: LongArray): FloatArray = FloatArray(0)
+    }
+
+    @Test fun accentorChoosesVowel() {
+        // «дзякуй»: гласные «я» и «у» — акцентор выбирает вторую
+        val stress = Stress(d, Fake(arrayOf(floatArrayOf(0.1f, 0.9f))), emptyMap(), Rules(), layer = BeLayer)
+        assertEquals("дзяк+уй", stress.apply("дзякуй"))
+    }
+
+    @Test fun shortAndServiceWordsNotMarked() {
+        val m = Fake(arrayOf(floatArrayOf(0.9f, 0.1f)))
+        val stress = Stress(d, m, emptyMap(), Rules(), layer = BeLayer)
+        // «з» — односложное, «намі» — два слога: акцентор спрашиваем только про второе
+        assertEquals("з н+амі", stress.apply("з намі"))
+        assertEquals(listOf("намі"), m.asked)
+    }
+
+    @Test fun hardSignFromApostropheKeptAndLookedUpWithout() {
+        // «абъём» (апостроф → «ъ» в BelNormalizer) ищем как «абём»: словарь и акцентор знают слово без апострофа
+        val m = Fake(arrayOf(floatArrayOf(0.1f, 0.9f)))
+        assertEquals("абъ+ём", Stress(d, m, emptyMap(), Rules(), layer = BeLayer).apply("абъём"))
+        assertEquals(listOf("абём"), m.asked)
+        assertEquals("сямъ+я", Stress(d, Fake(arrayOf(floatArrayOf(0.9f))), mapOf("сямя" to "сям+я"), Rules(), layer = BeLayer).apply("сямъя"))
+    }
+
+    @Test fun userDictWinsOverAccentor() {
+        val stress = Stress(d, Fake(arrayOf(floatArrayOf(0.1f, 0.9f))), mapOf("дзякуй" to "дз+якуй"), Rules(), layer = BeLayer)
+        assertEquals("дз+якуй", stress.apply("дзякуй"))
+    }
+
+    @Test fun dictWordsNotAsked() {
+        // словарь языка (свои списки и «Системный be» из stress.txt пака) — до акцентора, его слова модели не идут
+        val m = Fake(arrayOf(floatArrayOf(0.1f, 0.9f)))
+        val stress = Stress(d, m, mapOf("дзякуй" to "дз+якуй", "сталы" to "+сталы"), Rules(), layer = BeLayer)
+        assertEquals("дз+якуй +сталы", stress.apply("дзякуй сталы"))
+        assertEquals(emptyList<String>(), m.asked)
+    }
+
+    @Test fun accentorRuleOffLeavesOnlyDict() {
+        // «Ударения нейросетью» выключены — модель не зовём (заглушка упала бы), словарь работает, как у русского
+        val boom = object : StressModels {
+            override fun accentor(words: List<String>): Pair<Array<FloatArray>, Array<FloatArray>> = throw AssertionError("акцентор: $words")
+            override fun homo(ids: List<LongArray>, starts: LongArray, ends: LongArray): FloatArray = throw AssertionError("homo")
+        }
+        val stress = Stress(d, boom, mapOf("сталы" to "+сталы"), Rules(setOf("accentor")), layer = BeLayer)
+        assertEquals("дзякуй +сталы", stress.apply("дзякуй сталы"))
+    }
+
+    @Test fun readyPlusKeptWhole() {
+        // «тэлегр+ам» из Latin.WORDS, «з+амак» из текста: слово не режется по «+» и второй раз не размечается
+        val m = Fake(arrayOf(floatArrayOf(0.9f, 0.1f)))
+        val stress = Stress(d, m, emptyMap(), Rules(), layer = BeLayer)
+        assertEquals("тэлегр+ам і З+амак", stress.apply("тэлегр+ам і З+амак"))
+        assertEquals(emptyList<String>(), m.asked)
+    }
+
+    @Test fun hyphenWordWholeThenParts() {
+        // целиком из словаря — акцентор не спрашиваем; иначе по частям, регистр у каждой свой
+        val m = Fake(arrayOf(floatArrayOf(0.9f, 0.1f), floatArrayOf(0.9f, 0.1f)))
+        val stress = Stress(d, m, mapOf("па-беларуску" to "па-белар+уску"), Rules(), layer = BeLayer)
+        assertEquals("Па-белар+уску", stress.apply("Па-беларуску"))
+        assertEquals(emptyList<String>(), m.asked)
+        assertEquals("Ч+орна-б+елы", stress.apply("Чорна-белы"))
+        assertEquals(listOf("чорна", "белы"), m.asked)
+    }
+
+    @Test fun prefixSpaceRussianOnly() {
+        // prefix_space в BeLayer.unsupported: дефис «па-/по-» у белорусского слоя не трогаем ни при вкл, ни при выкл
+        val text = "па-р+уску і по-р+усски"
+        for (rules in listOf(Rules(), Rules(setOf("prefix_space"))))
+            assertEquals(text, Stress(d, Fake(emptyArray()), emptyMap(), rules, layer = BeLayer).forModel(text))
+    }
+
+    @Test fun modelEndKnowsBelarusianVowels() {
+        // «дар+огі» — ударение не на последнем слоге: точка остаётся (end_oxy её снимал, «і» не считалась гласной)
+        val stress = Stress(d, Fake(emptyArray()), emptyMap(), Rules(), layer = BeLayer)
+        assertEquals("тут дар+огі." to false, stress.modelEnd("тут дар+огі."))
+        assertEquals("тут дар+огі." to true, stress.modelEnd("тут дар+огі"))
+        assertEquals("+ухо востр+о" to false, stress.modelEnd("+ухо востр+о."))   // ударное на конце — как было
+        // короткое слово с «ў»/«і»: последняя гласная сдвоена, как у русского «Да.»
+        assertEquals("ўсёё.", stress.stretchShort("ўсё."))
+        assertEquals("ціі?", stress.stretchShort("ці?"))
+    }
+
+    @Test fun packAccentorWithoutYoOutput() {
+        // silero-stress bel/ukr: forward → (logits, None) или один тензор — «ё» пустые строки той же длины
+        val t = org.pytorch.Tensor.fromBlob(floatArrayOf(0f, 1f, 2f, 0f), longArrayOf(2, 2))
+        for (out in listOf(org.pytorch.IValue.tupleFrom(org.pytorch.IValue.from(t), org.pytorch.IValue.optionalNull()), org.pytorch.IValue.from(t))) {
+            val (stress, yo) = ru.kost.ruvoice.SileroModels.accentorOut(out)
+            assertEquals(2, stress.size)
+            assertTrue(stress[0][1] > stress[0][0] && stress[1][0] > stress[1][1])
+            assertEquals(listOf(0, 0), yo.map { it.size })
+        }
+        // русский акцентор — два тензора, как было
+        val (_, yo) = ru.kost.ruvoice.SileroModels.accentorOut(org.pytorch.IValue.tupleFrom(org.pytorch.IValue.from(t), org.pytorch.IValue.from(t)))
+        assertEquals(listOf(2, 2), yo.map { it.size })
+    }
+
+    @Test fun traceForAnalyze() {
+        // «Разбор»: белорусский путь пишет вход и результат
+        val stress = Stress(d, Fake(arrayOf(floatArrayOf(0.1f, 0.9f))), emptyMap(), Rules(), layer = BeLayer)
+        stress.trace = ArrayList()
+        stress.apply("дзякуй")
+        assertEquals(listOf("input: дзякуй", "be: дзяк+уй"), stress.trace)
+    }
+}
