@@ -30,19 +30,25 @@ internal object RuAccentInstallManifestPolicy {
         require(files.all(::isSafeRelativePath)) { "Model bundle manifest contains an unsafe path" }
     }
 
+    fun isValidExpectedHashes(expectedFiles: List<String>, expectedHashes: Map<String, String>): Boolean {
+        if (expectedFiles.isEmpty() || expectedFiles.size != expectedFiles.toSet().size) return false
+        if (expectedFiles.any { !isSafeRelativePath(it) }) return false
+        if (expectedHashes.keys != expectedFiles.toSet()) return false
+        return expectedHashes.values.all(sha256Pattern::matches)
+    }
+
     fun isValidCompletionMarker(
         repository: String,
         expectedRepository: String,
         revision: String,
         expectedRevision: String,
         expectedFiles: List<String>,
+        expectedHashes: Map<String, String>,
         recordedHashes: Map<String, String>,
     ): Boolean {
         if (repository != expectedRepository || revision != expectedRevision) return false
-        if (expectedFiles.isEmpty() || expectedFiles.size != expectedFiles.toSet().size) return false
-        if (expectedFiles.any { !isSafeRelativePath(it) }) return false
-        if (recordedHashes.keys != expectedFiles.toSet()) return false
-        return recordedHashes.values.all(sha256Pattern::matches)
+        if (!isValidExpectedHashes(expectedFiles, expectedHashes)) return false
+        return recordedHashes == expectedHashes
     }
 
     fun isValidSha256(value: String): Boolean = sha256Pattern.matches(value)
