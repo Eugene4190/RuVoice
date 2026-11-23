@@ -15,7 +15,8 @@ android {
         // Separate package/signature: RuVoice Improved installs beside the official RuVoice
         // and never overwrites its app data or TTS settings.
         applicationId = "ru.kost.ruvoice.improved"
-        minSdk = 23
+        // ONNX Runtime Android 1.32.0 requires API 24; official RuVoice stays untouched.
+        minSdk = 24
         targetSdk = 35
         versionCode = 10104
         versionName = "1.1.3-improved"
