@@ -351,6 +351,17 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Package RuVoice Improved Stage 4.11 APK and project"
           fi
+          # The dictionary-name restoration step renames two tracked assets locally.
+          # The source-packaging workflow persists those same renames to origin/main.
+          # Drop only this duplicate local rename before rebasing; the packaged project
+          # ZIP above already contains the correctly named files.
+          git restore --worktree --source=HEAD -- \
+            project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Unexpected tracked worktree changes remain before rebase:"
+            git status --short
+            exit 1
+          fi
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
