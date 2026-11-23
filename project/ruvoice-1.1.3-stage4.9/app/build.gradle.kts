@@ -12,11 +12,13 @@ android {
     namespace = "ru.kost.ruvoice"
     compileSdk = 35
     defaultConfig {
-        applicationId = "ru.kost.ruvoice"
+        // Separate package/signature: RuVoice Improved installs beside the official RuVoice
+        // and never overwrites its app data or TTS settings.
+        applicationId = "ru.kost.ruvoice.improved"
         minSdk = 23
         targetSdk = 35
-        versionCode = 10103
-        versionName = "1.1.3"
+        versionCode = 10104
+        versionName = "1.1.3-improved"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
