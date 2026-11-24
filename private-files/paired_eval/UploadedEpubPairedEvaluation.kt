@@ -765,13 +765,24 @@ class UploadedEpubPairedEvaluationTest {
                 val mergedText = readable(sourceText, combinedStress)
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
                 val mergedTokens = wordRegex.findAll(mergedText).toList()
-                println("YO_REGRESSION_CASE=$caseId source_tokens=${sourceTokens.size} baseline_tokens=${baselineTokens.size} merged_tokens=${mergedTokens.size}")
-                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
-                    "Ё regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
-                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
-                }
-                val baselineWord = baselineTokens[targetIndex].value
-                val mergedWord = mergedTokens[targetIndex].value
+                // Pipeline normalization can expand abbreviations (e.g. ДНК → «дэ эн ка»),
+                // so whole-sentence token counts are not a valid alignment invariant.
+                // Match the same occurrence ordinal of the target word in each stream instead.
+                val targetKey = plain(targetWord).replace('ё', 'е')
+                val targetOccurrence = sourceTokens.take(targetIndex + 1).count {
+                    plain(it.value).replace('ё', 'е') == targetKey
+                } - 1
+                fun targetOccurrence(tokens: List<MatchResult>): String? =
+                    tokens.asSequence()
+                        .map { it.value }
+                        .filter { plain(it).replace('ё', 'е') == targetKey }
+                        .drop(targetOccurrence)
+                        .firstOrNull()
+                val baselineWord = targetOccurrence(baselineTokens)
+                    ?: error("Ё regression $caseId: target occurrence missing from baseline")
+                val mergedWord = targetOccurrence(mergedTokens)
+                    ?: error("Ё regression $caseId: target occurrence missing from merged output")
+                println("YO_REGRESSION_CASE=$caseId source_tokens=${sourceTokens.size} baseline_tokens=${baselineTokens.size} merged_tokens=${mergedTokens.size} target_occurrence=$targetOccurrence baseline_target='$baselineWord' merged_target='$mergedWord'")
                 val actualLabel = if (mergedWord.any { it == 'ё' || it == 'Ё' }) "YO" else "NO_YO"
                 check(actualLabel == expectedLabel) {
                     "Ё regression $caseId: expected $expectedLabel, baseline='$baselineWord', " +
