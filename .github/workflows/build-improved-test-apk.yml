@@ -166,6 +166,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/restore_unicode_asset_names.py
+          AOT_DIR="$RUNNER_TEMP/morph_dict"
+          git clone --depth 1 --filter=blob:none --sparse --branch master \
+            https://github.com/sokirko74/morph_dict.git "$AOT_DIR"
+          git -C "$AOT_DIR" sparse-checkout set data/Russian
+          python3 tools/aot_forms.py "$AOT_DIR/data/Russian"
+          test -s app/build/aot_forms.tsv
           python3 tools/system_dicts.py
           test -s "app/src/main/assets/dicts/stress/Системный.txt"
           test -s "app/src/main/assets/dicts/replace/Системный.txt"
