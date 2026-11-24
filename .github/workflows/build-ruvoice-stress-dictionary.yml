@@ -71,7 +71,7 @@ jobs:
             echo "Generated dictionary and reports are unchanged."
           else
             git commit -m "Generate AOT Wiktionary consensus stress dictionary"
-            git push origin "HEAD:\${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
       - name: Upload generated dictionary and reports
