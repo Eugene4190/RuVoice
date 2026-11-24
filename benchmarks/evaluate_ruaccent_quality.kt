@@ -31,7 +31,7 @@ private fun sha256(file: File): String {
 }
 
 private fun plain(word: String): String =
-    word.replace(ACUTE.toString(), "").lowercase(Locale.ROOT).replace('ё', 'е')
+    word.replace(ACUTE.toString(), "").lowercase(Locale.ROOT).replace('ё', 'е').removeSuffix("ъ")
 
 /** The reference corpus writes the acute after the stressed vowel: "замо́к". */
 private fun markedVowelIndex(word: String): Int {

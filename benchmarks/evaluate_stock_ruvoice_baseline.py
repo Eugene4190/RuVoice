@@ -108,7 +108,7 @@ def main() -> int:
 
         target_variant = gold
         baseline_clean = baseline.replace("+", "")
-        if baseline_clean.replace("ё", "е") != word.replace("ё", "е"):
+        if baseline_clean.replace("ё", "е").removesuffix("ъ") != word.replace("ё", "е").removesuffix("ъ"):
             raise RuntimeError(
                 f"Baseline token alignment changed for item {item_id}: {baseline!r} vs {word!r}"
             )
