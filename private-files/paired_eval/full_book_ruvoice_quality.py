@@ -540,11 +540,12 @@ def main() -> int:
             counts["RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON"] +
             counts["BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW"]
         ),
-        "reviewed_overlay_entries": len(paired.get("book_reviewed_override_entries", [])),
-        "reviewed_overlay_changed_occurrences": reviewed_changed_occurrences,
-        "reviewed_overlay_changed_wordforms": len(reviewed_changed_words),
+        "reviewed_dictionary_override_entries": len(paired.get("book_reviewed_override_entries", [])),
+        "reviewed_phrase_override_entries": paired.get("book_reviewed_phrase_overrides", []),
+        "reviewed_ruvoice_changed_occurrences": reviewed_changed_occurrences,
+        "reviewed_ruvoice_changed_wordforms": len(reviewed_changed_words),
         "reviewed_status_counts": dict(reviewed_counts),
-        "reviewed_overlay_suspected_mismatches": sum(
+        "reviewed_ruvoice_suspected_mismatches": sum(
             count for status, count in reviewed_counts.items() if is_suspected_mismatch(status)
         ),
         "baseline_suspected_mismatches": sum(
