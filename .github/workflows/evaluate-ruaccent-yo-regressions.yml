@@ -42,30 +42,35 @@ jobs:
         working-directory: project/ruvoice-1.1.3-stage4.9
         run: |
           set -euo pipefail
-          REPORT="$GITHUB_WORKSPACE/ruaccent-yo-book-regressions.json"
+          BOOK_REPORT="$GITHUB_WORKSPACE/ruaccent-yo-book-regressions.json"
+          SMOKE_REPORT="$GITHUB_WORKSPACE/ruaccent-yo-smoke.json"
           python tools/probe_ruaccent_yo.py evaluate "$RUNNER_TEMP/ruaccent-yo" \
-            --corpus tools/data/ruaccent_yo_book_regressions.json --json > "$REPORT"
-          python - "$REPORT" <<'PY' >> "$GITHUB_STEP_SUMMARY"
+            --corpus tools/data/ruaccent_yo_book_regressions.json --json > "$BOOK_REPORT"
+          python tools/probe_ruaccent_yo.py evaluate "$RUNNER_TEMP/ruaccent-yo" --json > "$SMOKE_REPORT"
+          python - "$BOOK_REPORT" "$SMOKE_REPORT" <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, sys
           from pathlib import Path
-          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          print("## RUAccent ё context diagnostics")
-          print(f"- Checks: {report['passed']}/{report['total_checks']} matched")
-          print(f"- Mismatches: {report['mismatches']}; missing: {report['missing']}")
-          print("- These are raw classifier predictions, before the RuVoice dictionary and merge policy.")
-          print("- This diagnostic set is targeted; it is not a general accuracy benchmark.")
-          for case in report["cases"]:
-              for check in case["checks"]:
-                  conf = check.get("confidence")
-                  value = "n/a" if conf is None else f"{conf:.4f}"
-                  print(f"- `{case['id']}`: {check['word']} — expected {check['expected']}, "
-                        f"predicted {check['actual']} (confidence {value})")
+          for label, path in (("Exact uploaded-book cases", sys.argv[1]), ("Original diagnostic smoke set", sys.argv[2])):
+              report = json.loads(Path(path).read_text(encoding="utf-8"))
+              print(f"## {label}")
+              print(f"- Checks: {report['passed']}/{report['total_checks']} matched")
+              print(f"- Mismatches: {report['mismatches']}; missing: {report['missing']}")
+              print("- Raw classifier predictions, before the RuVoice dictionary and merge policy.")
+              for case in report["cases"]:
+                  for check in case["checks"]:
+                      conf = check.get("confidence")
+                      value = "n/a" if conf is None else f"{conf:.4f}"
+                      print(f"- `{case['id']}`: {check['word']} — expected {check['expected']}, "
+                            f"predicted {check['actual']} (confidence {value})")
+          print("\\nThe book regression set is targeted; neither report is a general accuracy benchmark.")
           PY
 
       - name: Upload classifier diagnostics
         uses: actions/upload-artifact@v4
         with:
           name: ruaccent-yo-book-regressions
-          path: ruaccent-yo-book-regressions.json
+          path: |
+            ruaccent-yo-book-regressions.json
+            ruaccent-yo-smoke.json
           if-no-files-found: error
           retention-days: 30
