@@ -712,6 +712,7 @@ class UploadedEpubPairedEvaluationTest {
             "отнята" to "отнят+а",
             "шумы" to "ш+умы",
             "двадцать" to "д+вадцать",
+            "десять" to "д+есять",
         )
         check(bookOverrides == expectedBookOverrides) {
             "Book-specific override set differs from reviewed manifest: $bookOverrides"
