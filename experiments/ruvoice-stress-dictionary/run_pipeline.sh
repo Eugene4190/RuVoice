@@ -22,13 +22,21 @@ done
 
 mkdir -p "$CACHE" "$RAW" "$HERE/output" "$HERE/reports"
 
-if [[ ! -s "$WIKT_GZ" ]] || ! gzip -t "$WIKT_GZ" >/dev/null 2>&1; then
+WIKT_PART="${WIKT_GZ}.part"
+if [[ -s "$WIKT_GZ" ]] && gzip -t "$WIKT_GZ" >/dev/null 2>&1; then
+  echo "Использую проверенный кеш Wiktionary: $WIKT_GZ"
+else
+  if [[ -e "$WIKT_GZ" ]]; then
+    echo "Кеш Wiktionary повреждён, удаляю и загружаю заново."
+    rm -f "$WIKT_GZ"
+  fi
   echo "Скачиваю сжатый raw Wiktextract JSONL (~272.5 МБ по снимку от 2026-11-01)."
-  curl --fail --location --retry 3 --continue-at - "$WIKT_URL" -o "$WIKT_GZ"
-fi
-gzip -t "$WIKT_GZ" || {
-  echo "Загруженный архив повреждён: $WIKT_GZ" >&2
-  exit 2
+  curl --fail --location --retry 3 --continue-at - "$WIKT_URL" -o "$WIKT_PART"
+  gzip -t "$WIKT_PART" || {
+    echo "Загруженный архив повреждён: $WIKT_PART" >&2
+    exit 2
+  }
+  mv "$WIKT_PART" "$WIKT_GZ"
 }
 
 if [[ ! -d "$AOT_REPO/.git" ]]; then
