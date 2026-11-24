@@ -870,6 +870,7 @@ class UploadedEpubPairedEvaluationTest {
             val changeRows = JSONArray()
             val reviewCandidates = JSONArray()
             val baselineTokens = JSONArray()
+            val combinedTokens = JSONArray()
             val segmentContexts = JSONArray()
 
             for ((segmentIndex, segment) in segments.withIndex()) {
@@ -902,6 +903,20 @@ class UploadedEpubPairedEvaluationTest {
                         .put("ruvoice_output", outputWord)
                         .put("ruvoice_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL)
                         .put("vowel_count", outputWord.count { it.lowercaseChar() in VOWELS }))
+                }
+                for (wordIndex in newWords.indices) {
+                    val outputWord = newWords[wordIndex].value
+                    val sourceWord = if (sourceWords.size == newWords.size) {
+                        sourceWords[wordIndex].value
+                    } else {
+                        JSONObject.NULL
+                    }
+                    combinedTokens.put(JSONObject()
+                        .put("segment_index", segmentIndex)
+                        .put("word_index", wordIndex)
+                        .put("source_word", sourceWord)
+                        .put("ruaccent_merged_output", outputWord)
+                        .put("ruaccent_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
                 }
                 if (oldWords.size != newWords.size) {
                     alignmentMismatches++
@@ -1037,6 +1052,7 @@ class UploadedEpubPairedEvaluationTest {
                 .put("changes", changeRows)
                 .put("review_candidates", reviewCandidates)
                 .put("baseline_tokens", baselineTokens)
+                .put("combined_tokens", combinedTokens)
                 .put("segment_contexts", segmentContexts)
 
             reportFile.parentFile?.mkdirs()
