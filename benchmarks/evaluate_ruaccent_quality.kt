@@ -285,7 +285,11 @@ private fun evaluateLabelCorpus(
             }
             val index = matching[occurrence]
             val actual = if (kind == "stress_usage") {
-                prediction.decisions[index].name
+                when (prediction.decisions[index]) {
+                    StressDecision.STRESSED -> "STRESS"
+                    StressDecision.UNSTRESSED -> "NO_STRESS"
+                    StressDecision.UNKNOWN -> "UNKNOWN"
+                }
             } else {
                 when (prediction.yoDecisions[index]) {
                     YoDecision.RESTORE_YO -> "YO"
