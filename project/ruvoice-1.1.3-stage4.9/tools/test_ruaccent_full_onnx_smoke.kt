@@ -96,6 +96,7 @@ fun main() {
                 val expected = item.getJSONArray("expect").getJSONObject(0)
                 val target = expected.getString("word")
                 val expectedLabel = expected.getString("label")
+                val expectedSource = item.getString("expected_source")
                 val sourceTokens = tokenPattern.findAll(sentence).map { it.value }.toList()
                 val targetIndex = sourceTokens.indexOfFirst { canonical(it) == canonical(target) }
                 check(targetIndex >= 0) { "Case $caseId: target '$target' is absent from its sentence" }
@@ -105,6 +106,9 @@ fun main() {
                 val outputToken = outputTokens.getOrNull(targetIndex)
                 val decision = result.yoDecisions.getOrNull(targetIndex)
                 val decisionSource = result.yoDecisionSources.getOrNull(targetIndex)
+                check(decisionSource?.name == expectedSource) {
+                    "Case $caseId: expected decision source $expectedSource, got $decisionSource"
+                }
                 val actual = when {
                     outputToken == null -> "MISSING"
                     outputToken.any { it == 'ё' || it == 'Ё' } -> "YO"
@@ -114,7 +118,7 @@ fun main() {
                 if (ok) matched++
                 println(
                     "BOOK_YO $caseId expected=$expectedLabel actual=$actual " +
-                    "decision=$decision source=$decisionSource token=" + (outputToken ?: "<missing>")
+                    "decision=$decision source=$decisionSource expectedSource=$expectedSource token=" + (outputToken ?: "<missing>")
                 )
             }
             println("BOOK_YO_SUMMARY matched=" + matched + " total=" + cases.length())
