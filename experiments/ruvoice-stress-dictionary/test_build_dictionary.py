@@ -34,10 +34,20 @@ class StressDictionaryTests(unittest.TestCase):
             self.assertEqual([row.word for row in rows], ["творог"])
             self.assertEqual(len(rejected), 2)
 
-    def test_trusted_source_conflict_is_withheld(self):
-        one = [tool.Entry("замок", "з+амок", "one")]
-        two = [tool.Entry("замок", "зам+ок", "two")]
-        result, rejected = tool.merge_entries([one, two], [])
+    def test_first_source_wins_over_later_source(self):
+        first = [tool.Entry("замок", "з+амок", "stage4.9")]
+        later = [tool.Entry("замок", "зам+ок", "upstream")]
+        result, rejected = tool.merge_entries([first, later], [])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].marked, "з+амок")
+        self.assertEqual(len(rejected), 1)
+
+    def test_conflict_inside_one_source_is_withheld(self):
+        rows = [
+            tool.Entry("замок", "з+амок", "same-source"),
+            tool.Entry("замок", "зам+ок", "same-source"),
+        ]
+        result, rejected = tool.merge_entries([rows], [])
         self.assertEqual(result, [])
         self.assertEqual(len(rejected), 1)
 
