@@ -39,6 +39,9 @@ kotlinc \
   -include-runtime -d "$OUT"
 
 mkdir -p "$PROJECT/app/build"
+python3 "$REPO_ROOT/benchmarks/evaluate_stock_ruvoice_baseline.py" \
+  "$PROJECT/app/src/test/resources/homograph_eval/HomographResolutionEval.json" \
+  "$PROJECT/app/build/stock_ruvoice_baseline.json"
 java \
   -Djava.library.path="$PROJECT/native/target/release" \
   -cp "$OUT:$CP" \
@@ -46,4 +49,5 @@ java \
   "$PROJECT/app/src/test/resources/homograph_eval/HomographResolutionEval.json" \
   "$PROJECT/tools/data/ruaccent_stress_usage_smoke.json" \
   "$PROJECT/tools/data/ruaccent_yo_smoke.json" \
-  "$PROJECT/app/build/ruaccent_quality_report.json"
+  "$PROJECT/app/build/ruaccent_quality_report.json" \
+  "$PROJECT/app/build/stock_ruvoice_baseline.json"

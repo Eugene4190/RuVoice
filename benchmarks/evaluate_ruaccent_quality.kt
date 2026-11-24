@@ -40,9 +40,21 @@ private fun markedVowelIndex(word: String): Int {
     return if (marker < 1) -1 else marker - 1
 }
 
-private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: File): JSONObject {
+private fun evaluateHomographs(
+    corrector: RuAccentOnnxCorrector,
+    corpusFile: File,
+    baselineFile: File,
+): JSONObject {
     val items = JSONArray(corpusFile.readText(Charsets.UTF_8))
     require(items.length() > 0) { "Homograph gold corpus is empty" }
+    val baselinePayload = JSONObject(baselineFile.readText(Charsets.UTF_8))
+    require(baselinePayload.optInt("schema_version") == 1) { "Stock baseline report schema is unsupported" }
+    val baselineById = HashMap<Int, JSONObject>()
+    val baselineRows = baselinePayload.getJSONArray("results")
+    for (index in 0 until baselineRows.length()) {
+        val row = baselineRows.getJSONObject(index)
+        baselineById[row.getInt("id")] = row
+    }
 
     var correct = 0
     var noMark = 0
@@ -50,6 +62,12 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
     var missingTarget = 0
     var skippedPhraseTargets = 0
     var alignmentErrors = 0
+    var stockCorrect = 0
+    var combinedCorrect = 0
+    var combinedWins = 0
+    var combinedRegressions = 0
+    var combinedChanges = 0
+    var baselineMissing = 0
     val byWord = LinkedHashMap<String, IntArray>()
     val misses = JSONArray()
 
@@ -98,8 +116,35 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
             continue
         }
 
+        val row = baselineById[item.getInt("id")]
+        if (row == null) {
+            baselineMissing++
+            error("Stock baseline has no scored row for gold item ${item.getInt("id")}")
+        }
+        val stockVariant = row.getString("stock")
+        val stockPosition = stockVariant.indexOf('+')
+        require(plain(stockVariant.replace("+", "")) == plain(goldWord)) {
+            "Stock baseline word alignment failed for item ${item.getInt("id")}: $stockVariant vs $goldWord"
+        }
+
         val observed = predictedTokens[sourceIndex]
         val predictedPosition = markedVowelIndex(observed)
+        val decision = prediction.decisions[sourceIndex]
+        val sourceHasExplicitStress = ACUTE in sourceTokens[sourceIndex] || '+' in sourceTokens[sourceIndex]
+        val combinedPosition = when {
+            sourceHasExplicitStress -> stockPosition
+            decision == StressDecision.STRESSED -> predictedPosition.takeIf { it >= 0 } ?: stockPosition
+            decision == StressDecision.UNSTRESSED -> -1
+            else -> stockPosition
+        }
+        val stockOk = stockPosition == goldPosition
+        val combinedOk = combinedPosition == goldPosition
+        if (stockOk) stockCorrect++
+        if (combinedOk) combinedCorrect++
+        if (!stockOk && combinedOk) combinedWins++
+        if (stockOk && !combinedOk) combinedRegressions++
+        if (combinedPosition != stockPosition) combinedChanges++
+
         val key = plain(goldWord)
         val stat = byWord.getOrPut(key) { intArrayOf(0, 0, 0) }
         stat[0]++
@@ -122,8 +167,11 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
                         .put("word", goldWord)
                         .put("context", context)
                         .put("expected", gold)
-                        .put("actual", observed)
-                        .put("decision", decision)
+                        .put("stock", stockVariant)
+                        .put("actual_ruaccent", observed)
+                        .put("combined_position", combinedPosition)
+                        .put("decision", decision.name)
+                        .put("combined_correct", combinedOk)
                 )
             }
         }
@@ -141,13 +189,22 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
         .put("source_note", "HomographResolutionEval gold-labelled contexts; one target homograph per sentence.")
         .put("items_total", items.length())
         .put("items_scored", evaluated)
-        .put("correct_exact_stress", correct)
+        .put("ruaccent_alone_correct", correct)
         .put("wrong_stress_position", wrongPosition)
         .put("no_stress_mark", noMark)
+        .put("stock_ruvoice_correct", stockCorrect)
+        .put("combined_ruvoice_plus_ruaccent_correct", combinedCorrect)
+        .put("combined_wins_over_stock", combinedWins)
+        .put("combined_regressions_vs_stock", combinedRegressions)
+        .put("combined_changed_target", combinedChanges)
+        .put("combined_net_gain", combinedWins - combinedRegressions)
+        .put("stock_accuracy", if (evaluated == 0) 0.0 else stockCorrect.toDouble() / evaluated)
+        .put("combined_accuracy", if (evaluated == 0) 0.0 else combinedCorrect.toDouble() / evaluated)
+        .put("ruaccent_alone_accuracy", if (evaluated == 0) 0.0 else correct.toDouble() / evaluated)
         .put("missing_target", missingTarget)
         .put("skipped_phrase_targets", skippedPhraseTargets)
         .put("alignment_errors", alignmentErrors)
-        .put("exact_accuracy", if (evaluated == 0) 0.0 else correct.toDouble() / evaluated)
+        .put("baseline_missing", baselineMissing)
         .put("stress_mark_coverage", coverage)
         .put("elapsed_ms", elapsedMs)
         .put("misses", misses)
@@ -172,8 +229,11 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
 
     println("\n=== GOLD HOMOGRAPH EVALUATION ===")
     println("Dataset: ${items.length()} sentences, ${byWord.size} distinct unaccented forms")
-    println("Exact stress: $correct / $evaluated (${"%.2f".format(Locale.ROOT, 100.0 * correct / evaluated.coerceAtLeast(1))}%)")
-    println("Wrong vowel: $wrongPosition; no stress mark: $noMark; target missing: $missingTarget; multiword targets skipped: $skippedPhraseTargets; alignment errors: $alignmentErrors")
+    println("RUAccent alone: $correct / $evaluated (${"%.2f".format(Locale.ROOT, 100.0 * correct / evaluated.coerceAtLeast(1))}%)")
+    println("Stock RuVoice: $stockCorrect / $evaluated (${"%.2f".format(Locale.ROOT, 100.0 * stockCorrect / evaluated.coerceAtLeast(1))}%)")
+    println("Stock + RUAccent merge: $combinedCorrect / $evaluated (${"%.2f".format(Locale.ROOT, 100.0 * combinedCorrect / evaluated.coerceAtLeast(1))}%)")
+    println("RUAccent wins=$combinedWins; regressions=$combinedRegressions; net=${combinedWins - combinedRegressions}; changed=$combinedChanges")
+    println("RUAccent standalone wrong vowel=$wrongPosition; no mark=$noMark; target missing=$missingTarget; multiword skipped=$skippedPhraseTargets; baseline missing=$baselineMissing; alignment errors=$alignmentErrors")
     println("Time: ${elapsedMs} ms")
     println("Worst repeated forms:")
     for (i in 0 until wordArray.length().coerceAtMost(15)) {
@@ -265,13 +325,14 @@ private fun evaluateLabelCorpus(
 }
 
 fun main(args: Array<String>) {
-    require(args.size == 4) {
-        "Usage: Evaluate_ruaccent_qualityKt homograph.json stress_usage.json yo.json output.json"
+    require(args.size == 5) {
+        "Usage: Evaluate_ruaccent_qualityKt homograph.json stress_usage.json yo.json output.json stock-baseline.json"
     }
     val corpusFile = File(args[0])
     val stressUsageFile = File(args[1])
     val yoFile = File(args[2])
     val reportFile = File(args[3])
+    val baselineFile = File(args[4])
 
     val root = Files.createTempDirectory("ruvoice-ruaccent-quality").toFile()
     val downloader = RuAccentHttpDownloader(connectTimeoutMillis = 30_000, readTimeoutMillis = 120_000)
@@ -303,7 +364,7 @@ fun main(args: Array<String>) {
             check(corrector.warmUp()) { "Four ONNX models failed to warm up" }
             println("PASS: all four production Kotlin ONNX sessions are loaded")
 
-            val homographs = evaluateHomographs(corrector, corpusFile)
+            val homographs = evaluateHomographs(corrector, corpusFile, baselineFile)
             val stressUsage = evaluateLabelCorpus(corrector, stressUsageFile, "stress_usage")
             val yo = evaluateLabelCorpus(corrector, yoFile, "yo")
 
