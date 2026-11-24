@@ -356,8 +356,19 @@ def main() -> int:
             f"baseline={len(tokens)}"
         )
     override_entries = paired.get("book_reviewed_override_entries", [])
-    if len(override_entries) != 5:
-        raise SystemExit(f"Ожидалось 5 проверенных книжных исправлений, найдено {len(override_entries)}")
+    expected_overrides = {
+        "утрам": "у+трам",
+        "несчастлив": "несчастли+в",
+        "отнята": "отнят+а",
+        "шумы": "ш+умы",
+        "двадцать": "два+дцать",
+    }
+    actual_overrides = {
+        str(row.get("word", "")): str(row.get("variant", ""))
+        for row in override_entries
+    }
+    if actual_overrides != expected_overrides:
+        raise SystemExit(f"Набор книжных исправлений отличается от проверенного манифеста: {actual_overrides}")
 
     # Use the complete independently merged token stream, not only changed-token samples.
     ruaccent_by_occurrence: dict[tuple[int, int], str] = {}
