@@ -2,7 +2,7 @@ name: Paired baseline vs RUAccent evaluation on uploaded EPUB
 
 on:
   push:
-    branches: [main]
+    branches: [main, stress-dictionary-pipeline]
     paths:
       - "private-files/8.Iskusstvo..epub"
       - "private-files/paired_eval/**"
