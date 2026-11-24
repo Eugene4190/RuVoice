@@ -17,7 +17,7 @@
 - Unit tests: `:app:testFullDebugUnitTest`.
 - APK: `ruvoice-improved-1.1.3.apk`.
 - APK bytes: 290065834.
-- APK SHA-256: `a5dfe4897bab1a0954a61f53ac9cdc1085bb469ddc83932419fb9b284581394b`.
+- APK SHA-256: `b55e9aece1c51db26cf86d416bc08dbe45f1014f2587f636a744bd8d079b6fc5`.
 
 ## Установка и первый запуск
 
