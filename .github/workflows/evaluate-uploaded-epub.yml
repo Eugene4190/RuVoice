@@ -10,6 +10,8 @@ on:
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/RuAccentOnnxCorrector.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/Stress.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/eyo_safe.txt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/YoDictTest.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/IndependentStressCorrectionTest.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/StressCorrectionMergerTest.kt"
       - "project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt"
