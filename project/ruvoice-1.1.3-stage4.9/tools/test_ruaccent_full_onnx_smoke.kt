@@ -104,6 +104,7 @@ fun main() {
                 val outputTokens = tokenPattern.findAll(result.text).map { it.value }.toList()
                 val outputToken = outputTokens.getOrNull(targetIndex)
                 val decision = result.yoDecisions.getOrNull(targetIndex)
+                val decisionSource = result.yoDecisionSources.getOrNull(targetIndex)
                 val actual = when {
                     outputToken == null -> "MISSING"
                     outputToken.any { it == 'ё' || it == 'Ё' } -> "YO"
@@ -113,7 +114,7 @@ fun main() {
                 if (ok) matched++
                 println(
                     "BOOK_YO $caseId expected=$expectedLabel actual=$actual " +
-                    "decision=$decision token=" + (outputToken ?: "<missing>")
+                    "decision=$decision source=$decisionSource token=" + (outputToken ?: "<missing>")
                 )
             }
             println("BOOK_YO_SUMMARY matched=" + matched + " total=" + cases.length())
