@@ -143,7 +143,7 @@ jobs:
           set -euo pipefail
           python tools/restore_unicode_asset_names.py
           python tools/system_dicts.py
-          grep -Eq '^снято[[:space:]]+сн\\+ято([[:space:]]|$)' app/src/main/assets/dicts/stress/Системный.txt
+          grep -Fxq 'снято сн+ято' app/src/main/assets/dicts/stress/Системный.txt
 
       - name: Build the production RUAccent server for paired JVM inference
         shell: bash
