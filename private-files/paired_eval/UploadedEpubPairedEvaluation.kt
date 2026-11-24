@@ -725,6 +725,8 @@ class UploadedEpubPairedEvaluationTest {
             val genitiveEyeCombined = readable("отражается от глаза", combinedStress)
             val handsBaseline = readable("дать разуму в руки инструмент", baselineStress)
             val handsCombined = readable("дать разуму в руки инструмент", combinedStress)
+            val networkBaseline = readable("Сети значений в потоке энергии сознания", baselineStress)
+            val networkCombined = readable("Сети значений в потоке энергии сознания", combinedStress)
             sanity.put("строительство дома_baseline", genitiveHouse)
             sanity.put("строительство дома_combined", genitiveHouseCombined)
             sanity.put("строительство дома_expected", "до́ма")
@@ -740,6 +742,14 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("дать разуму в руки инструмент_expected", "ру́ки")
             sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
             sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
+            sanity.put("Сети значений_baseline", networkBaseline)
+            sanity.put("Сети значений_combined", networkCombined)
+            sanity.put("Сети значений_expected", "Се́ти значений")
+            sanity.put("Сети значений_baseline_matches_expected", networkBaseline.contains("Се́ти значений", ignoreCase = true))
+            sanity.put("Сети значений_combined_matches_expected", networkCombined.contains("Се́ти значений", ignoreCase = true))
+            check(networkBaseline.contains("Се́ти значений", ignoreCase = true)) {
+                "Phrase-specific stress regression failed for 'Сети значений': $networkBaseline"
+            }
 
             // Run the five manually reviewed stress cases before the separate ё suite.
             // This makes a failure in spelling alignment unable to hide the stress-only result.
