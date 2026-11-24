@@ -27,12 +27,27 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         )
         self.assertEqual(status, "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS")
 
-    def test_two_source_consensus_can_identify_a_candidate(self) -> None:
-        status, _ = quality.verdict(
-            "утрам", 1, 0, {0: {"утро:dative plural"}},
-            {0: {"утро:dative plural"}}, set()
+    def test_po_utram_keeps_the_normative_adverbial_variant(self) -> None:
+        rules = quality.load_context_acceptances(
+            SOURCE.with_name("book_context_acceptances.tsv")
         )
-        self.assertEqual(status, "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE")
+        status, _ = quality.verdict(
+            "утрам", 1, 1, {0: {"утро:dative plural"}},
+            {0: {"утро:dative plural"}}, set(),
+            "Фигура появляется по утрам.", rules
+        )
+        self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+    def test_isolated_utram_dative_does_not_use_the_adverbial_exception(self) -> None:
+        rules = quality.load_context_acceptances(
+            SOURCE.with_name("book_context_acceptances.tsv")
+        )
+        status, _ = quality.verdict(
+            "утрам", 0, 0, {0: {"утро:dative plural"}},
+            {0: {"утро:dative plural"}}, set(),
+            "К этим утрам готовились заранее.", rules
+        )
+        self.assertNotEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
 
     def test_both_models_wrong_against_consensus_stays_visible(self) -> None:
         status, _ = quality.verdict(
@@ -82,18 +97,19 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         overlay = SOURCE.with_name("book_reviewed_overrides.txt")
         entries = dict(line.split() for line in overlay.read_text(encoding="utf-8").splitlines() if line.strip())
         expected = {
-            "утрам": "+утрам",
             "несчастлив": "несчастл+ив",
             "отнята": "отнят+а",
             "шумы": "ш+умы",
-            "двадцать": "д+вадцать",
+            "двадцать": "дв+адцать",
             "десять": "д+есять",
         }
         self.assertEqual(entries, expected)
-        expected_positions = {"утрам": 0, "несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0, "десять": 0}
+        expected_positions = {"несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0, "десять": 0}
         vowels = set("аеёиоуыэюя")
         for word, variant in entries.items():
             marker = variant.index("+")
+            self.assertEqual(variant[marker + 1].lower(), next(ch for ch in variant[marker + 1:] if ch.lower() in vowels))
+            self.assertIn(variant[marker + 1].lower(), vowels)
             self.assertEqual(sum(ch in vowels for ch in variant[:marker]), expected_positions[word])
         self.assertEqual(quality.acute_position("два́дцать"), 0)
 
