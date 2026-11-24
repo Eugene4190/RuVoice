@@ -82,7 +82,8 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         // grammar and BERT homograph passes. Those decisions outrank a conflicting independent
         // prediction; ordinary accentor marks remain eligible for RUAccent correction.
         val merged = StressCorrectionMerger.merge(
-            sentence, ruResult, prediction, userDict.keys, ruPass.protectedStressIndices
+            sentence, ruResult, prediction, userDict.keys,
+            ruPass.protectedStressIndices, ruPass.protectedYoIndices
         )
 
         // Не показываем внутренние плюсы как будто это текст: "+о" — это «о́».
@@ -123,6 +124,7 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
     private data class RuApplyResult(
         val text: String,
         val protectedStressIndices: Set<Int>,
+        val protectedYoIndices: Set<Int>,
     )
 
     /** Word indices newly resolved by a native context-aware pass, aligned to merger tokens. */
@@ -157,7 +159,10 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         if (rules.on("accentor")) step("ka", fuseKa(s, source))
         // твёрдое [э] в заимствованиях — после всех ударений, чтобы модель и словари видели обычное «е»
         if (rules.on("hard_e") && hardE != null) step("hard_e", hardE.apply(s))
-        return RuApplyResult(s, protectedStress)
+        val protectedYo = if (rules.on("yo")) {
+            SafeYoDictionaryProtection.findProtectedIndices(sentence, s) { word -> yo?.restore(word) }
+        } else emptySet()
+        return RuApplyResult(s, protectedStress, protectedYo)
     }
 
     /** Фамилия-омограф с заглавной не в начале предложения: «Иван Волков» — «в+олков», а не род. мн. «волк+ов» из exceptions
