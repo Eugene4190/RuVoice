@@ -200,7 +200,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile private-files/paired_eval/full_book_ruvoice_quality.py
+          python -m py_compile private-files/paired_eval/full_book_ruvoice_quality.py private-files/paired_eval/test_full_book_ruvoice_quality.py
+          python -m unittest discover -s private-files/paired_eval -p 'test_*.py' -v
           python private-files/paired_eval/full_book_ruvoice_quality.py \
             --paired-json private-files/ruvoice-paired-book-analysis.json \
             --aot-dir "$RUVOICE_AOT_DIR" \
