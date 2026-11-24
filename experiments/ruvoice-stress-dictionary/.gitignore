@@ -9,3 +9,6 @@ __pycache__/
 # Temporary pipeline directories
 .work/
 *.tmp
+
+# Book excerpts may contain copyrighted text; keep scans local only.
+reports/book_scans/
