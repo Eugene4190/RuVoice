@@ -1,6 +1,6 @@
 # Book-specific reviewed stress overlay
 
-This file contains four case-specific corrections selected after a full production
+This file contains five case-specific corrections selected after a full production
 RuVoice pass over `8.Iskusstvo..epub`.
 
 | Book form | Previous RuVoice output | Reviewed output | Reason |
@@ -9,6 +9,7 @@ RuVoice pass over `8.Iskusstvo..epub`.
 | несчастлив | несча́стлив | несчастли́в | Short masculine form of `несчастливый` |
 | отнята | о́тнята | отнята́ | Short feminine form of `отнятый`; preferred dictionary paradigm uses final stress |
 | шумы | шумы́ | шу́мы | Nominative plural of the noun `шум` in this book context |
+| двадцать | unmarked in two number-expanded passages | два́дцать | Numeral form; both independent sources give first-syllable stress |
 
 These are an experimental, book-only supplement. They are not added to
 `Системный.txt`, the APK, or the cumulative accepted dictionary. The evaluation
