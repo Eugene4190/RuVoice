@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "name": "RUAccent ё regression set from RuVoice paired EPUB evaluation",
+  "description": "29 exact occurrences from the 2026-11-24 uploaded-book paired run. Negative labels are contextually clear e-forms; positive labels are the standard объём spelling and раздроблён in context. This is a targeted regression set, not a general accuracy benchmark.",
+  "cases": [
+    {
+      "id": "samoe-01",
+      "text": "Да и для человечества не самое главное создание идеальной ДНК.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-02",
+      "text": "Грозные признаки того, что глобальное общество потребления уже переросло самое себя, как лекарство в огромной дозе превращается в яд, обратилось против создавшего его человека и начало стеснять его свободу и ухудшать условия жизни в своих эгоистических интересах (разумеется, ради блага самого человека), видны",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-03",
+      "text": "Однако существовал способ исключить то самое негативное давление эгрегориальной среды.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "volume-01",
+      "text": "Но в нем же, в этих согласованных причинно-следственных коммуникационных, событийных и полевых цепях, сосредоточен весь накопленный человечеством энергоинформационный объем.",
+      "expect": [
+        {
+          "word": "объем",
+          "label": "YO"
+        }
+      ],
+      "rationale": "Contextually expected ё spelling."
+    },
+    {
+      "id": "samoe-04",
+      "text": "Потому что это самое «дальше» расположено за пределами биологических ориентиров, которые сообщают привлекательность понятиям, разработанным потребительским человеческим сообществом.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-05",
+      "text": "И это только самое начало пути, первые четыре ступени.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "far-01",
+      "text": "Иметь возможность мыслить независимо ни от чего и путешествовать так далеко, как угодно.",
+      "expect": [
+        {
+          "word": "далеко",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "near-01",
+      "text": "Но в то же время в одном отношении наше мышление недалеко ушло от мышления животных.",
+      "expect": [
+        {
+          "word": "недалеко",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-06",
+      "text": "Самое главное – разум свободен, глубок и вечно молод.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "sky-01",
+      "text": "И даже искусство здесь оказывается бессильно и передает лишь щемящую тоску и смутный образ светлой реальности под бесконечно высоким небом живых созвездий.",
+      "expect": [
+        {
+          "word": "небом",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-07",
+      "text": "Итак, самое главное – это почувствовать поле между ладонями физического тела.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-08",
+      "text": "С последующим воспоминанием делаем то же самое.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "near-02",
+      "text": "Обратите внимание на то, что эта зона расположена в нашем виртуальном пространстве недалеко от зоны «хорошо», но тем не менее не совпадает с ней.",
+      "expect": [
+        {
+          "word": "недалеко",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "near-03",
+      "text": "Вы заметили, что эта зона расположена недалеко от зоны «плохо», но не совпадает с ней.",
+      "expect": [
+        {
+          "word": "недалеко",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-09",
+      "text": "Обратим внимание на то, что реакция мозга – это самое «хорошо-плохо» – вызывается при помещении осознаваемого образа в центр других образов, формирующих контекст, поле для сравнения.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "far-02",
+      "text": "За примерами далеко ходить не нужно.",
+      "expect": [
+        {
+          "word": "далеко",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "years-01",
+      "text": "Тысячи лет люди ищут способ проникновения за грань этого заколдованного круга.",
+      "expect": [
+        {
+          "word": "лет",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-10",
+      "text": "Вроде бы прекрасный метод, это самое самоограничение.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "far-03",
+      "text": "Он превратится в круг ясного познания, сопровождающий разум в каком угодно направлении и как угодно далеко.",
+      "expect": [
+        {
+          "word": "далеко",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "fragmented-01",
+      "text": "Если человек раздроблен, ветвей может быть и несколько, но хилых и странных.",
+      "expect": [
+        {
+          "word": "раздроблен",
+          "label": "YO"
+        }
+      ],
+      "rationale": "Contextually expected ё spelling."
+    },
+    {
+      "id": "samoe-11",
+      "text": "Поскольку мы для самих себя, нашего разума – это только кипение энергии в геометрии информационных переменных, имеющихся у нас в данный момент и продолжающих самое себя, – то лучшего направления, чем логическое продолжение существующего в каждом из нас в каждую эту секунду, своей живущей и растущей ветви, у нас нет.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-12",
+      "text": "Пусть даже это то самое место, которое оказывается долгожданным смыслом жизни в конце правильной тропинки.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "years-02",
+      "text": "Ничего, что всего несколько ферментов, и лицемерно волнующая всех проблема голода на планете решена лет на сто?",
+      "expect": [
+        {
+          "word": "лет",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-13",
+      "text": "То же самое – и совмещаем.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "samoe-14",
+      "text": "Так оно, собственно, и ведет самое себя к кризису, самозабвенно выстраивая из всех этих натяжек не имеющие отношения к реальности композиции, пока не нарвется на реальность.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "volume-02",
+      "text": "Будет адекватным взаимодействие в этом объеме – и мы сможем постепенно распространять его на еще больший объем.",
+      "expect": [
+        {
+          "word": "объем",
+          "label": "YO"
+        }
+      ],
+      "rationale": "Contextually expected ё spelling."
+    },
+    {
+      "id": "samoe-15",
+      "text": "Самое главное, что это распространит наш разум в Большой Мир.",
+      "expect": [
+        {
+          "word": "самое",
+          "label": "NO_YO"
+        }
+      ],
+      "rationale": "The cited book context uses the ordinary е spelling."
+    },
+    {
+      "id": "volume-03",
+      "text": "Ваша задача будет выглядеть просто – слиться с этим пространством при помощи увеличенной на весь его объем области «Я есмь», то есть стать им.",
+      "expect": [
+        {
+          "word": "объем",
+          "label": "YO"
+        }
+      ],
+      "rationale": "Contextually expected ё spelling."
+    },
+    {
+      "id": "volume-04",
+      "text": "Если вы подготовили цель, вам также нужно будет увеличить содержащий ее фрагмент виртуального пространства на наблюдаемый объем.",
+      "expect": [
+        {
+          "word": "объем",
+          "label": "YO"
+        }
+      ],
+      "rationale": "Contextually expected ё spelling."
+    }
+  ]
+}
