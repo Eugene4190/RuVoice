@@ -271,6 +271,7 @@ fun main(args: Array<String>) {
             var restoredYo = 0
             var keptYo = 0
             var alignmentErrors = 0
+            var lexicalChanges = 0
             var functionWordMarked = 0
             var originalYoWords = 0
             var changedSegments = 0
@@ -321,7 +322,7 @@ fun main(args: Array<String>) {
                                 .put("context", shortContext(segment.text, sourceWords[wordIndex], 40)))
                         }
                     }
-                    if (normalizedSource == normalizedOutput && sourceWord.lowercase(Locale.ROOT).contains('е') &&
+                    if (normalizedSource.replace('ё', 'е') == normalizedOutput.replace('ё', 'е') && sourceWord.lowercase(Locale.ROOT).contains('е') &&
                         outputWord.lowercase(Locale.ROOT).contains('ё') &&
                         sourceWord.lowercase(Locale.ROOT) != outputWord.lowercase(Locale.ROOT)) {
                         restoredYo++
@@ -331,8 +332,9 @@ fun main(args: Array<String>) {
                     val yoDecision = prediction.yoDecisions.getOrNull(wordIndex)
                     if (yoDecision == YoDecision.KEEP_E) keptYo++
 
-                    if (normalizedSource != normalizedOutput) {
-                        // Count lexical changes separately; they should not occur in this corrector contract.
+                    if (normalizedSource.replace('ё', 'е') != normalizedOutput.replace('ё', 'е')) {
+                        // A spelling change other than е/ё violates the corrector contract.
+                        lexicalChanges++
                         if (homographSamples.length() < 5) {
                             homographSamples.put(JSONObject().put("type", "LEXICAL_ALIGNMENT")
                                 .put("chapter", segment.chapter).put("source_word", sourceWord).put("output_word", outputWord))
@@ -387,6 +389,7 @@ fun main(args: Array<String>) {
                 .put("segments_changed", changedSegments)
                 .put("segments_without_stress_mark", segmentsWithNoStress)
                 .put("alignment_errors", alignmentErrors)
+                .put("lexical_changes_other_than_yo", lexicalChanges)
                 .put("accuracy_claim", "NOT_MEASURED: EPUB has no gold stress annotation; these are model outputs, not verified corrections.")
                 .put("homograph_review_samples", homographSamples)
                 .put("function_word_stress_samples", functionSamples)
@@ -406,7 +409,7 @@ fun main(args: Array<String>) {
                 " restored_yo=" + restoredYo + " kept_e_decisions=" + keptYo)
             println("BOOK_EVAL_SAFETY function_words_with_stress=" + functionWordMarked +
                 " changed_segments=" + changedSegments + " segments_without_stress=" + segmentsWithNoStress +
-                " alignment_errors=" + alignmentErrors)
+                " alignment_errors=" + alignmentErrors + " lexical_changes=" + lexicalChanges)
             println("BOOK_EVAL_ACCURACY=NOT_MEASURED (нет эталонных ударений в EPUB)")
             println("BOOK_EVAL_HOMOGRAPH_SAMPLES_BEGIN")
             for (i in 0 until homographSamples.length()) {
@@ -425,7 +428,9 @@ fun main(args: Array<String>) {
                     item.optString("ruaccent_word") + " | " + item.optString("context"))
             }
             println("BOOK_EVAL_FUNCTION_WORD_SAMPLES_END")
-            check(alignmentErrors == 0) { "Обнаружены ошибки выравнивания токенов: " + alignmentErrors }
+            check(alignmentErrors == 0 && lexicalChanges == 0) {
+                "Ошибки контракта корректора: alignment=" + alignmentErrors + ", lexical_changes=" + lexicalChanges
+            }
         } finally {
             corrector.close()
         }
