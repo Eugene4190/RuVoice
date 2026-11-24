@@ -4,4 +4,4 @@ This file is a one-time trigger for the **Build automatic RuVoice stress diction
 
 Large source dumps and temporary model files remain ignored and are not committed.
 
-Retry trigger: 2026-11-24, after shell syntax fix.
+Retry trigger: 2026-11-24, corrected generated-output push ref.
