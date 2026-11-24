@@ -47,6 +47,19 @@ class IndependentStressCorrectionTest {
         assertEquals("дверн+ой зам+ок над+ёжен", merged)
     }
 
+    @Test fun independentStressCannotMoveNativeStressOffYo() {
+        val prediction = IndependentStressPrediction(
+            text = "про\u0301йдённый",
+            decisions = listOf(StressDecision.STRESSED),
+        )
+        val merged = StressCorrectionMerger.merge(
+            original = "пройдённый",
+            ruVoice = "пройд+ённый",
+            prediction = prediction,
+        )
+        assertEquals("пройд+ённый", merged)
+    }
+
     @Test fun noStressDecisionKeepsSileroFallbackOnPolysyllabicWords() {
         val prediction = IndependentStressPrediction(
             text = "это долгий путь и",
