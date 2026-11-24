@@ -287,7 +287,7 @@ def main() -> int:
     for row in paired.get("changes", []):
         if "segment_index" not in row or "word_index" not in row:
             continue
-        if row.get("type") in {"STRESS", "STRESS_AND_YO"}:
+        if row.get("type") in {"STRESS", "STRESS_AND_YO", "YO"}:
             ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(row.get("after", ""))
 
     occurrence_rows: list[list[Any]] = []
