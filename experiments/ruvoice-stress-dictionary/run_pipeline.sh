@@ -100,6 +100,10 @@ STAGE_FIXES="$REPO_ROOT/project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt"
 if [[ -f "$STAGE_FIXES" ]]; then
   ARGS+=(--source-list "$STAGE_FIXES")
 fi
+CURATED="$HERE/data/curated/reviewed_overrides.txt"
+if [[ -f "$CURATED" ]]; then
+  ARGS+=(--source-list "$CURATED")
+fi
 ARGS+=(--consensus-source-list "$UPSTREAM/tools/stress_fixes.txt")
 
 if [[ -f "$UPSTREAM/app/build/stress_candidates.txt" ]]; then
