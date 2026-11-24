@@ -1,0 +1,103 @@
+import csv
+import tempfile
+import unittest
+from argparse import Namespace
+from pathlib import Path
+
+import build_book_dictionary as tool
+
+
+class BookDictionaryTests(unittest.TestCase):
+    def test_only_book_specific_consensus_candidates_are_exported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("молоко молоко корова творог старое неизвестное", encoding="utf-8")
+            system.write_text("корова кор+ова\n", encoding="utf-8")
+            approved.write_text("творог твор+ог\n", encoding="utf-8")
+            pool.write_text(
+                "молоко мол+око\n"
+                "корова кор+ова\n"
+                "старое стар+ое\n"
+                "вне_книги вне_кни+ги\n",
+                encoding="utf-8",
+            )
+            audit.write_text(
+                "# provenance\nword\tstress\tsource\n"
+                "молоко\tмол+око\taot_wiktionary_silero_consensus\n"
+                "корова\tкор+ова\taot_wiktionary_silero_consensus\n"
+                "старое\tстар+ое\tstage49_existing\n",
+                encoding="utf-8",
+            )
+
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            self.assertEqual(tool.build(args), 0)
+
+            candidate_text = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
+            self.assertIn("молоко мол+око", candidate_text)
+            self.assertNotIn("корова", candidate_text)
+            self.assertNotIn("творог", candidate_text)
+            self.assertNotIn("старое", candidate_text)
+            self.assertNotIn("вне_книги", candidate_text)
+
+            report = __import__("json").loads((out / "Book_Report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["new_candidate_forms"], 1)
+            self.assertEqual(report["new_candidate_tokens"], 2)
+            self.assertEqual(report["already_in_system_tokens"], 1)
+            self.assertEqual(report["already_in_approved_supplement_tokens"], 1)
+            self.assertEqual(report["unresolved_forms"], 2)
+
+    def test_system_dictionary_conflict_is_not_auto_overridden(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("трёхгорке", encoding="utf-8")
+            system.write_text(
+                "трёхгорке тр+ёхгорке\n"
+                "трёхгорке трёхг+орке\n",
+                encoding="utf-8",
+            )
+            approved.write_text("# empty\n", encoding="utf-8")
+            pool.write_text("трёхгорке трёхг+орке\n", encoding="utf-8")
+            audit.write_text(
+                "word\tstress\tsource\n"
+                "трёхгорке\tтрёхг+орке\tcurated_manual_reviewed\n",
+                encoding="utf-8",
+            )
+
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            self.assertEqual(tool.build(args), 0)
+            candidate_text = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
+            self.assertNotIn("трёхгорке трёхг+орке", candidate_text)
+            review_text = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
+            self.assertIn("CONFLICT", review_text)
+
+
+if __name__ == "__main__":
+    unittest.main()
