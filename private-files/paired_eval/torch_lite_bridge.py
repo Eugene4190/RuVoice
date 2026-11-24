@@ -47,7 +47,8 @@ with torch.no_grad():
                 emit({"probabilities": []})
                 continue
             width = max(len(row) for row in rows)
-            padded = [row + [0] * (width - len(row)) for row in rows]
+            pad_id = int(request.get("pad_id", 0))
+            padded = [row + [pad_id] * (width - len(row)) for row in rows]
             logits = homograph(
                 torch.tensor(padded, dtype=torch.long),
                 torch.tensor(starts, dtype=torch.long),
