@@ -118,18 +118,9 @@ internal class RuAccentOnnxCorrector(private val root: File) : IndependentStress
             }
             check("YO" in yoLabels.values) { "Неизвестные метки модели nn_yo_homograph" }
             check("STRESS_PRIMARY" in accentLabels.values) { "Неизвестные метки модели nn_accent" }
-            val accentVocabLines = File(root, "nn_accent/vocab.txt").readLines(Charsets.UTF_8)
-                .map { it.trimEnd('\r') }
-            require(accentVocabLines.size > RuAccentCharAccentPolicy.EOS_ID) {
-                "Словарь nn_accent не содержит фиксированные ID UNK/BOS/EOS"
-            }
-            require(accentVocabLines.none { it.isEmpty() } && accentVocabLines.size == accentVocabLines.toSet().size) {
-                "Словарь nn_accent содержит пустые или повторяющиеся токены"
-            }
-            require(vowels.all { vowel -> accentVocabLines.contains(vowel.toString()) }) {
-                "Словарь nn_accent не содержит все русские гласные"
-            }
-            accentVocab = accentVocabLines.mapIndexed { index, token -> token to index }.toMap()
+            accentVocab = RuAccentCharAccentPolicy.parseVocab(
+                File(root, "nn_accent/vocab.txt").readLines(Charsets.UTF_8)
+            )
 
             omographs = readGzipJson(File(root, "dictionary/omographs.json.gz"))
             yoWords = readYoDictionary(File(root, "dictionary/yo_words.json.gz"), "yo_words")
