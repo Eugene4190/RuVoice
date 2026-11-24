@@ -253,6 +253,14 @@ def build(args: argparse.Namespace) -> int:
     candidate_txt = output_dir / "Book_AutoStress_Candidates.txt"
     write_dictionary(candidate_txt, candidates)
 
+    candidate_review_tsv = output_dir / "Book_AutoStress_Candidate_Review.tsv"
+    with candidate_review_tsv.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.writer(stream, delimiter="\\t")
+        writer.writerow(["word", "proposed_stress", "frequency_in_book", "source", "status"])
+        for entry in candidates:
+            frequency = entry.note.split("=", 1)[1] if "=" in entry.note else ""
+            writer.writerow([entry.word, entry.marked, frequency, entry.source, "UNREVIEWED"])
+
     book_approved_txt = output_dir / "Book_Approved_Additions.txt"
     write_dictionary(book_approved_txt, book_approved_entries)
 
@@ -316,6 +324,7 @@ def build(args: argparse.Namespace) -> int:
     print(f"Дополнения этой книги, уже утверждённые ранее: {book_approved_txt}")
     print(f"Полный накопительный утверждённый словарь: {cumulative_export}")
     print(f"Кандидаты для проверки: {candidate_txt}")
+    print(f"Таблица проверки кандидатов: {candidate_review_tsv}")
     print(f"Отчёт проверки: {review_tsv}")
     print(f"Неизвестные формы: {unresolved_tsv}")
     print(f"Временный объединённый файл (НЕ ИМПОРТИРОВАТЬ): {provisional_txt}")
