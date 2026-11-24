@@ -182,8 +182,8 @@ internal object StressInputSanitizer {
  * decisions must survive the later merge, while unrelated model-generated ё remains overridable.
  */
 internal object SafeYoDictionaryProtection {
-    private const val ACUTE = '\\u0301'
-    private val wordRegex = Regex("[\\\\p{L}+\\\\u0301]+")
+    private const val ACUTE = '\u0301'
+    private val wordRegex = Regex("[\\p{L}+\u0301]+")
 
     fun findProtectedIndices(
         original: String,
