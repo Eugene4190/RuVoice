@@ -5,8 +5,8 @@ ROOT="${GITHUB_WORKSPACE}/project/ruvoice-1.1.3-stage4.9"
 WORK="${RUNNER_TEMP}/ruvoice-paired-bridge"
 mkdir -p "$WORK"
 
-MAVEN="https://repo1.maven.org/maven2"
-ORT_VERSION="1.22.0"
+MAVEN="https://repo.maven.apache.org/maven2"
+ORT_VERSION="1.32.0"
 JSON_VERSION="20240303"
 
 curl --fail --location --retry 3 --silent --show-error \
