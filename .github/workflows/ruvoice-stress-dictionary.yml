@@ -74,6 +74,12 @@ jobs:
           for row in rows[:40]:
               print(row["word"] + "\t" + row["frequency"])
           print("TOP_UNMATCHED_WORD_FORMS_END")
+          with (root / "dictionary_conflicts.tsv").open(encoding="utf-8-sig", newline="") as f:
+              conflicts = list(csv.DictReader(f, delimiter="\t"))
+          print("FULL_SYSTEM_DICTIONARY_CONFLICTS_BEGIN")
+          for row in conflicts:
+              print(row["conflict"])
+          print("FULL_SYSTEM_DICTIONARY_CONFLICTS_END")
           with (root / "dictionary_hits.tsv").open(encoding="utf-8-sig", newline="") as f:
               hits = list(csv.DictReader(f, delimiter="\t"))
           hits.sort(key=lambda row: int(row["frequency"]), reverse=True)
