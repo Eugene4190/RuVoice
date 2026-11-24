@@ -142,9 +142,11 @@ def analyze(text: str, dictionary: dict[str, str], context_radius: int, max_cont
     tokens = [match.group(0).lower() for match in WORD_RE.finditer(text)]
     counts = Counter(tokens)
     contexts: dict[str, list[str]] = defaultdict(list)
+    hit_contexts: dict[str, list[str]] = defaultdict(list)
     for index, word in enumerate(tokens):
-        if word not in dictionary and len(contexts[word]) < max_contexts:
-            contexts[word].append(make_context(tokens, index, context_radius))
+        target = hit_contexts if word in dictionary else contexts
+        if len(target[word]) < max_contexts:
+            target[word].append(make_context(tokens, index, context_radius))
 
     total = len(tokens)
     matched = sum(counts[word] for word in counts if word in dictionary)
@@ -165,7 +167,7 @@ def analyze(text: str, dictionary: dict[str, str], context_radius: int, max_cont
         "unmatched_unique_forms": len(missing),
         "note": "Coverage is dictionary lookup coverage, not a measured stress-accuracy score.",
     }
-    return report, counts, contexts, missing
+    return report, counts, contexts, missing, hit_contexts
 
 
 def write_tsv(path: Path, header: list[str], rows: Iterable[list[object]]) -> None:
@@ -196,7 +198,7 @@ def main() -> int:
     try:
         dictionary, conflicts = parse_dictionary(args.dictionary)
         text = extract_text(args.book)
-        summary, counts, contexts, missing = analyze(
+        summary, counts, contexts, missing, hit_contexts = analyze(
             text, dictionary, args.context_radius, args.max_contexts
         )
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
@@ -223,9 +225,9 @@ def main() -> int:
     )
     write_tsv(
         args.output_dir / "dictionary_hits.tsv",
-        ["word", "dictionary_stress", "frequency"],
+        ["word", "dictionary_stress", "frequency", "examples"],
         [
-            [word, dictionary[word], counts[word]]
+            [word, dictionary[word], counts[word], " || ".join(hit_contexts[word])]
             for word in sorted(counts, key=lambda w: (-counts[w], w)) if word in dictionary
         ],
     )
