@@ -987,7 +987,7 @@ class UploadedEpubPairedEvaluationTest {
             val segmentContexts = JSONArray()
             val reviewedOverrideSeen = LinkedHashMap<String, Int>()
             var reviewedPhraseOverrideHits = 0
-            val reviewedPhrasePattern = Regex("(?i)\\bсети\\s+значений\\b")
+            val reviewedPhrasePattern = Regex("(?<![а-яё])сети\\s+значений(?![а-яё])")
 
             for ((segmentIndex, segment) in segments.withIndex()) {
                 val baseline = StressDiagnosticFormatter.readable(
@@ -1004,7 +1004,7 @@ class UploadedEpubPairedEvaluationTest {
                 val newWords = wordRegex.findAll(combined).toList()
                 val sourceWords = wordRegex.findAll(segment.text).toList()
 
-                // The book overlay is deliberately narrow: only its six exact wordforms
+                // The book overlay is deliberately narrow: only its seven exact wordforms
                 // and the one contextual phrase may change. This catches accidental loading
                 // of the entire experimental phrases_extra.txt collection.
                 check(oldWords.size == reviewedWords.size) {
@@ -1013,15 +1013,16 @@ class UploadedEpubPairedEvaluationTest {
                 for (reviewIndex in oldWords.indices) {
                     val beforeWord = oldWords[reviewIndex].value
                     val reviewedWord = reviewedWords[reviewIndex].value
-                    val beforeKey = plain(beforeWord).lowercase(Locale.ROOT).replace('ё', 'е')
-                    val reviewedKey = plain(reviewedWord).lowercase(Locale.ROOT).replace('ё', 'е')
+                    val beforeKey = plain(beforeWord).lowercase(Locale.ROOT)
+                    val reviewedKey = plain(reviewedWord).lowercase(Locale.ROOT)
                     check(beforeKey == reviewedKey) {
                         "Book review changed token spelling in segment " + segmentIndex + ": '" + beforeWord + "' -> '" + reviewedWord + "'"
                     }
                     val beforePosition = stressPosition(beforeWord)
                     val reviewedPosition = stressPosition(reviewedWord)
                     val expectedVariant = bookOverrides[beforeKey]
-                    val phraseTarget = beforeKey == "сети" && reviewedPhrasePattern.containsMatchIn(segment.text)
+                    val phraseTarget = beforeKey == "сети" &&
+                        reviewedPhrasePattern.containsMatchIn(segment.text.lowercase(Locale.ROOT))
                     if (expectedVariant != null) {
                         val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
                             "Invalid reviewed dictionary marker for " + beforeKey + ": " + expectedVariant
