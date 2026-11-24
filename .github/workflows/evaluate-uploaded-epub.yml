@@ -179,6 +179,46 @@ jobs:
             :app:testFullDebugUnitTest \
             --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
 
+      - name: Download complete AOT and Wiktionary references for every book wordform
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          AOT_DIR="$RUNNER_TEMP/morph_dict"
+          WIKT_GZ="$RUNNER_TEMP/raw-wiktextract-data.jsonl.gz"
+          git clone --depth 1 https://github.com/sokirko74/morph_dict.git "$AOT_DIR"
+          curl --fail --location --retry 3 --continue-at - \
+            https://kaikki.org/ruwiktionary/raw-wiktextract-data.jsonl.gz \
+            --output "$WIKT_GZ"
+          gzip -t "$WIKT_GZ"
+          echo "RUVOICE_AOT_DIR=$AOT_DIR/data/Russian" >> "$GITHUB_ENV"
+          echo "RUVOICE_WIKT_GZ=$WIKT_GZ" >> "$GITHUB_ENV"
+
+      - name: Evaluate every production RuVoice token against AOT, Wiktionary and RUAccent
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/full_book_ruvoice_quality.py
+          python private-files/paired_eval/full_book_ruvoice_quality.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --aot-dir "$RUVOICE_AOT_DIR" \
+            --wiktionary-gz "$RUVOICE_WIKT_GZ" \
+            --system-dictionary "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt" \
+            --output-dir private-files/ruvoice-full-book-quality
+
+      - name: Upload whole-book quality assessment for every word and occurrence
+        if: always() && hashFiles('private-files/ruvoice-full-book-quality/WholeBook_RuVoice_Quality_Summary.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-full-book-quality-assessment
+          path: |
+            private-files/ruvoice-full-book-quality/WholeBook_RuVoice_Quality_Summary.json
+            private-files/ruvoice-full-book-quality/WholeBook_RuVoice_UniqueWords.tsv
+            private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Build full-book contextual stress review against built-in and independent dictionary sources
         if: always() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
         shell: bash
