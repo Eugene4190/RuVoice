@@ -768,7 +768,7 @@ class UploadedEpubPairedEvaluationTest {
                 val baselineWord = baselineTokens[targetIndex].value
                 val mergedWord = mergedTokens[targetIndex].value
                 val actualPosition = stressPosition(mergedWord)
-                check(actualPosition in acceptedPositions) {
+                check(actualPosition != null && actualPosition in acceptedPositions) {
                     "Stress regression $caseId: expected one of $acceptedPositions, " +
                         "baseline='$baselineWord', merged='$mergedWord', actual=$actualPosition"
                 }
