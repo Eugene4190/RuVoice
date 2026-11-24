@@ -497,7 +497,7 @@ internal object StressDiagnosticFormatter {
     }
 
     private fun plain(word: String): String =
-        word.replace("+", "").replace("\\u0301", "")
+        word.replace("+", "").replace("\u0301", "")
 
     private fun key(word: String): String =
         plain(word).lowercase(Locale.ROOT).replace('ё', 'е')

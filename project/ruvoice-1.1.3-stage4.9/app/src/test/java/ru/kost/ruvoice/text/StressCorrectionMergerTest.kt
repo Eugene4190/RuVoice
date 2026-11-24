@@ -296,4 +296,12 @@ class StressCorrectionMergerTest {
         assertEquals(emptyList<String>(), StressDiagnosticFormatter.differences("з+амок", "з+амок"))
     }
 
+
+    @Test fun `diagnostics align existing acute accent with a stress marker`() {
+        assertEquals(
+            listOf("замок: за́мок → замо́к"),
+            StressDiagnosticFormatter.differences("за\u0301мок", "зам+ок")
+        )
+    }
+
 }
