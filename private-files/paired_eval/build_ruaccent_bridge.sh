@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="\${GITHUB_WORKSPACE}/project/ruvoice-1.1.3-stage4.9"
-WORK="\${RUNNER_TEMP}/ruvoice-paired-bridge"
+ROOT="${GITHUB_WORKSPACE}/project/ruvoice-1.1.3-stage4.9"
+WORK="${RUNNER_TEMP}/ruvoice-paired-bridge"
 mkdir -p "$WORK"
 
 MAVEN="https://repo1.maven.org/maven2"
