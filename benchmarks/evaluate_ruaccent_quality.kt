@@ -70,6 +70,10 @@ private fun evaluateHomographs(
     var baselineMissing = 0
     val byWord = LinkedHashMap<String, IntArray>()
     val misses = JSONArray()
+    // Save every paired change, not just the first 100 standalone RUAccent mistakes.
+    val pairedWins = JSONArray()
+    val pairedRegressions = JSONArray()
+    val regressionsByDecision = linkedMapOf<String, Int>()
 
     val started = System.nanoTime()
     for (itemIndex in 0 until items.length()) {
@@ -141,8 +145,35 @@ private fun evaluateHomographs(
         val combinedOk = combinedPosition == goldPosition
         if (stockOk) stockCorrect++
         if (combinedOk) combinedCorrect++
-        if (!stockOk && combinedOk) combinedWins++
-        if (stockOk && !combinedOk) combinedRegressions++
+        if (!stockOk && combinedOk) {
+            combinedWins++
+            pairedWins.put(
+                JSONObject()
+                    .put("id", item.optInt("id"))
+                    .put("word", goldWord)
+                    .put("context", context)
+                    .put("expected", gold)
+                    .put("stock", stockVariant)
+                    .put("ruaccent", observed)
+                    .put("decision", decision.name)
+            )
+        }
+        if (stockOk && !combinedOk) {
+            combinedRegressions++
+            regressionsByDecision[decision.name] = (regressionsByDecision[decision.name] ?: 0) + 1
+            pairedRegressions.put(
+                JSONObject()
+                    .put("id", item.optInt("id"))
+                    .put("word", goldWord)
+                    .put("context", context)
+                    .put("expected", gold)
+                    .put("stock", stockVariant)
+                    .put("ruaccent", observed)
+                    .put("decision", decision.name)
+                    .put("stock_position", stockPosition)
+                    .put("ruaccent_position", combinedPosition)
+            )
+        }
         if (combinedPosition != stockPosition) combinedChanges++
 
         val key = plain(goldWord)
@@ -206,6 +237,11 @@ private fun evaluateHomographs(
         .put("baseline_missing", baselineMissing)
         .put("stress_mark_coverage", coverage)
         .put("elapsed_ms", elapsedMs)
+        .put("regressions_by_decision", JSONObject().apply {
+            regressionsByDecision.forEach { (decision, count) -> put(decision, count) }
+        })
+        .put("paired_wins", pairedWins)
+        .put("paired_regressions", pairedRegressions)
         .put("misses", misses)
 
     val wordArray = JSONArray()
