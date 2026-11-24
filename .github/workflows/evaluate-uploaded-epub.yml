@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   evaluate-book:
@@ -48,12 +48,29 @@ jobs:
           set -euo pipefail
           bash tools/run_ruaccent_uploaded_book_eval.sh \
             "$GITHUB_WORKSPACE/private-files/8.Iskusstvo..epub" \
-            "$GITHUB_WORKSPACE/project/ruvoice-1.1.3-stage4.9/app/build/reports/ruaccent-uploaded-book.json"
+            "$GITHUB_WORKSPACE/private-files/ruaccent-real-book-analysis.json"
 
       - name: Upload private book evaluation report
         uses: actions/upload-artifact@v4
         with:
           name: ruaccent-uploaded-book-evaluation
-          path: project/ruvoice-1.1.3-stage4.9/app/build/reports/ruaccent-uploaded-book.json
+          path: private-files/ruaccent-real-book-analysis.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Save compact evaluation report in the private repository
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f private-files/ruaccent-real-book-analysis.json
+          if git diff --cached --quiet; then
+            echo "Evaluation report is unchanged; no commit needed."
+            exit 0
+          fi
+          git commit -m "Save real EPUB RUAccent analysis report"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
