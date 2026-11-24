@@ -75,7 +75,7 @@ def load_context_acceptances(path: Path | None) -> dict[str, list[tuple[int, re.
     if path is None or not path.is_file():
         return result
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
-        for row in csv.reader(stream, delimiter="\\t"):
+        for row in csv.reader(stream, delimiter="\t"):
             if not row or row[0].startswith("#") or row[0].lower() == "word":
                 continue
             if len(row) < 4:
