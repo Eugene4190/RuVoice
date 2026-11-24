@@ -157,6 +157,7 @@ def build(args: argparse.Namespace) -> int:
     book_approved_entries: list[Entry] = []
     new_candidate_tokens = 0
     conflict_tokens = 0
+    conflict_forms = 0
     withheld_rule_tokens = 0
     withheld_rule_forms = 0
     hyphenated_forms = 0
@@ -175,6 +176,7 @@ def build(args: argparse.Namespace) -> int:
         if key in system_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "во встроенном словаре несколько вариантов"])
             conflict_tokens += frequency
+            conflict_forms += 1
             continue
         if len(base_rows) > 1:
             variants = {norm(marked) for _, marked in base_rows}
@@ -305,7 +307,7 @@ def build(args: argparse.Namespace) -> int:
         "already_in_approved_supplement_tokens": already_approved_tokens,
         "new_candidate_forms": len(candidates),
         "new_candidate_tokens": new_candidate_tokens,
-        "conflict_forms": len(review_rows),
+        "conflict_forms": conflict_forms,
         "conflict_tokens": conflict_tokens,
         "withheld_by_context_rules_forms": withheld_rule_forms,
         "withheld_by_context_rules_tokens": withheld_rule_tokens,
