@@ -1,6 +1,6 @@
 # Book-specific reviewed stress overlay
 
-This file contains five case-specific corrections selected after a full production
+This file contains six case-specific corrections selected after a full production
 RuVoice pass over `8.Iskusstvo..epub`.
 
 | Book form | Previous RuVoice output | Reviewed output | Reason |
@@ -10,8 +10,12 @@ RuVoice pass over `8.Iskusstvo..epub`.
 | шумы | шумы́ | шу́мы | Nominative plural of the noun `шум` in this book context |
 | двадцать | unmarked in two number-expanded passages | два́дцать | Numeral form; both independent sources give first-syllable stress |
 | десять | деся́ть | де́сять | Number expansion of 10 in the range 10–20; AOT and Wiktionary agree on first-syllable stress |
+| издревле | и́здревле | издре́вле | Two occurrences; normatively only издре́вле (the initial-stress variant is explicitly marked nonrecommended in modern dictionaries) |
 
 The existing `утра́м` in the phrase `по утра́м` is deliberately left unchanged: this is a normative adverbial variant, distinct from isolated dative `у́трам`.
+
+
+The standard is also confirmed by [Викисловарь](https://ru.wiktionary.org/wiki/издревле) and [Словарь трудностей русского языка (Эскова)](https://mgmtmo.ru/edumat/OD/rus/Eskova_dictionary_difficulties.pdf): initial-stress `и́здревле` is labelled non-recommended/incorrect.
 
 These are an experimental, book-only supplement. They are not added to
 `Системный.txt`, the APK, or the cumulative accepted dictionary. The evaluation
@@ -26,4 +30,4 @@ A separate phrase-level correction is applied through the production homograph p
 |---|---|---|---|
 | Сети значений | Сети́ значений | Се́ти значений | Nominative plural in this phrase; the prepositional form сети́ remains valid elsewhere |
 
-The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the five-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
+The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the six-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
