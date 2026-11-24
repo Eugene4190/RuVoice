@@ -28,6 +28,7 @@ DEFAULT_SYSTEM = (
 DEFAULT_APPROVED = HERE / "data/approved/RuVoice_Accumulated_Approved.txt"
 DEFAULT_POOL = HERE / "output/RuVoice_AutoStress.txt"
 DEFAULT_AUDIT = HERE / "reports/RuVoice_AutoStress_accepted.tsv"
+DEFAULT_RULES = HERE / "data/curated/book_candidate_review_rules.tsv"
 ALLOWED_SOURCES = {"aot_wiktionary_silero_consensus", "curated_manual_reviewed"}
 WORD_ONLY_RE = re.compile(r"[а-яё]+")
 
@@ -77,6 +78,28 @@ def load_provenance(path: Path) -> dict[str, str]:
     return result
 
 
+def load_candidate_rules(path: Path) -> dict[str, tuple[str, str, str]]:
+    rules: dict[str, tuple[str, str, str]] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\\t")
+        required = {"word", "action", "reason", "source"}
+        if not reader.fieldnames or not required.issubset(reader.fieldnames):
+            raise ValueError(f"Некорректные правила контекстной проверки: {path}")
+        for row in reader:
+            word = (row.get("word") or "").strip().lower()
+            action = (row.get("action") or "").strip()
+            reason = (row.get("reason") or "").strip()
+            source = (row.get("source") or "").strip()
+            if not word:
+                continue
+            if action not in {"WITHHOLD_UNSTRESSED", "CONTEXT_REVIEW"}:
+                raise ValueError(f"Неизвестное действие для {word}: {action}")
+            if norm(word) in rules:
+                raise ValueError(f"Повторное правило для словоформы {word}")
+            rules[norm(word)] = (action, reason, source)
+    return rules
+
+
 def adapt_marked_form(book_word: str, source_marked: str) -> str:
     """Preserve the source stress position but use the book's е/ё spelling."""
     marked_source = source_marked.lower()
@@ -98,8 +121,9 @@ def make_output_dir(book: Path, book_hash: str) -> Path:
 
 
 def build(args: argparse.Namespace) -> int:
+    candidate_rules_path = getattr(args, "candidate_rules", DEFAULT_RULES)
     paths = [args.book, args.system_dictionary, args.approved_dictionary,
-             args.candidate_dictionary, args.candidate_audit]
+             args.candidate_dictionary, args.candidate_audit, candidate_rules_path]
     for path in paths:
         if not path.is_file():
             raise FileNotFoundError(f"Не найден обязательный файл: {path}")
@@ -112,6 +136,7 @@ def build(args: argparse.Namespace) -> int:
     approved, approved_conflicts = load_dictionary(args.approved_dictionary)
     pool, pool_conflicts = load_dictionary(args.candidate_dictionary)
     provenance = load_provenance(args.candidate_audit)
+    candidate_rules = load_candidate_rules(candidate_rules_path)
 
     system_idx = normalized_index(system)
     approved_idx = normalized_index(approved)
@@ -132,6 +157,8 @@ def build(args: argparse.Namespace) -> int:
     book_approved_entries: list[Entry] = []
     new_candidate_tokens = 0
     conflict_tokens = 0
+    withheld_rule_tokens = 0
+    withheld_rule_forms = 0
     hyphenated_forms = 0
 
     for word, frequency in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
@@ -181,6 +208,14 @@ def build(args: argparse.Namespace) -> int:
         if key in pool_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "пул кандидатов содержит несколько вариантов"])
             conflict_tokens += frequency
+            continue
+
+        rule = candidate_rules.get(key)
+        if rule:
+            action, reason, source_url = rule
+            review_rows.append([word, frequency, "", action, reason + (f" Source: {source_url}" if source_url else "")])
+            withheld_rule_forms += 1
+            withheld_rule_tokens += frequency
             continue
 
         variants = {norm(marked): marked for _, marked, _ in pool_rows}
@@ -255,6 +290,7 @@ def build(args: argparse.Namespace) -> int:
         "approved_dictionary_sha256": sha256(args.approved_dictionary),
         "candidate_pool_sha256": sha256(args.candidate_dictionary),
         "candidate_provenance_sha256": sha256(args.candidate_audit),
+        "candidate_rules_sha256": sha256(candidate_rules_path),
         "total_word_tokens": total,
         "unique_word_forms": unique,
         "already_in_system_tokens": already_system_tokens,
@@ -263,6 +299,8 @@ def build(args: argparse.Namespace) -> int:
         "new_candidate_tokens": new_candidate_tokens,
         "conflict_forms": len(review_rows),
         "conflict_tokens": conflict_tokens,
+        "withheld_by_context_rules_forms": withheld_rule_forms,
+        "withheld_by_context_rules_tokens": withheld_rule_tokens,
         "unresolved_forms": len(unresolved_rows),
         "hyphenated_or_compound_forms": hyphenated_forms,
         "cumulative_approved_entries": len(approved_entries),
@@ -293,6 +331,7 @@ def main() -> int:
     parser.add_argument("--approved-dictionary", type=Path, default=DEFAULT_APPROVED)
     parser.add_argument("--candidate-dictionary", type=Path, default=DEFAULT_POOL)
     parser.add_argument("--candidate-audit", type=Path, default=DEFAULT_AUDIT)
+    parser.add_argument("--candidate-rules", type=Path, default=DEFAULT_RULES)
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
 
