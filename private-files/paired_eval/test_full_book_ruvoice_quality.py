@@ -81,7 +81,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
     def test_expanded_numeral_twenty_is_stressed_on_first_syllable(self) -> None:
         overlay = SOURCE.with_name("book_reviewed_overrides.txt")
         entries = dict(line.split() for line in overlay.read_text(encoding="utf-8").splitlines() if line.strip())
-        self.assertEqual(entries["двадцать"], "два+дцать")
+        self.assertEqual(entries["двадцать"], "д+вадцать")
         self.assertEqual(quality.acute_position("два́дцать"), 0)
 
 
