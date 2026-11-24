@@ -87,9 +87,10 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "отнята": "отнят+а",
             "шумы": "ш+умы",
             "двадцать": "д+вадцать",
+            "десять": "д+есять",
         }
         self.assertEqual(entries, expected)
-        expected_positions = {"утрам": 0, "несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0}
+        expected_positions = {"утрам": 0, "несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0, "десять": 0}
         vowels = set("аеёиоуыэюя")
         for word, variant in entries.items():
             marker = variant.index("+")
