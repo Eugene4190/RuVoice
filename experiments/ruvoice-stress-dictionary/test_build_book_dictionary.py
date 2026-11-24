@@ -60,7 +60,7 @@ class BookDictionaryTests(unittest.TestCase):
             self.assertEqual(report["already_in_approved_supplement_tokens"], 1)
             self.assertEqual(report["unresolved_forms"], 2)
             book_approved = (out / "Book_Approved_Additions.txt").read_text(encoding="utf-8")
-            self.assertNotIn("творог", book_approved)  # Master approval is included only when present in a book and missing from system.
+            self.assertIn("творог твор+ог", book_approved)  # Export only book-used approved additions absent from system.
             cumulative = (out / "RuVoice_Accumulated_Approved.txt").read_text(encoding="utf-8")
             self.assertIn("творог твор+ог", cumulative)
 
