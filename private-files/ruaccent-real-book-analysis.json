@@ -1,0 +1,840 @@
+{
+  "model_revision": "cb1594ddf81928e678a3a7ee7a22415e6e3a218f",
+  "new_stress_marks_vs_unmarked_book": 43504,
+  "decisions_stressed": 43504,
+  "segments_without_stress_mark": 27,
+  "paragraphs": 2156,
+  "stress_position_changes_vs_source": 43504,
+  "segments_changed": 4509,
+  "accuracy_claim": "NOT_MEASURED: EPUB has no gold stress annotation; these are model outputs, not verified corrections.",
+  "segments": 4532,
+  "homograph_review_samples": [
+    {
+      "chapter": "index_split_002.xhtml",
+      "paragraph": 3,
+      "decision": "STRESSED",
+      "context": "убже понимать наш мир и яснее видеть его туманные дали \u2013 и теперь готовы приступить к обсуждению теории",
+      "source_word": "дали",
+      "ruaccent_word": "да́ли",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "paragraph": 4,
+      "decision": "UNKNOWN",
+      "context": "и событийные слои, выходу на тот уровень, где наш дух получает возможность творить по своему желанию.",
+      "source_word": "дух",
+      "ruaccent_word": "дух",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "paragraph": 7,
+      "decision": "STRESSED",
+      "context": "Много воды утекло с момента выхода первых пособий.",
+      "source_word": "воды",
+      "ruaccent_word": "воды́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "paragraph": 13,
+      "decision": "STRESSED",
+      "context": "Поэтому все слова, которые я мог бы сказать в предисловии, возможно",
+      "source_word": "слова",
+      "ruaccent_word": "слова́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_003.xhtml",
+      "paragraph": 1,
+      "decision": "STRESSED",
+      "context": "Как водится, для начала нам стоит окинуть взглядом область задач, стоящую перед нам",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 4,
+      "decision": "STRESSED",
+      "context": "Ради этого, право, стоит потрудиться.",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 7,
+      "decision": "STRESSED",
+      "context": "Эволюции стоит уделить внимание: мы являемся частью вида, и нас",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 11,
+      "decision": "STRESSED",
+      "context": "ство знаний, способность делать открытия, строить дома и создавать механизмы, умение найти выход едва ли",
+      "source_word": "дома",
+      "ruaccent_word": "дома́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 17,
+      "decision": "STRESSED",
+      "context": "А первые клонированные собаки уже дали потомство.",
+      "source_word": "дали",
+      "ruaccent_word": "да́ли",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 66,
+      "decision": "STRESSED",
+      "context": "и построения очередного «светлого будущего», увы, стоит назвать паразитизмом.",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 102,
+      "decision": "STRESSED",
+      "context": "каждого гуся предопределена, едва он вылупился из яйца.",
+      "source_word": "яйца",
+      "ruaccent_word": "яйца́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 126,
+      "decision": "UNKNOWN",
+      "context": "И пройти дальше, создать вместе с другими крепость разума среди связей потребительского общества.",
+      "source_word": "крепость",
+      "ruaccent_word": "крепость",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 161,
+      "decision": "STRESSED",
+      "context": "Любые слова здесь, увы, солгут не имеющему опыта.",
+      "source_word": "слова",
+      "ruaccent_word": "слова́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "paragraph": 167,
+      "decision": "STRESSED",
+      "context": "емле разнообразнейшие животные, реки, моря, боги, чудеса, тайны вечной жизни, полета, а также отсутствие р",
+      "source_word": "чудеса",
+      "ruaccent_word": "чудеса́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 2,
+      "decision": "STRESSED",
+      "context": "д крышей нашего черепа и выглядывает наружу через глаза.",
+      "source_word": "глаза",
+      "ruaccent_word": "глаза́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 2,
+      "decision": "UNKNOWN",
+      "context": "Дух, душа, память, мысль, чувства, все вместе, все то",
+      "source_word": "Дух",
+      "ruaccent_word": "Дух",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 21,
+      "decision": "STRESSED",
+      "context": "ных ископаемых, написание книги или строительство дома.",
+      "source_word": "дома",
+      "ruaccent_word": "до́ма",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 22,
+      "decision": "UNKNOWN",
+      "context": "ле, что вот прямо сейчас нужно молитвенно воздеть руки к небу и восхвалять существующую на сегодняшний д",
+      "source_word": "руки",
+      "ruaccent_word": "руки",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 37,
+      "decision": "STRESSED",
+      "context": "К примеру, некогда кто-то научился передавать слова при помощи знаков письма.",
+      "source_word": "слова",
+      "ruaccent_word": "слова́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 52,
+      "decision": "STRESSED",
+      "context": "Но стоит восстановить защиту \u2013 и мир вновь делается таким,",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 61,
+      "decision": "STRESSED",
+      "context": "ному и визуальному восприятию сенсорных проекций: поля («биополя», как его не слишком правильно называют",
+      "source_word": "поля",
+      "ruaccent_word": "поля́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 61,
+      "decision": "STRESSED",
+      "context": "В-третьих, использование эталонного состояния как средства возвращения разума в состояние отсутствия внешних",
+      "source_word": "средства",
+      "ruaccent_word": "сре́дства",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 83,
+      "decision": "STRESSED",
+      "context": "Чудеса?",
+      "source_word": "Чудеса",
+      "ruaccent_word": "Чудеса́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 100,
+      "decision": "STRESSED",
+      "context": "Это очень важные вопросы, над которыми каждому стоит подумать.",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 101,
+      "decision": "STRESSED",
+      "context": "Но не думаю, что мне стоит излагать здесь содержание его исследований.",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 104,
+      "decision": "STRESSED",
+      "context": "сь владеть собственной причиной, \u2013 вряд ли разуму стоит обращать свой взор на внешний мир.",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 107,
+      "decision": "STRESSED",
+      "context": "Стоит сказать несколько слов и о том, что техники второ",
+      "source_word": "Стоит",
+      "ruaccent_word": "Сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 128,
+      "decision": "STRESSED",
+      "context": "потенциальных преимуществ грех отказываться, чего стоит хотя бы телепатия, технология считывания задуманн",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 135,
+      "decision": "STRESSED",
+      "context": "Готовы шире раскрыть глаза на мир и его энергоинформационные чудеса.",
+      "source_word": "глаза",
+      "ruaccent_word": "глаза́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 135,
+      "decision": "STRESSED",
+      "context": "раскрыть глаза на мир и его энергоинформационные чудеса.",
+      "source_word": "чудеса",
+      "ruaccent_word": "чудеса́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 150,
+      "decision": "STRESSED",
+      "context": "ы поговорить с человеком, нужно уметь слышать его слова и издавать слышимые и понятные ему звуки.",
+      "source_word": "слова",
+      "ruaccent_word": "слова́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 166,
+      "decision": "STRESSED",
+      "context": "ких-то разных мирах \u2013 вроде все похоже, но у него дороги открыты, а другие рассказывают о сплошных заслона",
+      "source_word": "дороги",
+      "ruaccent_word": "доро́ги",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 172,
+      "decision": "STRESSED",
+      "context": "И стоит ли двигаться дальше?",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 174,
+      "decision": "STRESSED",
+      "context": "багамы или даже просто \u2013 хватает и не каплет, то стоит ли идти куда-то дальше из такого хорошего, милого",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 180,
+      "decision": "STRESSED",
+      "context": "Здесь не подойдут слова «приятно», «правильно», «величественно», «блаженн",
+      "source_word": "слова",
+      "ruaccent_word": "слова́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 181,
+      "decision": "STRESSED",
+      "context": "Может, немного подойдут слова «интересно», «свободно» и «радостно».",
+      "source_word": "слова",
+      "ruaccent_word": "слова́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 182,
+      "decision": "STRESSED",
+      "context": "Но идти туда стоит только тогда, поверьте, когда человеку интересна",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_005.xhtml",
+      "paragraph": 185,
+      "decision": "STRESSED",
+      "context": "Дальше стоит двигаться только тогда, когда твоя Мечта растет в",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 1,
+      "decision": "STRESSED",
+      "context": "Но стоит лучше познакомиться с собственным разумом и его в",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 40,
+      "decision": "STRESSED",
+      "context": "С самого начала перед нами стоит простая задача \u2013 попробовать определиться, как мы",
+      "source_word": "стоит",
+      "ruaccent_word": "стои́т",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 58,
+      "decision": "STRESSED",
+      "context": "К примеру, стоит прилавок в каком-нибудь магазине у границы, и туд",
+      "source_word": "стоит",
+      "ruaccent_word": "стои́т",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 74,
+      "decision": "STRESSED",
+      "context": "ранство для парковки, или вакансия, мало ли что), стоит «нахмурить брови», как природа словно спешит испр",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 116,
+      "decision": "STRESSED",
+      "context": "Нас не устраивает меньшее, чем дать разуму в руки инструмент, позволяющий ему самому управлять собс",
+      "source_word": "руки",
+      "ruaccent_word": "руки́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 142,
+      "decision": "STRESSED",
+      "context": "сть фотонов не попадает в зрачок, а отражается от глаза, попадает опять на предмет\u2026 Мы окружены энергоинф",
+      "source_word": "глаза",
+      "ruaccent_word": "гла́за",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 145,
+      "decision": "STRESSED",
+      "context": "На шум выглянул из окна другой человек и поднял крик, обративший на себя",
+      "source_word": "окна",
+      "ruaccent_word": "окна́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 146,
+      "decision": "STRESSED",
+      "context": "Магия, чудеса.",
+      "source_word": "чудеса",
+      "ruaccent_word": "чудеса́",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 159,
+      "decision": "STRESSED",
+      "context": "от ваш магазин, вот дорога, по которой идут люди\u2026 Стоит ли описывать дальнейший способ действий?",
+      "source_word": "Стоит",
+      "ruaccent_word": "Сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 171,
+      "decision": "STRESSED",
+      "context": "ого в жизни человека, если человек, даже когда он дома, все равно на службе?",
+      "source_word": "дома",
+      "ruaccent_word": "до́ма",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_006.xhtml",
+      "paragraph": 203,
+      "decision": "STRESSED",
+      "context": "вот что-то брезжит, что-то вторгается в жизнь, но стоит попробовать ухватить это вниманием \u2013 и все: пыль,",
+      "source_word": "стоит",
+      "ruaccent_word": "сто́ит",
+      "type": "HOMOGRAPH_REVIEW"
+    },
+    {
+      "chapter": "index_split_007.xhtml",
+      "paragraph": 38,
+      "decision": "STRESSED",
+      "context": "ргию, которой техники второго этапа пятой ступени дали нам в избытке, и ее притягивает тоже, определяет",
+      "source_word": "дали",
+      "ruaccent_word": "да́ли",
+      "type": "HOMOGRAPH_REVIEW"
+    }
+  ],
+  "function_word_stress_samples": [
+    {
+      "chapter": "index_split_001.xhtml",
+      "context": "ергоинформационного развития человека \u2013 это последовательная система обучения челов",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_001.xhtml",
+      "context": "се движение мира в самой своей основе \u2013 это энергия и информация.",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "Вот мы с вами, пусть после долгого перерыва, и встретились на стра",
+      "source_word": "после",
+      "ruaccent_word": "по́сле"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "Как обычно, затем, чтобы улучшить жизнь \u2013 свою и окружающих, сде",
+      "source_word": "чтобы",
+      "ruaccent_word": "что́бы"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "И это замечательно, потому что означает, что",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "гнуто при помощи изученных техник \u2013 вот это и есть влияние ДЭИР на социальную жизнь",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "ерное, сейчас не так уж важно вспомнить о количестве наших коллег и об их успехах",
+      "source_word": "о",
+      "ruaccent_word": "о́"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "риятными мелочами ее невозможно оценить или измерить.",
+      "source_word": "или",
+      "ruaccent_word": "и́ли"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "ДЭИР \u2013 это один из путей к другому, грандиозно нов",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "Очередное начало для тех, кто уже сумел пройти далеко в мире человека и г",
+      "source_word": "уже",
+      "ruaccent_word": "уже́"
+    },
+    {
+      "chapter": "index_split_002.xhtml",
+      "context": "далеко в мире человека и готов к тому, чтобы видеть мир шире, жить большой жизнью.",
+      "source_word": "чтобы",
+      "ruaccent_word": "что́бы"
+    },
+    {
+      "chapter": "index_split_003.xhtml",
+      "context": "ресмотреть пройденный за эти годы путь, чтобы всесторонне оценить текущие наши знания",
+      "source_word": "чтобы",
+      "ruaccent_word": "что́бы"
+    },
+    {
+      "chapter": "index_split_003.xhtml",
+      "context": "Мы делаем это каждый раз, в каждом пособии.",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "Достижения уже сейчас, причем на практике, нового эвол",
+      "source_word": "уже",
+      "ruaccent_word": "уже́"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "Это была бы глупая затея \u2013 менять форму, чт",
+      "source_word": "Это",
+      "ruaccent_word": "Э́то"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "то была бы глупая затея \u2013 менять форму, чтобы наполнить ее тем же самым содержанием.",
+      "source_word": "чтобы",
+      "ruaccent_word": "что́бы"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "Человек как вид \u2013 это существо, имеющее биологическую природу",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "ни шлифуются эволюционными механизмами, чтобы больше, лучше и полнее решать задачи, в",
+      "source_word": "чтобы",
+      "ruaccent_word": "что́бы"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "чше и полнее решать задачи, выдвигаемые перед телами окружающим нас миром.",
+      "source_word": "перед",
+      "ruaccent_word": "пе́ред"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "Но разве это в нас главное?",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "Разве для нас, мыслящих существ, это нескончаемое совершенствование цепочек",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "спутник \u2013 Луна, не за горами то время, когда перед нами распахнет свои просторы непр",
+      "source_word": "когда",
+      "ruaccent_word": "когда́"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "ик \u2013 Луна, не за горами то время, когда перед нами распахнет свои просторы неприветли",
+      "source_word": "перед",
+      "ruaccent_word": "пе́ред"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "огическая природа не шагнула в космос \u2013 это сделал Гагарин.",
+      "source_word": "это",
+      "ruaccent_word": "э́то"
+    },
+    {
+      "chapter": "index_split_004.xhtml",
+      "context": "И человек как вид уже меньше зависит от самого Солнца, родите",
+      "source_word": "уже",
+      "ruaccent_word": "уже́"
+    }
+  ],
+  "restored_yo_words": 1441,
+  "words_with_acute_in_ruaccent_output": 43504,
+  "decisions_unknown": 6643,
+  "words": 62699,
+  "original_yo_words_seen": 1,
+  "alignment_errors": 0,
+  "stress_assignment_samples": [
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Человек развивается, освобождаясь из границ одн",
+      "source_word": "Человек",
+      "ruaccent_word": "Челове́к"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Человек развивается, освобождаясь из границ одних законов и",
+      "source_word": "развивается",
+      "ruaccent_word": "развива́ется"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Человек развивается, освобождаясь из границ одних законов и оказываясь пе",
+      "source_word": "освобождаясь",
+      "ruaccent_word": "освобожда́ясь"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Человек развивается, освобождаясь из границ одних законов и оказываясь перед другим",
+      "source_word": "границ",
+      "ruaccent_word": "грани́ц"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "век развивается, освобождаясь из границ одних законов и оказываясь перед другими.",
+      "source_word": "одних",
+      "ruaccent_word": "одни́х"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "звивается, освобождаясь из границ одних законов и оказываясь перед другими.",
+      "source_word": "законов",
+      "ruaccent_word": "зако́нов"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "освобождаясь из границ одних законов и оказываясь перед другими.",
+      "source_word": "оказываясь",
+      "ruaccent_word": "ока́зываясь"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "границ одних законов и оказываясь перед другими.",
+      "source_word": "другими",
+      "ruaccent_word": "други́ми"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Думать о том, что построенная нами социально-т",
+      "source_word": "Думать",
+      "ruaccent_word": "Ду́мать"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Думать о том, что построенная нами социально-техническая цивилизация",
+      "source_word": "построенная",
+      "ruaccent_word": "постро́енная"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Думать о том, что построенная нами социально-техническая цивилизация \u2013 пре",
+      "source_word": "нами",
+      "ruaccent_word": "на́ми"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Думать о том, что построенная нами социально-техническая цивилизация \u2013 предел, не по",
+      "source_word": "социально",
+      "ruaccent_word": "социа́льно"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "ь о том, что построенная нами социально-техническая цивилизация \u2013 предел, не позволяет одно",
+      "source_word": "техническая",
+      "ruaccent_word": "техни́ческая"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "построенная нами социально-техническая цивилизация \u2013 предел, не позволяет одно: человеческ",
+      "source_word": "цивилизация",
+      "ruaccent_word": "цивилиза́ция"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "ами социально-техническая цивилизация \u2013 предел, не позволяет одно: человеческий Разум.",
+      "source_word": "предел",
+      "ruaccent_word": "преде́л"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "но-техническая цивилизация \u2013 предел, не позволяет одно: человеческий Разум.",
+      "source_word": "позволяет",
+      "ruaccent_word": "позволя́ет"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "ская цивилизация \u2013 предел, не позволяет одно: человеческий Разум.",
+      "source_word": "одно",
+      "ruaccent_word": "одно́"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "ивилизация \u2013 предел, не позволяет одно: человеческий Разум.",
+      "source_word": "человеческий",
+      "ruaccent_word": "челове́ческий"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "предел, не позволяет одно: человеческий Разум.",
+      "source_word": "Разум",
+      "ruaccent_word": "Ра́зум"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Живой Разум, который дан каждому и который ви",
+      "source_word": "Живой",
+      "ruaccent_word": "Живо́й"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Живой Разум, который дан каждому и который видит, ч",
+      "source_word": "Разум",
+      "ruaccent_word": "Ра́зум"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Живой Разум, который дан каждому и который видит, чувствует,",
+      "source_word": "который",
+      "ruaccent_word": "кото́рый"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Живой Разум, который дан каждому и который видит, чувствует, знает, что",
+      "source_word": "каждому",
+      "ruaccent_word": "ка́ждому"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "Живой Разум, который дан каждому и который видит, чувствует, знает, что за предела",
+      "source_word": "который",
+      "ruaccent_word": "кото́рый"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "ой Разум, который дан каждому и который видит, чувствует, знает, что за пределами мир",
+      "source_word": "видит",
+      "ruaccent_word": "ви́дит"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "м, который дан каждому и который видит, чувствует, знает, что за пределами мира, состояще",
+      "source_word": "чувствует",
+      "ruaccent_word": "чу́вствует"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "дан каждому и который видит, чувствует, знает, что за пределами мира, состоящего из д",
+      "source_word": "знает",
+      "ruaccent_word": "зна́ет"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "который видит, чувствует, знает, что за пределами мира, состоящего из домов, машин, карье",
+      "source_word": "пределами",
+      "ruaccent_word": "преде́лами"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "дит, чувствует, знает, что за пределами мира, состоящего из домов, машин, карьер, де",
+      "source_word": "мира",
+      "ruaccent_word": "ми́ра"
+    },
+    {
+      "chapter": "index_split_000.xhtml",
+      "paragraph": 1,
+      "context": "увствует, знает, что за пределами мира, состоящего из домов, машин, карьер, денег, славы,",
+      "source_word": "состоящего",
+      "ruaccent_word": "состоя́щего"
+    }
+  ],
+  "model_bytes": 144301606,
+  "function_words_with_stress": 1455,
+  "lexical_changes_other_than_yo": 0,
+  "model_files": 16,
+  "kept_e_decisions": 362,
+  "book_file": "8.Iskusstvo..epub",
+  "decisions_unstressed": 12552
+}
