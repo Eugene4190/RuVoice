@@ -102,7 +102,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "шумы": "ш+умы",
             "двадцать": "дв+адцать",
             "десять": "д+есять",
-            "издревле": "изд+ревле",
+            "издревле": "издр+евле",
         }
         self.assertEqual(entries, expected)
         expected_positions = {"несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0, "десять": 0, "издревле": 1}
