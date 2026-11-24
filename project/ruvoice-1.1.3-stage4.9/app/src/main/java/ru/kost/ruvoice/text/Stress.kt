@@ -56,7 +56,8 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
             trace?.add("input: $sentence")
             return own(sentence).also { trace?.add("${layer.code}: $it") }
         }
-        val ruResult = ruApply(sentence, source)
+        val ruPass = ruApply(sentence, source)
+        val ruResult = ruPass.text
         val corrector = independentCorrector ?: return ruResult
         // Независимая модель и слияние должны работать с тем же подготовленным текстом,
         // который получил штатный конвейер: Normalizer может раскрыть число/сокращение,
@@ -77,21 +78,11 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         val unstressed = prediction.decisions.count { it == StressDecision.UNSTRESSED }
         val restoredYo = prediction.yoDecisions.count { it == YoDecision.RESTORE_YO }
         val keptE = prediction.yoDecisions.count { it == YoDecision.KEEP_E }
-        // Re-run only the deterministic grammar pass to identify words whose case/form
-        // was explicitly resolved by RuVoice. These marks must not be overwritten by a
-        // conflicting context-free or erroneous independent prediction.
-        val grammarProtectedWords = if (rules.on("gram")) runCatching {
-            val grammarInput = StressInputSanitizer.stripMarkers(sentence)
-            val grammarOutput = gramPass(surnamePass(grammarInput, source), source = source)
-            val sourceTokens = correctionWordRe.findAll(grammarInput).toList()
-            val grammarTokens = correctionWordRe.findAll(grammarOutput).toList()
-            if (sourceTokens.size != grammarTokens.size) emptySet()
-            else sourceTokens.indices.filterTo(LinkedHashSet()) { index ->
-                grammarTokens[index].value.contains('+') || grammarTokens[index].value.contains('\u0301')
-            }
-        }.getOrDefault(emptySet()) else emptySet()
+        // The native RuVoice pipeline records which words were resolved by its contextual
+        // grammar and BERT homograph passes. Those decisions outrank a conflicting independent
+        // prediction; ordinary accentor marks remain eligible for RUAccent correction.
         val merged = StressCorrectionMerger.merge(
-            sentence, ruResult, prediction, userDict.keys, grammarProtectedWords
+            sentence, ruResult, prediction, userDict.keys, ruPass.protectedStressIndices
         )
 
         // Не показываем внутренние плюсы как будто это текст: "+о" — это «о́».
@@ -129,15 +120,36 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         return kaRe.replace(s) { m -> if (m.groupValues[1].replace("+", "").lowercase().replace('ё', 'е') in words) m.groupValues[1] + "ка" else m.value }
     }
 
-    private fun ruApply(sentence: String, source: String): String {
+    private data class RuApplyResult(
+        val text: String,
+        val protectedStressIndices: Set<Int>,
+    )
+
+    /** Word indices newly resolved by a native context-aware pass, aligned to merger tokens. */
+    private fun newlyMarkedStressIndices(before: String, after: String): Set<Int> {
+        val previous = correctionWordRe.findAll(before).toList()
+        val next = correctionWordRe.findAll(after).toList()
+        if (previous.size != next.size) return emptySet()
+        return previous.indices.filterTo(LinkedHashSet()) { index ->
+            !previous[index].value.contains('+') &&
+                (next[index].value.contains('+') || next[index].value.contains('\u0301'))
+        }
+    }
+
+    private fun ruApply(sentence: String, source: String): RuApplyResult {
         var s = sentence
-        fun step(name: String, next: String) { trace?.add("$name: $next"); s = next }
+        val protectedStress = LinkedHashSet<Int>()
+        fun step(name: String, next: String, trustedContextDecision: Boolean = false) {
+            if (trustedContextDecision) protectedStress += newlyMarkedStressIndices(s, next)
+            trace?.add("$name: $next")
+            s = next
+        }
         trace?.add("input: $sentence")
         // слова, пришедшие уже с «+» (фраза из словаря замен или ударение в самом тексте): словарь ударений их не трогает,
         // фраза конкретнее слова («обливаясь п+отом» против «потом = пот+ом»)
         val preset = wordRe.findAll(sentence).filter { '+' in it.value }.map { it.value.lowercase() }.toSet()
-        if (rules.on("gram")) step("gram", gramPass(surnamePass(s, source), source = source))
-        if (rules.on("homo")) step("homo", homographPass(s))
+        if (rules.on("gram")) step("gram", gramPass(surnamePass(s, source), source = source), trustedContextDecision = true)
+        if (rules.on("homo")) step("homo", homographPass(s), trustedContextDecision = true)
         if (rules.on("accentor")) step("accentor", accentorPass(s))
         step("dict", userDictPass(s, sentence, preset))
         // «скаж+и-к+а» — у частицы свой «+», модель тянет «а»: слитно и без знака, «скаж+ика» (жалоба 28.10.2026). После словаря:
@@ -145,7 +157,7 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         if (rules.on("accentor")) step("ka", fuseKa(s, source))
         // твёрдое [э] в заимствованиях — после всех ударений, чтобы модель и словари видели обычное «е»
         if (rules.on("hard_e") && hardE != null) step("hard_e", hardE.apply(s))
-        return s
+        return RuApplyResult(s, protectedStress)
     }
 
     /** Фамилия-омограф с заглавной не в начале предложения: «Иван Волков» — «в+олков», а не род. мн. «волк+ов» из exceptions
