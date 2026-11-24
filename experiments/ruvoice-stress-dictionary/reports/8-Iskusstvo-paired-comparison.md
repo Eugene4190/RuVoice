@@ -55,3 +55,15 @@ These are examples of changed predictions, **not** automatically verified correc
 This is a paired output comparison, not a whole-book accuracy benchmark. The EPUB has no complete gold stress annotation, so the 9,654 changed tokens cannot be labelled “corrected” as a group. The zero lexical/alignment mismatches confirms that the corrector preserved token alignment and lexical forms in this run. The reviewed regression cases are a small, explicitly curated gold set, not a substitute for a full annotated corpus.
 
 The JSON artifact is retained in the Actions run; this Markdown report deliberately stores only aggregate counts and a short word list, not book excerpts or paragraph contexts.
+
+## Limited normative spot-check of changed forms
+
+A few high-frequency changes were checked against independent normative references. This does not establish that the surrounding book usage is correct:
+
+- `одновреме́нно → одновре́менно`: Gramota's metadictionary lists both as variants. This is an allowed variant, not proof that the new form is uniquely correct in the book: https://gramota.ru/meta/odnovremenno
+- `созда́ли → со́здали`: Gramota calls `сОздали` exemplary and `создАли` conversational, while explicitly stating that both are normative: https://gramota.ru/spravka/vopros/308981
+- `создана́ → со́здана`: Gramota's reference answer records both variants as correct for this form: https://gramota.ru/poisk?mode=spravka&query=начата
+- `лека́рства → ле́карства`: Gramota distinguishes the stress by meaning: `лека́рство` as a medicinal substance and `ле́карство` in the older sense “occupation of a healer”. Without the exact sentence we cannot decide which meaning applies: https://gramota.ru/poisk?mode=slovari&query=лекарство
+- `эгре́гор → эгрего́р`: Wiktionary records the stress on `е` and also notes a variant on `о`; that is a lexical variant check, not a full verification of every inflected form: https://ru.wiktionary.org/wiki/эгрегор
+
+The detailed 71-pair, occurrence-count list is in `8-Iskusstvo-stress-movements-review.tsv`. Every row remains marked `UNREVIEWED_NOT_GOLD` until the exact context and applicable sense are reviewed. No rows from this comparison were silently promoted into the importable user dictionary.
