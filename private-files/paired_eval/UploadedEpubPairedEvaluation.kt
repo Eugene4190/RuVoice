@@ -415,7 +415,7 @@ fun main(args: Array<String>) {
 
             if (reportFile != null) {
                 reportFile.parentFile?.mkdirs()
-                reportFile.writeText(summary.toString(2), Charsets.UTF_8)
+                reportFile.bufferedWriter(Charsets.UTF_8).use { writer -> summary.write(writer) }
                 println("REPORT_FILE=" + reportFile.path + " REPORT_BYTES=" + reportFile.length())
             }
 
