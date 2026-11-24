@@ -25,6 +25,8 @@ class YoDictTest {
         assertEquals("ёжик", yo.restore("ежик"))
         assertEquals("Ёжик", yo.restore("Ежик"))          // строчное слово подходит и с заглавной
         assertEquals("зелёного", yo.restore("зеленого"))   // «зелён(ый|ого|…)» — формы в скобках
+        assertEquals("объём", yo.restore("объем"))             // базовая форма добавлена в словарь после regressions EPUB
+        assertEquals("Объём", yo.restore("Объем"))             // регистр в начале предложения сохраняется
         assertNull(yo.restore("ЕЖИК"))                     // капс — не наш случай
         assertNull(yo.restore("все"))                      // спорные слова в safe.txt не входят
         assertNull(yo.restore("небо"))
@@ -50,6 +52,7 @@ class YoDictTest {
     @Test fun accentorPassUsesDict() {
         val s = Stress(d, firstVowel, yo = yo)
         assertEquals("+ёжик ш+ёл", s.apply("ежик шел"))           // «ё» из словаря, ударение на неё
+        assertEquals("об+ъём", s.apply("объем"))                       // словарь восстанавливает и ударяет базовую форму
         assertEquals("+ёлки-п+алки", s.apply("елки-палки"))         // часть через дефис ищется без дефиса
         assertEquals("м+ама", s.apply("мама"))                     // не словарное — как было
         assertEquals("+ежик", Stress(d, firstVowel, yo = yo, rules = Rules(off = setOf("yo"))).apply("ежик"))
