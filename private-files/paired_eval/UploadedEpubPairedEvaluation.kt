@@ -745,9 +745,9 @@ class UploadedEpubPairedEvaluationTest {
             val handsCombined = readable("дать разуму в руки инструмент", combinedStress, baselineData)
             val networkBaseline = readable("Сети значений в потоке энергии сознания", baselineStress, baselineData)
             val networkCombined = readable("Сети значений в потоке энергии сознания", combinedStress, baselineData)
-            val utрамBaseline = readable("Фигура появляется по утрам", baselineStress, baselineData)
-            val utрамReviewed = readable("Фигура появляется по утрам", reviewedStress, data)
-            val двадцатьReviewed = readable("двадцать", reviewedStress, data)
+            val utramBaseline = readable("Фигура появляется по утрам", baselineStress, baselineData)
+            val utramReviewed = readable("Фигура появляется по утрам", reviewedStress, data)
+            val twentyReviewed = readable("двадцать", reviewedStress, data)
             sanity.put("строительство дома_baseline", genitiveHouse)
             sanity.put("строительство дома_combined", genitiveHouseCombined)
             sanity.put("строительство дома_expected", "до́ма")
@@ -770,11 +770,11 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("Сети значений_expected", "Се́ти значений")
             sanity.put("Сети значений_baseline_matches_expected", networkBaseline.contains("сети́", ignoreCase = true))
             sanity.put("Сети значений_reviewed_matches_expected", networkReviewed.contains("се́ти", ignoreCase = true))
-            sanity.put("по утра́м_baseline", utрамBaseline)
-            sanity.put("по утра́м_reviewed", utрамReviewed)
-            sanity.put("по утра́м_variant_preserved", utрамReviewed.contains("утра́м", ignoreCase = true))
-            sanity.put("два́дцать_reviewed", двадцатьReviewed)
-            sanity.put("два́дцать_reviewed_matches_expected", двадцатьReviewed.contains("два́дцать", ignoreCase = true))
+            sanity.put("по утра́м_baseline", utramBaseline)
+            sanity.put("по утра́м_reviewed", utramReviewed)
+            sanity.put("по утра́м_variant_preserved", utramReviewed.contains("утра́м", ignoreCase = true))
+            sanity.put("два́дцать_reviewed", twentyReviewed)
+            sanity.put("два́дцать_reviewed_matches_expected", twentyReviewed.contains("два́дцать", ignoreCase = true))
             sanity.put("Сети значений_combined_matches_expected", networkCombined.contains("сети́", ignoreCase = true))
             check(networkBaseline.contains("сети́", ignoreCase = true)) {
                 "Untouched production baseline did not reproduce the original 'сети' stress: $networkBaseline"
@@ -782,12 +782,12 @@ class UploadedEpubPairedEvaluationTest {
             check(networkReviewed.contains("се́ти", ignoreCase = true)) {
                 "Phrase-specific stress correction failed for the word 'сети': $networkReviewed"
             }
-            check(utрамBaseline.contains("утра́м", ignoreCase = true) &&
-                utрамReviewed.contains("утра́м", ignoreCase = true)) {
-                "The normative adverbial variant 'по утра́м' must remain unchanged: baseline=$utрамBaseline reviewed=$utрамReviewed"
+            check(utramBaseline.contains("утра́м", ignoreCase = true) &&
+                utramReviewed.contains("утра́м", ignoreCase = true)) {
+                "The normative adverbial variant 'по утра́м' must remain unchanged: baseline=$utramBaseline reviewed=$utramReviewed"
             }
-            check(двадцатьReviewed.contains("два́дцать", ignoreCase = true)) {
-                "Book override must place the acute on the vowel а in 'двадцать': $двадцатьReviewed"
+            check(twentyReviewed.contains("два́дцать", ignoreCase = true)) {
+                "Book override must place the acute on the vowel а in 'двадцать': $twentyReviewed"
             }
 
             // Run the five manually reviewed stress cases before the separate ё suite.
