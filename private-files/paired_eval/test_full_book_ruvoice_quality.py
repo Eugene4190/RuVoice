@@ -78,10 +78,22 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         self.assertEqual(quality.acute_position("далёко"), 1)
         self.assertEqual(quality.acute_position("поздне́е"), 1)
 
-    def test_expanded_numeral_twenty_is_stressed_on_first_syllable(self) -> None:
+    def test_reviewed_overlay_uses_plus_before_the_stressed_vowel(self) -> None:
         overlay = SOURCE.with_name("book_reviewed_overrides.txt")
         entries = dict(line.split() for line in overlay.read_text(encoding="utf-8").splitlines() if line.strip())
-        self.assertEqual(entries["двадцать"], "д+вадцать")
+        expected = {
+            "утрам": "+утрам",
+            "несчастлив": "несчастл+ив",
+            "отнята": "отнят+а",
+            "шумы": "ш+умы",
+            "двадцать": "д+вадцать",
+        }
+        self.assertEqual(entries, expected)
+        expected_positions = {"утрам": 0, "несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0}
+        vowels = set("аеёиоуыэюя")
+        for word, variant in entries.items():
+            marker = variant.index("+")
+            self.assertEqual(sum(ch in vowels for ch in variant[:marker]), expected_positions[word])
         self.assertEqual(quality.acute_position("два́дцать"), 0)
 
 
