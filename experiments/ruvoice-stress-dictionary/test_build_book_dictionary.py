@@ -48,6 +48,8 @@ class BookDictionaryTests(unittest.TestCase):
 
             candidate_text = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
             self.assertIn("молоко мол+око", candidate_text)
+            candidate_review = (out / "Book_AutoStress_Candidate_Review.tsv").read_text(encoding="utf-8-sig")
+            self.assertIn("UNREVIEWED", candidate_review)
             self.assertNotIn("корова", candidate_text)
             self.assertNotIn("творог", candidate_text)
             self.assertNotIn("старое", candidate_text)
