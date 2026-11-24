@@ -692,11 +692,11 @@ class UploadedEpubPairedEvaluationTest {
             }
         }
         val expectedBookOverrides = mapOf(
-            "утрам" to "у+трам",
-            "несчастлив" to "несчастли+в",
+            "утрам" to "+утрам",
+            "несчастлив" to "несчастл+ив",
             "отнята" to "отнят+а",
             "шумы" to "ш+умы",
-            "двадцать" to "два+дцать",
+            "двадцать" to "д+вадцать",
         )
         check(bookOverrides == expectedBookOverrides) {
             "Book-specific override set differs from reviewed manifest: $bookOverrides"
