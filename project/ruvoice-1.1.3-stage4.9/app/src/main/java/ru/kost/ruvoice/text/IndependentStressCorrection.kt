@@ -320,15 +320,21 @@ internal object StressCorrectionMerger {
             val isHyphenatedClitic = i > 0 &&
                 normalizeKey(sourceParsed.base) in hyphenatedClitics &&
                 original.substring(src[i - 1].range.last + 1, src[i].range.first).contains('-')
+            // A native stress mark on ё is protected: moving it to another vowel would
+            // contradict the spelling signal carried by ё itself (e.g. пройд+ённый).
+            val nativeYoStress = currentParsed.stressed.filterTo(LinkedHashSet()) { it in currentParsed.yo }
             val selectedStress = when (decision) {
-                // Если модель заявила STRESSED, но не указала позицию U+0301,
-                // прогноз внутренне противоречив: не стираем и не переносим знак.
-                StressDecision.STRESSED -> predictedParsed.stressed.ifEmpty { currentParsed.stressed }
-                // Preserve the native mark on ordinary polysyllabic words. Hyphenated Russian
-                // enclitics are a deliberate exception: -то/-нибудь/-либо/-таки/-ка are unstressed.
-                StressDecision.UNSTRESSED -> if (
-                    currentParsed.base.count { it.lowercaseChar() in VOWELS } >= 2 && !isHyphenatedClitic
-                ) currentParsed.stressed else emptySet()
+                // If STRESSED comes without a usable acute marker, do not erase a native mark.
+                StressDecision.STRESSED ->
+                    nativeYoStress.ifEmpty { predictedParsed.stressed.ifEmpty { currentParsed.stressed } }
+                // NO_STRESS leaves polysyllabic Silero fallback intact. A hyphenated Russian
+                // enclitic is an exception; ё-stress remains protected even in a short token.
+                StressDecision.UNSTRESSED -> when {
+                    nativeYoStress.isNotEmpty() -> nativeYoStress
+                    currentParsed.base.count { it.lowercaseChar() in VOWELS } >= 2 && !isHyphenatedClitic ->
+                        currentParsed.stressed
+                    else -> emptySet()
+                }
                 StressDecision.UNKNOWN -> currentParsed.stressed
             }
             val rendered = buildString(mergedBase.length + selectedStress.size) {
