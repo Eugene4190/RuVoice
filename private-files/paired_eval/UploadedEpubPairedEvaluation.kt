@@ -868,6 +868,7 @@ class UploadedEpubPairedEvaluationTest {
             var lexicalMismatches = 0
             var alignmentMismatches = 0
             val changeRows = JSONArray()
+            val reviewCandidates = JSONArray()
 
             for ((segmentIndex, segment) in segments.withIndex()) {
                 val baseline = StressDiagnosticFormatter.readable(
@@ -918,10 +919,41 @@ class UploadedEpubPairedEvaluationTest {
                     segmentChanged = true
                     if (stressChanged) {
                         stressChanges++
+                        val beforeVowels = before.count { it.lowercaseChar() in VOWELS }
+                        val afterVowels = after.count { it.lowercaseChar() in VOWELS }
                         when {
                             beforeStress == null && afterStress != null -> stressAdded++
                             beforeStress != null && afterStress == null -> stressRemoved++
                             else -> stressMoved++
+                        }
+                        // Keep all potentially meaningful multisyllabic changes for a
+                        // context-first audit. Monosyllabic stress-mark removal is not a
+                        // dictionary correction candidate and is intentionally excluded.
+                        val candidateType = when {
+                            beforeStress != null && afterStress != null && beforeStress != afterStress ->
+                                "STRESS_MOVED"
+                            beforeStress != null && afterStress == null && beforeVowels >= 2 ->
+                                "MULTISYLLABIC_STRESS_REMOVED"
+                            beforeStress == null && afterStress != null && afterVowels >= 2 ->
+                                "MULTISYLLABIC_STRESS_ADDED"
+                            else -> null
+                        }
+                        if (candidateType != null) {
+                            reviewCandidates.put(JSONObject()
+                                .put("type", candidateType)
+                                .put("chapter", segment.chapter)
+                                .put("paragraph", segment.paragraph)
+                                .put("part", segment.part)
+                                .put("word_index", wordIndex)
+                                .put("word", beforePlain)
+                                .put("before", before)
+                                .put("after", after)
+                                .put("stress_before_vowel_index", beforeStress ?: JSONObject.NULL)
+                                .put("stress_after_vowel_index", afterStress ?: JSONObject.NULL)
+                                .put("before_vowels", beforeVowels)
+                                .put("after_vowels", afterVowels)
+                                .put("context", segment.text)
+                                )
                         }
                     }
                     if (yoChanged) yoChanges++
@@ -977,6 +1009,7 @@ class UploadedEpubPairedEvaluationTest {
                 .put("sanity_examples", sanity)
                 .put("accuracy_claim", "NOT_MEASURED: this is a paired output comparison; the EPUB has no gold stress annotations, so changes are not automatically labelled corrections.")
                 .put("changes", changeRows)
+                .put("review_candidates", reviewCandidates)
 
             reportFile.parentFile?.mkdirs()
             reportFile.writeText(summary.toString(2), Charsets.UTF_8)
