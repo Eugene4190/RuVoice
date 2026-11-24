@@ -1,0 +1,11 @@
+# Downloaded source dictionaries and large temporary artifacts
+.cache/
+data/raw/*
+!data/raw/README.md
+.venv/
+__pycache__/
+*.py[cod]
+
+# Temporary pipeline directories
+.work/
+*.tmp
