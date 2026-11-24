@@ -31,9 +31,7 @@ permissions:
 
 jobs:
   paired-evaluation:
-    # The uploaded EPUB and paired report are user data. Do not run this
-    # workflow while the repository is public, where artifacts may be public too.
-    if: github.event.repository.private == true
+    # The repository owner explicitly approved running the book evaluation publicly.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
