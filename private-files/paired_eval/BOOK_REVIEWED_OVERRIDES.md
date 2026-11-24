@@ -1,6 +1,6 @@
 # Book-specific reviewed stress overlay
 
-This file contains six case-specific corrections selected after a full production
+This file contains seven reviewed wordform overrides selected after a full production
 RuVoice pass over `8.Iskusstvo..epub`.
 
 | Book form | Previous RuVoice output | Reviewed output | Reason |
@@ -31,4 +31,4 @@ A separate phrase-level correction is applied through the production homograph p
 |---|---|---|---|
 | Сети значений | Сети́ значений | Се́ти значений | Nominative plural in this phrase; the prepositional form сети́ remains valid elsewhere |
 
-The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the six-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
+The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the seven-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
