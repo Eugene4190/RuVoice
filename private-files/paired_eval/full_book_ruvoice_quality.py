@@ -61,7 +61,39 @@ def marked_position(marked: str) -> int | None:
 
 
 def acute_position(marked: str) -> int | None:
-    return vowel_position(marked, ACUTE)
+    explicit = vowel_position(marked, ACUTE)
+    if explicit is not None:
+        return explicit
+    # Ё is intrinsically stressed in Russian; no combining acute is normally written.
+    lower = marked.lower()
+    yo_index = lower.find("ё")
+    return sum(ch in VOWELS for ch in lower[:yo_index]) if yo_index >= 0 else None
+
+
+def load_context_acceptances(path: Path | None) -> dict[str, list[tuple[int, re.Pattern[str], str]]]:
+    result: dict[str, list[tuple[int, re.Pattern[str], str]]] = defaultdict(list)
+    if path is None or not path.is_file():
+        return result
+    with path.open("r", encoding="utf-8-sig", newline="") as stream:
+        for row in csv.reader(stream, delimiter="\\t"):
+            if not row or row[0].startswith("#") or row[0].lower() == "word":
+                continue
+            if len(row) < 4:
+                raise ValueError(f"Malformed context acceptance row: {row}")
+            word, position, pattern, reason = row[:4]
+            result[norm(word)].append((int(position), re.compile(pattern), reason))
+    return result
+
+
+def is_suspected_mismatch(status: str) -> bool:
+    return status in {
+        "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT",
+        "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE",
+        "BOTH_DIFFER_FROM_AOT_WIKT",
+        "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON",
+        "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW",
+        "AOT_WIKT_DISAGREE_BASELINE_OUTSIDE_VARIANTS",
+    }
 
 
 def read_ruvoice_system(path: Path) -> dict[str, set[int]]:
@@ -211,48 +243,66 @@ def verdict(
     aot: dict[int, set[str]],
     wikt: dict[int, set[str]],
     system: set[int],
+    context: str = "",
+    contextual_acceptances: dict[str, list[tuple[int, re.Pattern[str], str]]] | None = None,
 ) -> tuple[str, str]:
     vowels = sum(ch in VOWELS for ch in key)
     if key in FUNCTION_WORDS:
         return "FUNCTION_WORD_CONTEXT_REQUIRED", "Служебное слово/частица; словарное ударение не равно фразовому"
     if vowels < 2:
         return "MONOSYLLABLE_NOT_SCORED", "Односложное слово: отдельное ударение в словаре не оценивается"
+
+    # Curated context exceptions prevent known inflection/sense variants from becoming
+    # false positives when dictionary dumps merge homographs or omit a paradigm.
+    for accepted_position, pattern, reason in (contextual_acceptances or {}).get(key, []):
+        if base_position == accepted_position and pattern.search(context):
+            return "CONTEXTUAL_VARIANT_ACCEPTED", reason
+
+    aot_positions = set(aot)
+    wikt_positions = set(wikt)
+    source_union = aot_positions | wikt_positions
+    common = aot_positions & wikt_positions
+
     if aot and wikt:
-        aot_positions = set(aot)
-        wikt_positions = set(wikt)
-        common = aot_positions & wikt_positions
         if len(aot_positions) == 1 and len(wikt_positions) == 1 and len(common) == 1:
             agreed = next(iter(common))
             base_ok = base_position == agreed
             ruaccent_ok = ruaccent_position == agreed
             if base_ok and ruaccent_ok:
-                return "BOTH_MATCH_AOT_WIKT", "RuVoice и RUAccent совпали с единственным AOT/Wiktionary вариантом"
+                return "BOTH_MATCH_AOT_WIKT", "RuVoice и RUAccent совпали с единственным вариантом AOT/Wiktionary"
             if not base_ok and ruaccent_ok and base_position in system:
                 return "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT", "Встроенный словарь поддерживает RuVoice, но AOT и Wiktionary согласны с RUAccent"
             if not base_ok and ruaccent_ok:
                 return "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE", "RUAccent и оба словаря согласны против RuVoice"
             if base_ok and not ruaccent_ok:
                 return "RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE", "RuVoice и оба словаря согласны против RUAccent"
-            return "BOTH_DIFFER_FROM_AOT_WIKT", "Обе модели расходятся с согласным вариантом двух словарей"
+            return "BOTH_DIFFER_FROM_AOT_WIKT", "Обе модели расходятся с единственным согласным вариантом двух словарей"
+
+        # Do not require exact intersection: AOT and Wiktionary can contain different
+        # paradigms/lemmas for one spelling. Any source-attested form is not a mismatch.
+        if base_position in common:
+            return "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS", "Ударение RuVoice подтверждено обоими источниками"
+        if base_position in source_union:
+            return "BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT", "Ударение RuVoice присутствует в вариантах хотя бы одного источника"
         if common:
-            if base_position in common:
-                return "BASELINE_ONE_OF_SHARED_VARIANTS", "Ударение RuVoice входит в общий набор допустимых вариантов"
-            return "SHARED_VARIANTS_BUT_BASELINE_OUTSIDE", "Источники имеют общие варианты, но RuVoice вне них"
-        return "AOT_WIKT_DISAGREE", "AOT и Wiktionary дают разные ударения"
+            if ruaccent_position in common:
+                return "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON", "RuVoice вне найденных вариантов; RUAccent совпадает с общим вариантом"
+            return "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW", "Оба источника имеют общий вариант, но RuVoice вне всех перечисленных вариантов; нужен контекстный разбор"
+        return "AOT_WIKT_DISAGREE_BASELINE_OUTSIDE_VARIANTS", "AOT и Wiktionary расходятся, а ударение RuVoice не найдено ни в одном наборе вариантов"
+
     if aot or wikt:
         source = aot if aot else wikt
         name = "AOT" if aot else "WIKTIONARY"
-        if len(source) > 1:
-            return "SINGLE_SOURCE_MULTIPLE_VARIANTS", f"{name} допускает несколько вариантов"
-        pos = next(iter(source))
-        if base_position == pos:
-            return "SINGLE_SOURCE_SUPPORTS_RUVOICE", f"Только {name} найден; совпадает с RuVoice"
-        if ruaccent_position == pos:
-            return "SINGLE_SOURCE_SUPPORTS_RUACCENT", f"Только {name} найден; совпадает с RUAccent"
-        return "SINGLE_SOURCE_DIFFERS_FROM_BOTH", f"Только {name} найден и не совпадает с моделями"
+        positions = set(source)
+        if base_position in positions:
+            return "SINGLE_SOURCE_SUPPORTS_RUVOICE", f"Только {name} найден; он поддерживает RuVoice"
+        if ruaccent_position in positions:
+            return "SINGLE_SOURCE_SUPPORTS_RUACCENT", f"Только {name} найден; он поддерживает RUAccent"
+        return "SINGLE_SOURCE_DIFFERS_FROM_BOTH", f"Только {name} найден и не совпадает с обеими моделями"
+
     if system:
         if base_position in system:
-            return "BUILTIN_SUPPORTS_RUVOICE_ONLY", "Есть встроенная словарная запись, но независимые источники не нашлись"
+            return "BUILTIN_SUPPORTS_RUVOICE_ONLY", "Есть встроенная словарная запись, но независимые источники не найдены"
         return "BUILTIN_DIFFERS_OR_AMBIGUOUS", "Встроенная запись не подтверждает результат RuVoice"
     return "NO_INDEPENDENT_REFERENCE", "Независимая словарная форма не найдена"
 
@@ -263,6 +313,7 @@ def main() -> int:
     parser.add_argument("--aot-dir", type=Path, required=True)
     parser.add_argument("--wiktionary-gz", type=Path, required=True)
     parser.add_argument("--system-dictionary", type=Path, required=True)
+    parser.add_argument("--context-rules", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -286,6 +337,19 @@ def main() -> int:
     aot = load_aot(args.aot_dir, target_words)
     wikt = load_wiktionary(args.wiktionary_gz, target_words)
     system = read_ruvoice_system(args.system_dictionary)
+    contextual_acceptances = load_context_acceptances(args.context_rules)
+
+    reviewed_tokens = paired.get("reviewed_tokens", [])
+    if not reviewed_tokens:
+        raise SystemExit("В paired JSON нет reviewed_tokens: требуется третий полный прогон с книжным оверлеем.")
+    reviewed_by_occurrence: dict[tuple[int, int], str] = {}
+    for row in reviewed_tokens:
+        if "segment_index" in row and "word_index" in row:
+            reviewed_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(
+                row.get("reviewed_output", "")
+            )
+    if not reviewed_by_occurrence:
+        raise SystemExit("Третий прогон не содержит выровненных reviewed_tokens.")
 
     # Use the complete independently merged token stream, not only changed-token samples.
     ruaccent_by_occurrence: dict[tuple[int, int], str] = {}
@@ -305,6 +369,9 @@ def main() -> int:
     occurrence_rows: list[list[Any]] = []
     aggregate: dict[str, dict[str, Any]] = {}
     counts = Counter()
+    reviewed_counts = Counter()
+    reviewed_changed_occurrences = 0
+    reviewed_changed_words: Counter[str] = Counter()
     for token in tokens:
         source_word = token.get("source_word")
         output_word = str(token.get("ruvoice_output", ""))
@@ -323,35 +390,50 @@ def main() -> int:
         system_positions = system.get(key, set())
         aot_positions = aot.get(key, {})
         wikt_positions = wikt.get(key, {})
-        status, reason = verdict(
-            key, base_position, ruaccent_position, aot_positions, wikt_positions, system_positions
-        )
         context = context_by_segment.get(segment_index, "")
+        status, reason = verdict(
+            key, base_position, ruaccent_position, aot_positions, wikt_positions,
+            system_positions, context, contextual_acceptances
+        )
+        reviewed_word = reviewed_by_occurrence.get((segment_index, word_index), output_word)
+        reviewed_position = acute_position(reviewed_word)
+        reviewed_status, reviewed_reason = verdict(
+            key, reviewed_position, ruaccent_position, aot_positions, wikt_positions,
+            system_positions, context, contextual_acceptances
+        )
         counts[status] += 1
+        reviewed_counts[reviewed_status] += 1
+        if reviewed_position != base_position:
+            reviewed_changed_occurrences += 1
+            reviewed_changed_words[key] += 1
         if key not in aggregate:
             aggregate[key] = {
-                "frequency": 0, "base_positions": Counter(), "ruaccent_positions": Counter(),
-                "statuses": Counter(), "source_forms": Counter(), "contexts": [],
+                "frequency": 0, "base_positions": Counter(), "reviewed_positions": Counter(),
+                "ruaccent_positions": Counter(), "statuses": Counter(), "reviewed_statuses": Counter(),
+                "source_forms": Counter(), "contexts": [],
                 "aot": aot_positions, "wikt": wikt_positions, "system": system_positions,
             }
         item = aggregate[key]
         item["frequency"] += 1
         item["base_positions"][base_position if base_position is not None else "UNMARKED"] += 1
+        item["reviewed_positions"][reviewed_position if reviewed_position is not None else "UNMARKED"] += 1
         item["ruaccent_positions"][ruaccent_position if ruaccent_position is not None else "UNMARKED"] += 1
         item["statuses"][status] += 1
+        item["reviewed_statuses"][reviewed_status] += 1
         item["source_forms"][output_word] += 1
         if context and len(item["contexts"]) < 4:
             item["contexts"].append(context)
 
         occurrence_rows.append([
-            status, source_word, output_word, ruaccent_word,
+            status, reviewed_status, source_word, output_word, reviewed_word, ruaccent_word,
             "" if base_position is None else base_position,
+            "" if reviewed_position is None else reviewed_position,
             "" if ruaccent_position is None else ruaccent_position,
             variants_text(aot_positions), variants_text(wikt_positions),
-            variants_text(system_positions), token.get("segment_index", ""),
-            token.get("word_index", ""), token.get("chapter", ""),
-            token.get("paragraph", ""), context,
-            reason,
+            variants_text(system_positions), positions_text(aot_positions), positions_text(wikt_positions),
+            token.get("segment_index", ""), token.get("word_index", ""),
+            token.get("chapter", ""), token.get("paragraph", ""), context,
+            reason, reviewed_reason,
         ])
 
     # Rank unique words by severity and how often they appear.
@@ -359,10 +441,11 @@ def main() -> int:
         "BOTH_DIFFER_FROM_AOT_WIKT": 0,
         "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT": 1,
         "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE": 1,
-        "SHARED_VARIANTS_BUT_BASELINE_OUTSIDE": 2,
-        "SINGLE_SOURCE_DIFFERS_FROM_BOTH": 3,
-        "RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE": 4,
-        "AOT_WIKT_DISAGREE": 5,
+        "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON": 2,
+        "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW": 3,
+        "AOT_WIKT_DISAGREE_BASELINE_OUTSIDE_VARIANTS": 4,
+        "SINGLE_SOURCE_DIFFERS_FROM_BOTH": 5,
+        "RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE": 6,
         "SINGLE_SOURCE_MULTIPLE_VARIANTS": 6,
         "BUILTIN_DIFFERS_OR_AMBIGUOUS": 7,
         "NO_INDEPENDENT_REFERENCE": 8,
@@ -378,33 +461,36 @@ def main() -> int:
     for key, item in aggregate.items():
         top_status = min(item["statuses"], key=lambda st: priority_order.get(st, 99))
         base_summary = ",".join(f"{k}:{v}" for k, v in item["base_positions"].most_common())
+        reviewed_summary = ",".join(f"{k}:{v}" for k, v in item["reviewed_positions"].most_common())
         ruaccent_summary = ",".join(f"{k}:{v}" for k, v in item["ruaccent_positions"].most_common())
         unique_rows.append([
-            top_status, key, item["frequency"], base_summary, ruaccent_summary,
+            top_status, key, item["frequency"], base_summary, reviewed_summary, ruaccent_summary,
             variants_text(item["aot"]), variants_text(item["wikt"]), variants_text(item["system"]),
             ";".join(f"{k}:{v}" for k, v in item["statuses"].most_common()),
+            ";".join(f"{k}:{v}" for k, v in item["reviewed_statuses"].most_common()),
             " || ".join(item["contexts"]),
         ])
     unique_rows.sort(key=lambda row: (
         priority_order.get(row[0], 99), -int(row[2]), row[1]
     ))
     occurrence_rows.sort(key=lambda row: (
-        priority_order.get(row[0], 99), row[1], int(row[9]), int(row[10])
+        priority_order.get(row[0], 99), row[2], int(row[14]), int(row[15])
     ))
 
     total = sum(item["frequency"] for item in aggregate.values())
     scored = {
-        "BOTH_MATCH_AOT_WIKT", "BASELINE_ONE_OF_SHARED_VARIANTS",
+        "BOTH_MATCH_AOT_WIKT", "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS",
+        "BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT",
         "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE",
         "RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE",
         "BOTH_DIFFER_FROM_AOT_WIKT", "AOT_WIKT_DISAGREE",
         "SINGLE_SOURCE_SUPPORTS_RUVOICE", "SINGLE_SOURCE_SUPPORTS_RUACCENT",
-        "SINGLE_SOURCE_DIFFERS_FROM_BOTH", "SINGLE_SOURCE_MULTIPLE_VARIANTS",
-        "SHARED_VARIANTS_BUT_BASELINE_OUTSIDE",
+        "SINGLE_SOURCE_DIFFERS_FROM_BOTH",
+        "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON",
+        "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW",
+        "AOT_WIKT_DISAGREE_BASELINE_OUTSIDE_VARIANTS",
+        "CONTEXTUAL_VARIANT_ACCEPTED",
     }
-    scored_count = sum(counts[s] for s in scored)
-    baseline_agree = counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"] + counts["SINGLE_SOURCE_SUPPORTS_RUVOICE"]
-    ruaccent_agree = counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"] + counts["SINGLE_SOURCE_SUPPORTS_RUACCENT"]
     summary = {
         "book": paired.get("book_file"),
         "tokens_from_ruvoice": len(tokens),
@@ -420,10 +506,31 @@ def main() -> int:
             counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"] +
             counts["BOTH_DIFFER_FROM_AOT_WIKT"]
         ),
-        "ruvoice_matches_two_source_consensus_and_variants": counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"],
-        "ruvoice_suspected_mismatches_against_two_sources": counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] + counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] + counts["SHARED_VARIANTS_BUT_BASELINE_OUTSIDE"],
-        "ruaccent_matches_two_source_consensus_and_variants": (counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"] + counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] + counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"]),
-        "ruaccent_suspected_mismatches_against_two_sources": counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"] + counts["BOTH_DIFFER_FROM_AOT_WIKT"],
+        "ruvoice_matches_two_source_consensus_and_variants": (
+            counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS"]
+        ),
+        "ruvoice_supported_by_at_least_one_reference_variant": (
+            counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS"] +
+            counts["BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT"] + counts["SINGLE_SOURCE_SUPPORTS_RUVOICE"] +
+            counts["CONTEXTUAL_VARIANT_ACCEPTED"]
+        ),
+        "ruvoice_suspected_mismatches_against_two_sources": (
+            counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] +
+            counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] +
+            counts["BOTH_DIFFER_FROM_AOT_WIKT"] +
+            counts["RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON"] +
+            counts["BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW"]
+        ),
+        "reviewed_overlay_entries": len(paired.get("book_reviewed_override_entries", [])),
+        "reviewed_overlay_changed_occurrences": reviewed_changed_occurrences,
+        "reviewed_overlay_changed_wordforms": len(reviewed_changed_words),
+        "reviewed_status_counts": dict(reviewed_counts),
+        "reviewed_overlay_suspected_mismatches": sum(
+            count for status, count in reviewed_counts.items() if is_suspected_mismatch(status)
+        ),
+        "baseline_suspected_mismatches": sum(
+            count for status, count in counts.items() if is_suspected_mismatch(status)
+        ),
         "unscored_function_word_occurrences": counts["FUNCTION_WORD_CONTEXT_REQUIRED"],
         "unscored_monosyllable_occurrences": counts["MONOSYLLABLE_NOT_SCORED"],
         "no_independent_reference_occurrences": counts["NO_INDEPENDENT_REFERENCE"],
@@ -436,11 +543,13 @@ def main() -> int:
     with (args.output_dir / "WholeBook_RuVoice_AllOccurrences.tsv").open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream, delimiter="\t")
         writer.writerow([
-            "status", "source_form", "ruvoice_output", "ruaccent_output",
-            "ruvoice_stress_vowel_index", "ruaccent_stress_vowel_index",
-            "aot_stress_positions", "wiktionary_stress_positions",
-            "built_in_stress_positions", "segment_index", "word_index",
-            "chapter", "paragraph", "context", "reason",
+            "baseline_status", "reviewed_status", "source_form", "ruvoice_output",
+            "reviewed_output", "ruaccent_output", "ruvoice_stress_vowel_index",
+            "reviewed_stress_vowel_index", "ruaccent_stress_vowel_index",
+            "aot_stress_positions", "wiktionary_stress_positions", "built_in_stress_positions",
+            "aot_source_details", "wiktionary_source_details",
+            "segment_index", "word_index", "chapter", "paragraph", "context",
+            "baseline_reason", "reviewed_reason",
         ])
         writer.writerows(occurrence_rows)
 
@@ -448,9 +557,9 @@ def main() -> int:
         writer = csv.writer(stream, delimiter="\t")
         writer.writerow([
             "priority_status", "word", "book_frequency",
-            "ruvoice_position_counts", "ruaccent_position_counts",
+            "ruvoice_position_counts", "reviewed_position_counts", "ruaccent_position_counts",
             "aot_positions", "wiktionary_positions", "built_in_positions",
-            "occurrence_status_counts", "sample_contexts",
+            "occurrence_status_counts", "reviewed_occurrence_status_counts", "sample_contexts",
         ])
         writer.writerows(unique_rows)
 
