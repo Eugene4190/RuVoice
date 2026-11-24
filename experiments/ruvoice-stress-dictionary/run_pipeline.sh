@@ -47,21 +47,18 @@ else
   git -C "$AOT_REPO" reset --hard FETCH_HEAD
 fi
 
-MORPHS="$(find "$AOT_REPO" -type f -name morphs.json -print -quit)"
-GRAMTAB="$(find "$AOT_REPO" -type f -name gramtab.json -print -quit)"
-if [[ -z "$MORPHS" || -z "$GRAMTAB" ]]; then
-  echo "В скачанном morph_dict не найдены morphs.json и gramtab.json." >&2
-  echo "Укажите данные AOT вручную и проверьте структуру репозитория." >&2
+# Use the complete Russian AOT dataset explicitly. A generic find -quit can
+# select tiny fixtures under test_lem/ before the real 33 MB dataset.
+AOT_DIR="$AOT_REPO/data/Russian"
+MORPHS="$AOT_DIR/morphs.json"
+GRAMTAB="$AOT_DIR/gramtab.json"
+if [[ ! -s "$MORPHS" || ! -s "$GRAMTAB" ]]; then
+  echo "Не найден полный AOT dataset: $MORPHS и $GRAMTAB." >&2
+  find "$AOT_REPO" -type f \( -name morphs.json -o -name gramtab.json \) -printf '%p (%s bytes)\\n' >&2
   exit 3
 fi
-AOT_DIR="$(dirname "$MORPHS")"
-if [[ ! -f "$AOT_DIR/gramtab.json" ]]; then
-  AOT_DIR="$(dirname "$GRAMTAB")"
-fi
-if [[ ! -f "$AOT_DIR/morphs.json" || ! -f "$AOT_DIR/gramtab.json" ]]; then
-  echo "morphs.json и gramtab.json должны лежать в одном каталоге." >&2
-  exit 3
-fi
+echo "Использую полный русский AOT dataset: $AOT_DIR"
+echo "AOT morphs.json: $(wc -c < "$MORPHS") bytes; gramtab.json: $(wc -c < "$GRAMTAB") bytes"
 
 if [[ ! -x "$PY" ]]; then
   python3 -m venv "$VENV"
@@ -84,6 +81,14 @@ echo "Строю формы AOT и Викисловаря..."
 (
   cd "$UPSTREAM"
   "$PY" tools/aot_forms.py "$AOT_DIR"
+  AOT_FORMS="$UPSTREAM/app/build/aot_forms.tsv"
+  AOT_FORM_COUNT="$(wc -l < "$AOT_FORMS" | tr -d ' ')"
+  echo "AOT_FORMS_GENERATED=$AOT_FORM_COUNT"
+  if [[ "$AOT_FORM_COUNT" -lt 100000 ]]; then
+    echo "AOT-форм получилось подозрительно мало ($AOT_FORM_COUNT); сборка остановлена." >&2
+    echo "Проверьте исходные morphs.json / gramtab.json; пустой автоматический словарь не публикуется." >&2
+    exit 4
+  fi
   # The current Kaikki download is raw Wiktextract JSONL in gzip format.
   # Patch only this disposable upstream checkout so the official parser streams gzip without a 2.3 GB unpack.
   "$PY" - <<'PY'
