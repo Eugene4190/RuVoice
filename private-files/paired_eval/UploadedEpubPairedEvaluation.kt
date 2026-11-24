@@ -486,6 +486,7 @@ private class PairedTorchLiteStressModels(
     accentorFile: File,
     homoFile: File,
     bridgeScript: File,
+    private val padId: Int,
 ) : StressModels, AutoCloseable {
     private val process = ProcessBuilder(
         "python3", bridgeScript.absolutePath, accentorFile.absolutePath, homoFile.absolutePath
@@ -543,9 +544,9 @@ private class PairedTorchLiteStressModels(
         }
         val startJson = JSONArray().also { array -> starts.forEach { array.put(it) } }
         val endJson = JSONArray().also { array -> ends.forEach { array.put(it) } }
-        val key = JSONObject().put("ids", idJson).put("starts", startJson).put("ends", endJson).toString()
+        val key = JSONObject().put("ids", idJson).put("starts", startJson).put("ends", endJson).put("pad_id", padId).toString()
         homoCache[key]?.let { return it }
-        val response = request(JSONObject().put("op", "homo").put("ids", idJson).put("starts", startJson).put("ends", endJson))
+        val response = request(JSONObject().put("op", "homo").put("ids", idJson).put("starts", startJson).put("ends", endJson).put("pad_id", padId))
         val values = response.getJSONArray("probabilities")
         val result = FloatArray(values.length()) { values.getDouble(it).toFloat() }
         homoCache[key] = result
@@ -667,7 +668,7 @@ class UploadedEpubPairedEvaluationTest {
 
         val rules = Rules()
         val torchModels = PairedTorchLiteStressModels(
-            File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript
+            File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
         val baselineStress = Stress(data, torchModels, morph = morph, yo = yo, hardE = hardE)
         val corrector = PairedRemoteRuAccentCorrector(modelRoot, bridgeClasspath, nativeDir)
