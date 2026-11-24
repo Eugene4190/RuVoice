@@ -97,7 +97,7 @@ STAGE_FIXES="$REPO_ROOT/project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt"
 if [[ -f "$STAGE_FIXES" ]]; then
   ARGS+=(--source-list "$STAGE_FIXES")
 fi
-ARGS+=(--source-list "$UPSTREAM/tools/stress_fixes.txt")
+ARGS+=(--consensus-source-list "$UPSTREAM/tools/stress_fixes.txt")
 
 if [[ -f "$UPSTREAM/app/build/stress_candidates.txt" ]]; then
   ARGS+=(--candidates "$UPSTREAM/app/build/stress_candidates.txt")
