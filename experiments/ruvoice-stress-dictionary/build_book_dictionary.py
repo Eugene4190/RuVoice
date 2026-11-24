@@ -17,7 +17,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from analyze_book import WORD_RE, extract_text, parse_dictionary
-from build_dictionary import Entry, validate_entry, write_dictionary, write_report
+from build_dictionary import Entry, validate_entry, write_dictionary
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
@@ -170,6 +170,11 @@ def build(args: argparse.Namespace) -> int:
             already_approved_tokens += frequency
             continue
 
+        if key in pool_conflicts:
+            review_rows.append([word, frequency, "", "CONFLICT", "пул кандидатов содержит несколько вариантов"])
+            conflict_tokens += frequency
+            continue
+
         variants = {norm(marked): marked for _, marked, _ in pool_rows}
         if len(variants) > 1:
             rendered = " / ".join(sorted(variants.values()))
@@ -214,13 +219,6 @@ def build(args: argparse.Namespace) -> int:
     )
 
     review_tsv = output_dir / "Book_AutoStress_Review.tsv"
-    write_report(
-        review_tsv,
-        [
-            # write_report expects Rejected rows; a compact explicit TSV is written below instead.
-        ],
-        [],
-    )
     with review_tsv.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream, delimiter="\t")
         writer.writerow(["word", "frequency_in_book", "proposed_stress", "status", "reason"])
