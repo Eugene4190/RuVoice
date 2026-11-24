@@ -14,6 +14,11 @@ on:
       - ".github/workflows/evaluate-uploaded-epub.yml"
   workflow_dispatch:
 
+# Whole-book model inference is CPU-heavy; never run stale snapshots in parallel.
+concurrency:
+  group: ruvoice-paired-epub-quality
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
