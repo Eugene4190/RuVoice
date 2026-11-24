@@ -11,6 +11,10 @@
       "system_dictionary_lines": [
         81756,
         101538
+      ],
+      "source_sections": [
+        "earlier section of generated System dictionary (before the book-library block)",
+        "book-library section (matching lib_names.txt entry)"
       ]
     },
     {
@@ -22,11 +26,12 @@
       "system_dictionary_lines": [
         81757,
         101546
-      ]
+      ],
+      "source_file": "tools/lib_names.txt"
     }
   ],
-  "preferred_primary_stress": "трёхг+орк-",
-  "reason": "The orthographic dictionary lists Трёхгорка (Трёхгóрка); ё may indicate secondary prominence in a compound, while the primary stress is on о. The two system-dictionary rows should not be treated as two equal lexical stress variants.",
+  "preferred_primary_stress": "ударение на о: трёхг+орке, трёхг+орку",
+  "reason": "The orthographic dictionary lists Трёхгорка (Трёхгóрка); ё may indicate secondary prominence in this compound, while the primary stress is on о. The two system-dictionary rows are not two equal lexical variants.",
   "overrides": [
     {
       "word": "трёхгорке",
@@ -41,5 +46,5 @@
     "https://www.sinykova.ru/orfograficheskij-slovar/os-20/",
     "https://gramota.ru/biblioteka/slovari/russkoe-slovesnoe-udarenie/udareniya"
   ],
-  "note": "These forms do not occur among the 27 exact full-system dictionary hits in the uploaded book. This is a separate general dictionary audit, not a book-derived correction."
+  "note": "These forms do not occur among the 27 exact full-system dictionary hits in the uploaded book. This is a separate general dictionary audit, not a book-derived correction. The overrides are added to a separate user-import TXT and do not modify the built-in asset."
 }
