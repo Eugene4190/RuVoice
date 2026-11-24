@@ -869,6 +869,8 @@ class UploadedEpubPairedEvaluationTest {
             var alignmentMismatches = 0
             val changeRows = JSONArray()
             val reviewCandidates = JSONArray()
+            val baselineTokens = JSONArray()
+            val segmentContexts = JSONArray()
 
             for ((segmentIndex, segment) in segments.withIndex()) {
                 val baseline = StressDiagnosticFormatter.readable(
@@ -879,6 +881,28 @@ class UploadedEpubPairedEvaluationTest {
                 )
                 val oldWords = wordRegex.findAll(baseline).toList()
                 val newWords = wordRegex.findAll(combined).toList()
+                val sourceWords = wordRegex.findAll(segment.text).toList()
+                segmentContexts.put(JSONObject()
+                    .put("segment_index", segmentIndex)
+                    .put("chapter", segment.chapter)
+                    .put("paragraph", segment.paragraph)
+                    .put("part", segment.part)
+                    .put("context", segment.text))
+                for (wordIndex in oldWords.indices) {
+                    val outputWord = oldWords[wordIndex].value
+                    val sourceWord = if (sourceWords.size == oldWords.size) {
+                        sourceWords[wordIndex].value
+                    } else {
+                        JSONObject.NULL
+                    }
+                    baselineTokens.put(JSONObject()
+                        .put("segment_index", segmentIndex)
+                        .put("word_index", wordIndex)
+                        .put("source_word", sourceWord)
+                        .put("ruvoice_output", outputWord)
+                        .put("ruvoice_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL)
+                        .put("vowel_count", outputWord.count { it.lowercaseChar() in VOWELS }))
+                }
                 if (oldWords.size != newWords.size) {
                     alignmentMismatches++
                     continue
@@ -1010,6 +1034,8 @@ class UploadedEpubPairedEvaluationTest {
                 .put("accuracy_claim", "NOT_MEASURED: this is a paired output comparison; the EPUB has no gold stress annotations, so changes are not automatically labelled corrections.")
                 .put("changes", changeRows)
                 .put("review_candidates", reviewCandidates)
+                .put("baseline_tokens", baselineTokens)
+                .put("segment_contexts", segmentContexts)
 
             reportFile.parentFile?.mkdirs()
             reportFile.writeText(summary.toString(2), Charsets.UTF_8)
