@@ -205,8 +205,8 @@ def write_report(path: Path, rows: Iterable[Rejected]) -> None:
 
 
 def build(args: argparse.Namespace) -> int:
-    if not args.source_list and not args.candidates and not args.review_candidates:
-        print("Укажите хотя бы один источник: --source-list, --candidates или --review-candidates", file=sys.stderr)
+    if not args.source_list and not args.consensus_source_list and not args.candidates and not args.review_candidates:
+        print("Укажите хотя бы один источник: --source-list, --consensus-source-list, --candidates или --review-candidates", file=sys.stderr)
         return 2
 
     source_groups: list[list[Entry]] = []
@@ -214,6 +214,11 @@ def build(args: argparse.Namespace) -> int:
     source_count = 0
     for path in args.source_list:
         rows, bad = read_source_list(path, path.name)
+        source_groups.append(rows)
+        rejected.extend(bad)
+        source_count += len(rows)
+    for path in args.consensus_source_list:
+        rows, bad = read_source_list(path, "aot_wikt_consensus")
         source_groups.append(rows)
         rejected.extend(bad)
         source_count += len(rows)
@@ -238,10 +243,11 @@ def build(args: argparse.Namespace) -> int:
         "review_report": str(args.report),
         "entry_count": len(merged),
         "source_entry_count": source_count,
-        "automatic_candidate_count": sum(1 for e in merged if e.source == "stress_candidates"),
+        "automatic_candidate_count": sum(1 for e in merged if e.source in {"stress_candidates", "aot_wikt_consensus"}),
         "withheld_or_rejected_count": len(rejected),
         "minimum_candidate_observations": args.min_observations,
         "inputs": [str(p) for p in args.source_list]
+                  + [str(p) for p in args.consensus_source_list]
                   + ([str(args.candidates)] if args.candidates else [])
                   + ([str(args.review_candidates)] if args.review_candidates else []),
         "warning": "Observation counts are not calibrated probabilities. Validate against real text before relying on every entry."
@@ -263,6 +269,8 @@ def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Сборка импортируемого пользовательского словаря ударений RuVoice")
     parser.add_argument("--source-list", type=Path, action="append", default=[],
                         help="проверенный список в формате word = stressed+word; можно указать несколько раз")
+    parser.add_argument("--consensus-source-list", type=Path, action="append", default=[],
+                        help="список AOT + Wiktionary: одинаковые ударения двух независимых источников")
     parser.add_argument("--candidates", type=Path,
                         help="stress_candidates.txt из официального stress_compare.py")
     parser.add_argument("--review-candidates", type=Path,
