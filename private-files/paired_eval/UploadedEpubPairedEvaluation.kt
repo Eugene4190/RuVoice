@@ -219,14 +219,17 @@ private fun plain(word: String): String =
 
 private fun stressPosition(word: String): Int? {
     var vowelIndex = 0
+    var yoStress: Int? = null
     val lower = word.lowercase(Locale.ROOT)
     for (index in lower.indices) {
         if (lower[index] in VOWELS) {
             if (index + 1 < lower.length && lower[index + 1] == ACUTE) return vowelIndex
+            if (lower[index] == 'ё' && yoStress == null) yoStress = vowelIndex
             vowelIndex++
         }
     }
-    return null
+    // Ё is inherently stressed in Russian orthography and normally carries no acute mark.
+    return yoStress
 }
 
 private fun shortContext(text: String, match: MatchResult, radius: Int = 54): String {
@@ -667,11 +670,38 @@ class UploadedEpubPairedEvaluationTest {
             "System stress dictionary does not contain the normative сня́то entry"
         }
 
+        // Book-reviewed overlay is kept separate from the installed system dictionary.
+        // Conflicting or duplicate entries fail closed; the overlay is used only by this
+        // whole-book evaluation and never changes the APK asset.
+        val bookOverrideFile = File(checkNotNull(System.getenv("RUVOICE_BOOK_OVERRIDES"))).canonicalFile
+        check(bookOverrideFile.isFile && bookOverrideFile.length() > 0L) {
+            "Missing reviewed book-specific stress overlay: $bookOverrideFile"
+        }
+        val bookOverrides = LinkedHashMap<String, String>()
+        for (line in bookOverrideFile.readLines(Charsets.UTF_8)) {
+            val (word, variant) = DictLines.parseStress(line) ?: continue
+            val key = word.lowercase(Locale.ROOT)
+            val value = variant.lowercase(Locale.ROOT)
+            val builtIn = systemStressDict[key]
+            check(builtIn == null || builtIn == value) {
+                "Book override conflicts with built-in system dictionary: $key ($builtIn vs $value)"
+            }
+            val previous = bookOverrides.putIfAbsent(key, value)
+            check(previous == null || previous == value) {
+                "Conflicting duplicate book override: $key ($previous vs $value)"
+            }
+        }
+        check(bookOverrides.size == 4) {
+            "Expected exactly four reviewed book-specific overrides, found ${bookOverrides.size}"
+        }
+        val reviewedStressDict = LinkedHashMap(systemStressDict).apply { putAll(bookOverrides) }
+
         val rules = Rules()
         val torchModels = PairedTorchLiteStressModels(
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
         val baselineStress = Stress(data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
+        val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
         val corrector = PairedRemoteRuAccentCorrector(modelRoot, bridgeClasspath, nativeDir)
         val combinedStress = Stress(
             data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE,
@@ -870,6 +900,7 @@ class UploadedEpubPairedEvaluationTest {
             val changeRows = JSONArray()
             val reviewCandidates = JSONArray()
             val baselineTokens = JSONArray()
+            val reviewedTokens = JSONArray()
             val combinedTokens = JSONArray()
             val segmentContexts = JSONArray()
 
@@ -877,10 +908,14 @@ class UploadedEpubPairedEvaluationTest {
                 val baseline = StressDiagnosticFormatter.readable(
                     Pipeline.accent(segment.text, data, baselineStress, data.allowed, rules)
                 )
+                val reviewed = StressDiagnosticFormatter.readable(
+                    Pipeline.accent(segment.text, data, reviewedStress, data.allowed, rules)
+                )
                 val combined = StressDiagnosticFormatter.readable(
                     Pipeline.accent(segment.text, data, combinedStress, data.allowed, rules)
                 )
                 val oldWords = wordRegex.findAll(baseline).toList()
+                val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
                 val sourceWords = wordRegex.findAll(segment.text).toList()
                 segmentContexts.put(JSONObject()
@@ -904,6 +939,20 @@ class UploadedEpubPairedEvaluationTest {
                         .put("ruvoice_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL)
                         .put("vowel_count", outputWord.count { it.lowercaseChar() in VOWELS }))
                 }
+                for (wordIndex in reviewedWords.indices) {
+                    val outputWord = reviewedWords[wordIndex].value
+                    val sourceWord = if (sourceWords.size == reviewedWords.size) {
+                        sourceWords[wordIndex].value
+                    } else {
+                        JSONObject.NULL
+                    }
+                    reviewedTokens.put(JSONObject()
+                        .put("segment_index", segmentIndex)
+                        .put("word_index", wordIndex)
+                        .put("source_word", sourceWord)
+                        .put("reviewed_output", outputWord)
+                        .put("reviewed_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
+                }
                 for (wordIndex in newWords.indices) {
                     val outputWord = newWords[wordIndex].value
                     val sourceWord = if (sourceWords.size == newWords.size) {
@@ -918,7 +967,7 @@ class UploadedEpubPairedEvaluationTest {
                         .put("ruaccent_merged_output", outputWord)
                         .put("ruaccent_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
                 }
-                if (oldWords.size != newWords.size) {
+                if (oldWords.size != newWords.size || oldWords.size != reviewedWords.size) {
                     alignmentMismatches++
                     continue
                 }
@@ -1051,7 +1100,13 @@ class UploadedEpubPairedEvaluationTest {
                 .put("accuracy_claim", "NOT_MEASURED: this is a paired output comparison; the EPUB has no gold stress annotations, so changes are not automatically labelled corrections.")
                 .put("changes", changeRows)
                 .put("review_candidates", reviewCandidates)
+                .put("book_reviewed_override_entries", JSONArray().apply {
+                    bookOverrides.forEach { (word, variant) ->
+                        put(JSONObject().put("word", word).put("variant", variant))
+                    }
+                })
                 .put("baseline_tokens", baselineTokens)
+                .put("reviewed_tokens", reviewedTokens)
                 .put("combined_tokens", combinedTokens)
                 .put("segment_contexts", segmentContexts)
 
