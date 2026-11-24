@@ -11,4 +11,5 @@ __pycache__/
 *.tmp
 
 # Book excerpts may contain copyrighted text; keep scans local only.
+output/books/
 reports/book_scans/
