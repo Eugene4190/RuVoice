@@ -35,9 +35,9 @@ private fun plain(word: String): String =
 
 /** The reference corpus writes the acute after the stressed vowel: "замо́к". */
 private fun markedVowelIndex(word: String): Int {
+    // Match the existing RuVoice homograph evaluator: use the first explicit acute mark.
     val marker = word.indexOf(ACUTE)
-    if (marker < 1 || word.indexOf(ACUTE, marker + 1) >= 0) return -1
-    return marker - 1
+    return if (marker < 1) -1 else marker - 1
 }
 
 private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: File): JSONObject {
@@ -48,6 +48,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
     var noMark = 0
     var wrongPosition = 0
     var missingTarget = 0
+    var skippedPhraseTargets = 0
     var alignmentErrors = 0
     val byWord = LinkedHashMap<String, IntArray>()
     val misses = JSONArray()
@@ -58,9 +59,14 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
         val context = item.getString("context")
         val gold = item.getString("homograph")
         val goldWord = gold.replace(ACUTE.toString(), "")
+        // Existing HomographEvalTest/homo_eval.py score only one target word, not gold phrases.
+        if (goldWord.any { it.isWhitespace() }) {
+            skippedPhraseTargets++
+            continue
+        }
         val goldPosition = markedVowelIndex(gold)
         require(goldPosition >= 0) {
-            "Gold item ${item.optString("id")} has no single acute mark: $gold"
+            "Gold item ${item.optString("id")} has no acute mark: $gold"
         }
 
         val sourceTokens = WORD_RE.findAll(context).map { it.value }.toList()
@@ -128,7 +134,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
     }
 
     val elapsedMs = (System.nanoTime() - started) / 1_000_000
-    val evaluated = items.length() - missingTarget
+    val evaluated = items.length() - missingTarget - skippedPhraseTargets
     val coverage = if (evaluated == 0) 0.0 else (evaluated - noMark - alignmentErrors).toDouble() / evaluated
     val report = JSONObject()
         .put("corpus", corpusFile.name)
@@ -139,6 +145,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
         .put("wrong_stress_position", wrongPosition)
         .put("no_stress_mark", noMark)
         .put("missing_target", missingTarget)
+        .put("skipped_phrase_targets", skippedPhraseTargets)
         .put("alignment_errors", alignmentErrors)
         .put("exact_accuracy", if (evaluated == 0) 0.0 else correct.toDouble() / evaluated)
         .put("stress_mark_coverage", coverage)
@@ -166,7 +173,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
     println("\n=== GOLD HOMOGRAPH EVALUATION ===")
     println("Dataset: ${items.length()} sentences, ${byWord.size} distinct unaccented forms")
     println("Exact stress: $correct / $evaluated (${"%.2f".format(Locale.ROOT, 100.0 * correct / evaluated.coerceAtLeast(1))}%)")
-    println("Wrong vowel: $wrongPosition; no stress mark: $noMark; target missing: $missingTarget; alignment errors: $alignmentErrors")
+    println("Wrong vowel: $wrongPosition; no stress mark: $noMark; target missing: $missingTarget; multiword targets skipped: $skippedPhraseTargets; alignment errors: $alignmentErrors")
     println("Time: ${elapsedMs} ms")
     println("Worst repeated forms:")
     for (i in 0 until wordArray.length().coerceAtMost(15)) {
