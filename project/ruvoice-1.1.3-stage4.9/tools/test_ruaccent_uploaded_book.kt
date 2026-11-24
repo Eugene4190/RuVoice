@@ -9,6 +9,10 @@ import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
+import javax.swing.text.MutableAttributeSet
+import javax.swing.text.html.HTML
+import javax.swing.text.html.HTMLEditorKit
+import javax.swing.text.html.parser.ParserDelegator
 import org.xml.sax.InputSource
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,7 +44,7 @@ private fun secureDocument(bytes: ByteArray): org.w3c.dom.Document {
     factory.isNamespaceAware = true
     factory.isXIncludeAware = false
     factory.setExpandEntityReferences(false)
-    runCatching { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+    runCatching { factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false) }
     runCatching { factory.setFeature("http://xml.org/sax/features/external-general-entities", false) }
     runCatching { factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
     return factory.newDocumentBuilder().parse(ByteArrayInputStream(bytes))
@@ -90,7 +94,39 @@ private fun resolveHref(baseFile: String, href: String): String {
 }
 
 private fun extractBlocksFromXhtml(bytes: ByteArray): List<String> {
-    val doc = secureDocument(bytes)
+    val doc = try {
+        secureDocument(bytes)
+    } catch (_: Throwable) {
+        // Some commercial EPUBs use HTML named entities or a legacy XHTML doctype.
+        // Fall back to the JDK HTML parser without fetching external DTDs.
+        val fallback = ArrayList<String>()
+        val current = StringBuilder()
+        val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br")
+        fun flushFallback() {
+            val text = current.toString().replace(Regex("\\s+"), " ").trim()
+            current.setLength(0)
+            val letters = text.count { it.isLetter() }
+            val cyrillic = text.count { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }
+            if (text.length >= 30 && letters >= 20 && cyrillic >= letters * 0.45) fallback += text
+        }
+        val callback = object : HTMLEditorKit.ParserCallback() {
+            override fun handleText(data: CharArray, pos: Int) {
+                current.append(data).append(' ')
+            }
+            override fun handleStartTag(t: HTML.Tag, a: MutableAttributeSet, pos: Int) {
+                if (t.toString().lowercase(Locale.ROOT) in blockTags) flushFallback()
+            }
+            override fun handleEndTag(t: HTML.Tag, pos: Int) {
+                if (t.toString().lowercase(Locale.ROOT) in blockTags) flushFallback()
+            }
+            override fun handleSimpleTag(t: HTML.Tag, a: MutableAttributeSet, pos: Int) {
+                if (t.toString().lowercase(Locale.ROOT) == "br") flushFallback()
+            }
+        }
+        ParserDelegator().parse(StringReader(String(bytes, Charsets.UTF_8)), callback, true)
+        flushFallback()
+        return fallback
+    }
     val result = ArrayList<String>()
     val current = StringBuilder()
     val blocks = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br", "tr", "td", "th")
