@@ -45,6 +45,13 @@ jobs:
 
             rm -f "$OUTPUT"
             python3 project/ruvoice-1.1.3-stage4.9/tools/restore_unicode_asset_names.py
+            # system_dicts.py consumes AOT inflected forms generated from the upstream source dictionary.
+            AOT_DIR="$RUNNER_TEMP/morph_dict"
+            git clone --depth 1 --filter=blob:none --sparse --branch master \
+              https://github.com/sokirko74/morph_dict.git "$AOT_DIR"
+            git -C "$AOT_DIR" sparse-checkout set data/Russian
+            python3 project/ruvoice-1.1.3-stage4.9/tools/aot_forms.py "$AOT_DIR/data/Russian"
+            test -s project/ruvoice-1.1.3-stage4.9/app/build/aot_forms.tsv
             # The checked-in dictionaries are generated from stress_fixes.txt and related sources.
             python3 project/ruvoice-1.1.3-stage4.9/tools/system_dicts.py
             grep -Fxq 'снято сн+ято' \
