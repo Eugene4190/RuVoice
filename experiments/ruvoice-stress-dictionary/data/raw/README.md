@@ -1,8 +1,12 @@
-# Local source data
+# Local Wiktionary source data
 
-Put large source files here. They are intentionally excluded from Git.
+Put the compressed raw Wiktextract JSONL for the Russian-language Wiktionary edition here:
 
-Expected Wiktionary/Kaikki file:
-- kaikki.org-dictionary-Russian.jsonl
+- raw-wiktextract-data.jsonl.gz
 
-The pipeline expects the post-processed JSONL schema consumed by the official tools/wikt_forms.py script. Do not put a ZIP or GZIP archive here without extracting it first.
+As of the 2026-11-01 source snapshot, the compressed download is about 272.5 MB and expands to about 2.3 GB. The raw stream contains entries in multiple languages; the official tools/wikt_forms.py parser filters lang_code == ru.
+
+Download page:
+https://kaikki.org/ruwiktionary/rawdata.html
+
+The pipeline streams the gzip file directly; do not unpack it manually. The dump and intermediate files are excluded from Git.
