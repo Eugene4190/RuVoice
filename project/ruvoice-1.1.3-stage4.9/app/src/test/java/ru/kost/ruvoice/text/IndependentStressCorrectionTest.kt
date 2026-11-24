@@ -47,21 +47,35 @@ class IndependentStressCorrectionTest {
         assertEquals("дверн+ой зам+ок над+ёжен", merged)
     }
 
-    @Test fun explicitNoStressDecisionRemovesWrongAutomaticMark() {
+    @Test fun noStressDecisionKeepsSileroFallbackOnPolysyllabicWords() {
         val prediction = IndependentStressPrediction(
-            text = "это обычное предложение",
+            text = "это долгий путь и",
             decisions = listOf(
                 StressDecision.UNSTRESSED,
-                StressDecision.STRESSED,
-                StressDecision.STRESSED,
+                StressDecision.UNSTRESSED,
+                StressDecision.UNSTRESSED,
+                StressDecision.UNSTRESSED,
             ),
         )
         val merged = StressCorrectionMerger.merge(
-            original = "это обычное предложение",
-            ruVoice = "+это об+ычное предлож+ение",
+            original = "это долгий путь и",
+            ruVoice = "+это до+лгий п+уть +и",
             prediction = prediction,
         )
-        assertEquals("это об+ычное предлож+ение", merged)
+        assertEquals("+это до+лгий путь и", merged)
+    }
+
+    @Test fun noStressDecisionRemovesOnlyMonosyllabicAutomaticMark() {
+        val prediction = IndependentStressPrediction(
+            text = "это и",
+            decisions = listOf(StressDecision.UNSTRESSED, StressDecision.UNSTRESSED),
+        )
+        val merged = StressCorrectionMerger.merge(
+            original = "это и",
+            ruVoice = "+это +и",
+            prediction = prediction,
+        )
+        assertEquals("+это и", merged)
     }
 
     @Test fun unknownDecisionDoesNotEraseExistingMark() {
