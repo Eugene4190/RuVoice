@@ -129,6 +129,7 @@ def build(args: argparse.Namespace) -> int:
     unresolved_rows: list[list[object]] = []
     already_system_tokens = 0
     already_approved_tokens = 0
+    book_approved_entries: list[Entry] = []
     new_candidate_tokens = 0
     conflict_tokens = 0
     hyphenated_forms = 0
@@ -168,6 +169,13 @@ def build(args: argparse.Namespace) -> int:
             continue
         if approved_rows:
             already_approved_tokens += frequency
+            try:
+                approved_marked = adapt_marked_form(word, approved_rows[0][1])
+            except (ValueError, IndexError) as exc:
+                review_rows.append([word, frequency, approved_rows[0][1], "INVALID_APPROVED", str(exc)])
+                conflict_tokens += frequency
+                continue
+            book_approved_entries.append(Entry(word, approved_marked, "accumulated_approved", f"book_frequency={frequency}"))
             continue
 
         if key in pool_conflicts:
@@ -209,6 +217,12 @@ def build(args: argparse.Namespace) -> int:
 
     candidate_txt = output_dir / "Book_AutoStress_Candidates.txt"
     write_dictionary(candidate_txt, candidates)
+
+    book_approved_txt = output_dir / "Book_Approved_Additions.txt"
+    write_dictionary(book_approved_txt, book_approved_entries)
+
+    cumulative_export = output_dir / "RuVoice_Accumulated_Approved.txt"
+    write_dictionary(cumulative_export, approved_entries)
 
     provisional_txt = output_dir / "Book_Stress_Dictionary_PROVISIONAL_DO_NOT_IMPORT.txt"
     write_dictionary(provisional_txt, provisional_entries)
@@ -261,6 +275,8 @@ def build(args: argparse.Namespace) -> int:
     )
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(f"Дополнения этой книги, уже утверждённые ранее: {book_approved_txt}")
+    print(f"Полный накопительный утверждённый словарь: {cumulative_export}")
     print(f"Кандидаты для проверки: {candidate_txt}")
     print(f"Отчёт проверки: {review_tsv}")
     print(f"Неизвестные формы: {unresolved_tsv}")
