@@ -385,14 +385,6 @@ fun main(args: Array<String>) {
                 if (!segmentHasStress) segmentsWithNoStress++
             }
 
-            check(reviewedOverrideSeen.keys.containsAll(bookOverrides.keys)) {
-                "Not every reviewed book override was exercised: expected=" + bookOverrides.keys + " seen=" + reviewedOverrideSeen
-            }
-            check(reviewedPhraseOverrideHits > 0) {
-                "The single reviewed phrase hint 'сети значений' was not exercised"
-            }
-            println("BOOK_REVIEWED_OVERLAY_GUARD=PASS wordforms=" + reviewedOverrideSeen +
-                " phrase_occurrences=" + reviewedPhraseOverrideHits)
 
             val summary = JSONObject()
                 .put("book_file", epub.name)
@@ -1204,6 +1196,16 @@ class UploadedEpubPairedEvaluationTest {
                     println("PAIRED_PROGRESS segments=" + (segmentIndex + 1) + "/" + segments.size + " changed=" + changedSegments)
                 }
             }
+
+            check(reviewedOverrideSeen.keys.containsAll(bookOverrides.keys)) {
+                "Not every reviewed book override was exercised: expected=" + bookOverrides.keys + " seen=" + reviewedOverrideSeen
+            }
+            check(reviewedPhraseOverrideHits > 0) {
+                "The single reviewed phrase hint 'сети значений' was not exercised"
+            }
+            println("BOOK_REVIEWED_OVERLAY_GUARD=PASS wordforms=" + reviewedOverrideSeen +
+                " phrase_occurrences=" + reviewedPhraseOverrideHits)
+
 
             val summary = JSONObject()
                 .put("book_file", epub.name)
