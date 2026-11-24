@@ -132,20 +132,33 @@ def read_review_only(path: Path) -> tuple[list[Entry], list[Rejected]]:
 
 
 def merge_entries(source_groups: list[list[Entry]], candidates: list[Entry]) -> tuple[list[Entry], list[Rejected]]:
+    """Earlier source lists have higher priority; conflicts are never resolved by guessing."""
     rejected: list[Rejected] = []
-    by_word: dict[str, list[Entry]] = defaultdict(list)
-    for group in source_groups:
-        for entry in group:
-            by_word[entry.word].append(entry)
-
     selected: dict[str, Entry] = {}
-    for word, group in by_word.items():
-        variants = {entry.marked for entry in group}
-        if len(variants) > 1:
-            rejected.append(Rejected(word, " / ".join(sorted(variants)), "trusted_sources",
-                                     "исходные списки расходятся; запись отложена"))
-            continue
-        selected[word] = group[-1]
+    blocked: set[str] = set()
+
+    for source_group in source_groups:
+        grouped: dict[str, list[Entry]] = defaultdict(list)
+        for entry in source_group:
+            grouped[entry.word].append(entry)
+        for word, group in grouped.items():
+            variants = {entry.marked for entry in group}
+            if len(variants) > 1:
+                if word not in selected:
+                    blocked.add(word)
+                rejected.append(Rejected(word, " / ".join(sorted(variants)), group[0].source,
+                                         "внутри одного исходного списка разные ударения; запись не выбирается"))
+                continue
+            entry = group[0]
+            if word in blocked:
+                continue
+            existing = selected.get(word)
+            if existing:
+                if existing.marked != entry.marked:
+                    rejected.append(Rejected(word, entry.marked, entry.source,
+                                             f"конфликт с более приоритетным источником {existing.source}: {existing.marked}; сохранён первый источник"))
+                continue
+            selected[word] = entry
 
     candidate_groups: dict[str, list[Entry]] = defaultdict(list)
     for entry in candidates:
@@ -153,10 +166,14 @@ def merge_entries(source_groups: list[list[Entry]], candidates: list[Entry]) -> 
     for word, group in candidate_groups.items():
         variants = {entry.marked for entry in group}
         if len(variants) > 1:
+            if word not in selected:
+                blocked.add(word)
             rejected.append(Rejected(word, " / ".join(sorted(variants)), "stress_candidates",
                                      "разные ударения в кандидатах; автоматически не выбрано"))
             continue
         candidate = max(group, key=lambda e: e.observations or 0)
+        if word in blocked:
+            continue
         existing = selected.get(word)
         if existing:
             if existing.marked != candidate.marked:
