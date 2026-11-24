@@ -85,7 +85,7 @@ class IndependentStressCorrectionTest {
         )
         val merged = StressCorrectionMerger.merge(
             original = "кто-нибудь, что-либо, всё-таки",
-            ruVoice = "кто-н+ибудь, что-л+ибо, всё-та+ки",
+            ruVoice = "кто-н+ибудь, что-л+ибо, всё-т+аки",
             prediction = prediction,
         )
         assertEquals("кто-нибудь, что-либо, всё-таки", merged)
