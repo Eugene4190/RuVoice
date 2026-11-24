@@ -60,7 +60,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
         val goldWord = gold.replace(ACUTE.toString(), "")
         val goldPosition = markedVowelIndex(gold)
         require(goldPosition >= 0) {
-            "Gold item \${item.optString("id")} has no single acute mark: $gold"
+            "Gold item ${item.optString("id")} has no single acute mark: $gold"
         }
 
         val sourceTokens = WORD_RE.findAll(context).map { it.value }.toList()
@@ -73,7 +73,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
         val sourceIndex = candidates[minOf(occurrence, candidates.lastIndex)]
 
         val prediction = corrector.correct(context)
-            ?: error("RUAccent returned null for gold item \${item.optString("id")}")
+            ?: error("RUAccent returned null for gold item ${item.optString("id")}")
         val predictedTokens = WORD_RE.findAll(prediction.text).map { it.value }.toList()
         if (predictedTokens.size != sourceTokens.size ||
             prediction.decisions.size != sourceTokens.size ||
@@ -123,7 +123,7 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
         }
 
         if ((itemIndex + 1) % 100 == 0) {
-            println("HOMOGRAPH_PROGRESS=\${itemIndex + 1}/\${items.length()}")
+            println("HOMOGRAPH_PROGRESS=${itemIndex + 1}/${items.length()}")
         }
     }
 
@@ -164,14 +164,14 @@ private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: Fil
     report.put("worst_repeated_word_forms", wordArray)
 
     println("\n=== GOLD HOMOGRAPH EVALUATION ===")
-    println("Dataset: \${items.length()} sentences, \${byWord.size} distinct unaccented forms")
-    println("Exact stress: $correct / $evaluated (\${"%.2f".format(Locale.ROOT, 100.0 * correct / evaluated.coerceAtLeast(1))}%)")
+    println("Dataset: ${items.length()} sentences, ${byWord.size} distinct unaccented forms")
+    println("Exact stress: $correct / $evaluated (${"%.2f".format(Locale.ROOT, 100.0 * correct / evaluated.coerceAtLeast(1))}%)")
     println("Wrong vowel: $wrongPosition; no stress mark: $noMark; target missing: $missingTarget; alignment errors: $alignmentErrors")
-    println("Time: \${elapsedMs} ms")
+    println("Time: ${elapsedMs} ms")
     println("Worst repeated forms:")
     for (i in 0 until wordArray.length().coerceAtMost(15)) {
         val item = wordArray.getJSONObject(i)
-        println("  \${item.getString("word")}: \${item.getInt("correct")}/\${item.getInt("total")}")
+        println("  ${item.getString("word")}: ${item.getInt("correct")}/${item.getInt("total")}")
     }
     println("=================================\n")
     return report
@@ -198,10 +198,10 @@ private fun evaluateLabelCorpus(
         val tokens = WORD_RE.findAll(text).map { it.value }.toList()
         val predictedTokens = WORD_RE.findAll(prediction.text).map { it.value }.toList()
         require(tokens.size == prediction.decisions.size && tokens.size == prediction.yoDecisions.size) {
-            "Decision alignment failed in $kind case \${case.getString("id")}"
+            "Decision alignment failed in $kind case ${case.getString("id")}"
         }
         require(predictedTokens.size == tokens.size) {
-            "Text alignment failed in $kind case \${case.getString("id")}"
+            "Text alignment failed in $kind case ${case.getString("id")}"
         }
 
         for (checkIndex in 0 until expected.length()) {
@@ -253,7 +253,7 @@ private fun evaluateLabelCorpus(
         .put("warning", "Small component smoke set only; not a general quality estimate.")
         .put("misses", misses)
 
-    println("$kind: $passed/$scored passed; mismatches=\${scored - passed}; missing=$missing")
+    println("$kind: $passed/$scored passed; mismatches=${scored - passed}; missing=$missing")
     return report
 }
 
@@ -271,8 +271,8 @@ fun main(args: Array<String>) {
     val hashes = linkedMapOf<String, String>()
 
     try {
-        println("Pinned model revision: \${RuAccentInt8ModelManifest.revision}")
-        println("Downloading \${RuAccentInt8ModelManifest.files.size} manifest-pinned files")
+        println("Pinned model revision: ${RuAccentInt8ModelManifest.revision}")
+        println("Downloading ${RuAccentInt8ModelManifest.files.size} manifest-pinned files")
         RuAccentInt8ModelManifest.files.forEachIndexed { index, relative ->
             val destination = File(root, relative)
             check(destination.parentFile?.exists() == true || destination.parentFile?.mkdirs() == true) {
@@ -280,7 +280,7 @@ fun main(args: Array<String>) {
             }
             downloader.download(RuAccentInt8ModelManifest.downloadUrl(relative), destination) { bytes ->
                 if (bytes == 0L || bytes % (64L * 1024 * 1024) < 1024 * 1024) {
-                    System.err.print("\rModel \${index + 1}/\${RuAccentInt8ModelManifest.files.size}: $relative — $bytes bytes")
+                    System.err.print("\rModel ${index + 1}/${RuAccentInt8ModelManifest.files.size}: $relative — $bytes bytes")
                 }
             }
             val actual = sha256(destination)
@@ -289,7 +289,7 @@ fun main(args: Array<String>) {
             check(actual == expected) { "SHA-256 mismatch for $relative: $actual != $expected" }
             hashes[relative] = actual
         }
-        println("\nPASS: all \${hashes.size} downloaded files match pinned SHA-256 values")
+        println("\nPASS: all ${hashes.size} downloaded files match pinned SHA-256 values")
 
         val corrector = RuAccentOnnxCorrector(root)
         try {
@@ -312,7 +312,7 @@ fun main(args: Array<String>) {
                 .put("interpretation", "Gold homograph accuracy measures RUAccent's independent output on labelled target words. It is not by itself proof of improvement over the separate stock RuVoice pipeline.")
             reportFile.parentFile?.mkdirs()
             reportFile.writeText(report.toString(2) + "\n", Charsets.UTF_8)
-            println("QUALITY_REPORT=\${reportFile.absolutePath}")
+            println("QUALITY_REPORT=${reportFile.absolutePath}")
             println("PASS: RUAccent quality evaluation completed")
         } finally {
             corrector.close()
