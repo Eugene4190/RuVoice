@@ -232,6 +232,13 @@ private fun stressPosition(word: String): Int? {
     return yoStress
 }
 
+private fun reviewedVariantPosition(variant: String): Int? {
+    val marker = variant.indexOf('+')
+    if (marker < 0 || marker + 1 >= variant.length) return null
+    if (variant[marker + 1].lowercaseChar() !in VOWELS) return null
+    return variant.substring(0, marker).count { it.lowercaseChar() in VOWELS }
+}
+
 private fun shortContext(text: String, match: MatchResult, radius: Int = 54): String {
     val from = (match.range.first - radius).coerceAtLeast(0)
     val to = (match.range.last + radius + 1).coerceAtMost(text.length)
@@ -377,6 +384,15 @@ fun main(args: Array<String>) {
                 if (segmentChanged) changedSegments++
                 if (!segmentHasStress) segmentsWithNoStress++
             }
+
+            check(reviewedOverrideSeen.keys.containsAll(bookOverrides.keys)) {
+                "Not every reviewed book override was exercised: expected=" + bookOverrides.keys + " seen=" + reviewedOverrideSeen
+            }
+            check(reviewedPhraseOverrideHits > 0) {
+                "The single reviewed phrase hint 'сети значений' was not exercised"
+            }
+            println("BOOK_REVIEWED_OVERLAY_GUARD=PASS wordforms=" + reviewedOverrideSeen +
+                " phrase_occurrences=" + reviewedPhraseOverrideHits)
 
             val summary = JSONObject()
                 .put("book_file", epub.name)
@@ -712,6 +728,7 @@ class UploadedEpubPairedEvaluationTest {
             "шумы" to "ш+умы",
             "двадцать" to "дв+адцать",
             "десять" to "д+есять",
+            "издревле" to "изд+ревле",
         )
         check(bookOverrides == expectedBookOverrides) {
             "Book-specific override set differs from reviewed manifest: $bookOverrides"
@@ -723,7 +740,7 @@ class UploadedEpubPairedEvaluationTest {
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
         // Three independent full-book passes: untouched production baseline; production with
-        // the reviewed phrase hint and five book-only dictionary corrections; RUAccent on top
+        // the reviewed phrase hint and six book-only dictionary corrections; RUAccent on top
         // of the untouched baseline. This isolates the impact of RuVoice-specific fixes.
         val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
@@ -748,6 +765,10 @@ class UploadedEpubPairedEvaluationTest {
             val utramBaseline = readable("Фигура появляется по утрам", baselineStress, baselineData)
             val utramReviewed = readable("Фигура появляется по утрам", reviewedStress, data)
             val twentyReviewed = readable("двадцать", reviewedStress, data)
+            val izdrevleReviewed = readable(
+                "Вот, к примеру, человек издревле искал способы продления жизни.",
+                reviewedStress, data
+            )
             sanity.put("строительство дома_baseline", genitiveHouse)
             sanity.put("строительство дома_combined", genitiveHouseCombined)
             sanity.put("строительство дома_expected", "до́ма")
@@ -775,6 +796,8 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("по утра́м_variant_preserved", utramReviewed.contains("утра́м", ignoreCase = true))
             sanity.put("два́дцать_reviewed", twentyReviewed)
             sanity.put("два́дцать_reviewed_matches_expected", twentyReviewed.contains("два́дцать", ignoreCase = true))
+            sanity.put("издре́вле_reviewed", izdrevleReviewed)
+            sanity.put("издре́вле_reviewed_matches_expected", izdrevleReviewed.contains("издре́вле", ignoreCase = true))
             sanity.put("Сети значений_combined_matches_expected", networkCombined.contains("сети́", ignoreCase = true))
             check(networkBaseline.contains("сети́", ignoreCase = true)) {
                 "Untouched production baseline did not reproduce the original 'сети' stress: $networkBaseline"
@@ -788,6 +811,9 @@ class UploadedEpubPairedEvaluationTest {
             }
             check(twentyReviewed.contains("два́дцать", ignoreCase = true)) {
                 "Book override must place the acute on the vowel а in 'двадцать': $twentyReviewed"
+            }
+            check(izdrevleReviewed.contains("издре́вле", ignoreCase = true)) {
+                "Book override must use the normative stress in 'издревле': $izdrevleReviewed"
             }
 
             // Run the five manually reviewed stress cases before the separate ё suite.
@@ -959,6 +985,9 @@ class UploadedEpubPairedEvaluationTest {
             val reviewedTokens = JSONArray()
             val combinedTokens = JSONArray()
             val segmentContexts = JSONArray()
+            val reviewedOverrideSeen = LinkedHashMap<String, Int>()
+            var reviewedPhraseOverrideHits = 0
+            val reviewedPhrasePattern = Regex("(?i)\\bсети\\s+значений\\b")
 
             for ((segmentIndex, segment) in segments.withIndex()) {
                 val baseline = StressDiagnosticFormatter.readable(
@@ -974,6 +1003,49 @@ class UploadedEpubPairedEvaluationTest {
                 val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
                 val sourceWords = wordRegex.findAll(segment.text).toList()
+
+                // The book overlay is deliberately narrow: only its six exact wordforms
+                // and the one contextual phrase may change. This catches accidental loading
+                // of the entire experimental phrases_extra.txt collection.
+                check(oldWords.size == reviewedWords.size) {
+                    "Reviewed pipeline changed token alignment in segment " + segmentIndex
+                }
+                for (reviewIndex in oldWords.indices) {
+                    val beforeWord = oldWords[reviewIndex].value
+                    val reviewedWord = reviewedWords[reviewIndex].value
+                    val beforeKey = plain(beforeWord).lowercase(Locale.ROOT).replace('ё', 'е')
+                    val reviewedKey = plain(reviewedWord).lowercase(Locale.ROOT).replace('ё', 'е')
+                    check(beforeKey == reviewedKey) {
+                        "Book review changed token spelling in segment " + segmentIndex + ": '" + beforeWord + "' -> '" + reviewedWord + "'"
+                    }
+                    val beforePosition = stressPosition(beforeWord)
+                    val reviewedPosition = stressPosition(reviewedWord)
+                    val expectedVariant = bookOverrides[beforeKey]
+                    val phraseTarget = beforeKey == "сети" && reviewedPhrasePattern.containsMatchIn(segment.text)
+                    if (expectedVariant != null) {
+                        val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
+                            "Invalid reviewed dictionary marker for " + beforeKey + ": " + expectedVariant
+                        }
+                        check(reviewedPosition == expectedPosition) {
+                            "Book overlay failed for " + beforeKey + " in segment " + segmentIndex +
+                                ": expected=" + expectedPosition + " actual=" + reviewedPosition +
+                                " context='" + segment.text + "'"
+                        }
+                        reviewedOverrideSeen[beforeKey] = (reviewedOverrideSeen[beforeKey] ?: 0) + 1
+                    } else if (phraseTarget) {
+                        check(reviewedPosition == 0) {
+                            "The phrase 'Сети значений' must stress the first vowel of 'сети': '" + reviewedWord + "'"
+                        }
+                        reviewedPhraseOverrideHits++
+                    } else {
+                        check(beforePosition == reviewedPosition) {
+                            "Unapproved stress change in reviewed output, segment=" + segmentIndex +
+                                " word=" + beforeWord + " reviewed=" + reviewedWord +
+                                " context='" + segment.text + "'"
+                        }
+                    }
+                }
+
                 segmentContexts.put(JSONObject()
                     .put("segment_index", segmentIndex)
                     .put("chapter", segment.chapter)
