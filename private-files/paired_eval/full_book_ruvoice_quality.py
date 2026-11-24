@@ -357,11 +357,10 @@ def main() -> int:
         )
     override_entries = paired.get("book_reviewed_override_entries", [])
     expected_overrides = {
-        "утрам": "+утрам",
         "несчастлив": "несчастл+ив",
         "отнята": "отнят+а",
         "шумы": "ш+умы",
-        "двадцать": "д+вадцать",
+        "двадцать": "дв+адцать",
         "десять": "д+есять",
     }
     actual_overrides = {
