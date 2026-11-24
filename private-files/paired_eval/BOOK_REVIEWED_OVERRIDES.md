@@ -16,3 +16,12 @@ These are an experimental, book-only supplement. They are not added to
 workflow checks every overlay entry against the existing system dictionary and
 runs the full EPUB again with this overlay loaded by the production `Stress`
 pipeline.
+
+
+A separate phrase-level correction is applied through the production homograph phrase table, not the word dictionary:
+
+| Phrase | Previous output | Reviewed output | Reason |
+|---|---|---|---|
+| Сети значений | Сети́ значений | Се́ти значений | Nominative plural in this phrase; the prepositional form сети́ remains valid elsewhere |
+
+The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the five-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
