@@ -7,6 +7,38 @@ import org.junit.Test
 class RuAccentCharAccentPolicyTest {
     private val vocab = mapOf("к" to 10, "о" to 11, "р" to 12, "в" to 13, "а" to 14)
     private val labels = mapOf(0 to "O", 1 to "STRESS_PRIMARY", 2 to "STRESS_SECONDARY")
+    private val smallValidVocab = listOf("[pad]", "[unk]", "[bos]", "[eos]") +
+        "аеёиоуыэюя".map { it.toString() }
+
+    @Test fun acceptsSmallCharacterVocabularyWithFixedSpecialTokenIds() {
+        val parsed = RuAccentCharAccentPolicy.parseVocab(smallValidVocab)
+        assertEquals(14, parsed.size)
+        assertEquals(4, parsed["а"])
+        assertEquals(13, parsed["я"])
+        org.junit.Assert.assertTrue(parsed.size < 100)
+    }
+
+    @Test fun rejectsIncorrectSpecialTokenOrder() {
+        val invalid = smallValidVocab.toMutableList().apply {
+            this[1] = "[bos]"
+            this[2] = "[unk]"
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            RuAccentCharAccentPolicy.parseVocab(invalid)
+        }
+    }
+
+    @Test fun rejectsDuplicateCharacterTokens() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            RuAccentCharAccentPolicy.parseVocab(smallValidVocab + "а")
+        }
+    }
+
+    @Test fun rejectsMissingRussianVowel() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            RuAccentCharAccentPolicy.parseVocab(smallValidVocab.filterNot { it == "ё" })
+        }
+    }
 
     @Test fun inputUsesFixedReferenceSpecialTokenIds() {
         assertEquals(
