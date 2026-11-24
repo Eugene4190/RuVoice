@@ -37,7 +37,7 @@ else
     exit 2
   }
   mv "$WIKT_PART" "$WIKT_GZ"
-}
+fi
 
 if [[ ! -d "$AOT_REPO/.git" ]]; then
   echo "Загружаю словарь AOT..."
