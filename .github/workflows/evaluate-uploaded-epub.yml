@@ -146,6 +146,9 @@ jobs:
         run: |
           set -euo pipefail
           python tools/restore_unicode_asset_names.py
+          BASELINE_JSON="$RUNNER_TEMP/ruvoice_silero_ru_baseline.json"
+          cp app/src/main/assets/silero/silero_ru.json "$BASELINE_JSON"
+          echo "RUVOICE_BASELINE_SILERO_JSON=$BASELINE_JSON" >> "$GITHUB_ENV"
           # Apply the reviewed phrase hints to the staged production stress data.
           # This changes the contextual phrase table, not the installed stress dictionary.
           python tools/phrases_extra.py apply
