@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Test
 import java.nio.ByteBuffer
+import java.security.MessageDigest
 import ru.kost.ruvoice.Pipeline
 import ru.kost.ruvoice.SileroData
 import ru.kost.ruvoice.bin.StressBin
@@ -626,6 +627,20 @@ private class PairedRemoteRuAccentCorrector(
     }
 }
 
+
+private fun pairedSha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
 class UploadedEpubPairedEvaluationTest {
     @Test
     fun compareOriginalRuVoiceWithRuAccentMergedAcrossTheWholeBook() {
@@ -653,6 +668,8 @@ class UploadedEpubPairedEvaluationTest {
                 if (bytes == 0L) println("RUAccent model " + (index + 1) + "/" + RuAccentInt8ModelManifest.files.size + ": " + relative)
             }
             check(destination.isFile && destination.length() > 0L) { "RUAccent model download failed: " + relative }
+            val expectedHash = RuAccentInt8ModelManifest.expectedSha256.getValue(relative)
+            check(pairedSha256(destination) == expectedHash) { "RUAccent SHA-256 mismatch: " + relative }
             downloaded += destination.length()
         }
 
