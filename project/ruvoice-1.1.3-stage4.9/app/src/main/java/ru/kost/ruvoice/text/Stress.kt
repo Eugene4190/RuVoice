@@ -45,6 +45,8 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
      * следующего слова. По умолчанию — сам sentence (тесты, аудит). */
     /** «Разбор»: не null — сюда пишется текст после каждого прохода и вероятности акцентора по словам. */
     var trace: MutableList<String>? = null
+    /** RUAccent diagnostics for the built-in «Разбор» screen, independent of verbose logging. */
+    var independentTrace: MutableList<String>? = null
 
     fun apply(sentence: String, source: String = sentence): String {
         val own = own
@@ -59,11 +61,30 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         // поэтому сырой source иногда не выравнивается с ruResult по словам.
         // При этом модель видит исходный для стресс-конвейера текст ДО его автоматических плюсов.
         val modelInput = StressInputSanitizer.stripMarkers(sentence)
-        val prediction = runCatching { corrector.correct(modelInput) }
-            .onFailure { trace?.add("independent: ошибка модели (${it.javaClass.simpleName})") }
-            .getOrNull() ?: return ruResult
+        val prediction = try {
+            corrector.correct(modelInput)
+        } catch (error: Throwable) {
+            independentTrace?.add("RUAccent: ошибка инференса (${error.javaClass.simpleName})")
+            trace?.add("independent: ошибка модели (${error.javaClass.simpleName})")
+            return ruResult
+        } ?: run {
+            independentTrace?.add("RUAccent: модель не вернула прогноз")
+            return ruResult
+        }
+        val stressed = prediction.decisions.count { it == StressDecision.STRESSED }
+        val unstressed = prediction.decisions.count { it == StressDecision.UNSTRESSED }
+        val restoredYo = prediction.yoDecisions.count { it == YoDecision.RESTORE_YO }
+        val keptE = prediction.yoDecisions.count { it == YoDecision.KEEP_E }
+        independentTrace?.add(
+            "RUAccent: инференс выполнен; ударение — уверенно STRESS: $stressed, NO_STRESS: $unstressed; «ё» восстановлено: $restoredYo, оставлено «е»: $keptE"
+        )
         val merged = StressCorrectionMerger.merge(sentence, ruResult, prediction, userDict.keys)
-        if (merged != ruResult) trace?.add("independent: $merged")
+        if (merged != ruResult) {
+            independentTrace?.add("RUAccent: исправленный вариант: $merged")
+            trace?.add("independent: $merged")
+        } else {
+            independentTrace?.add("RUAccent: результат совпал со штатным RuVoice")
+        }
         return merged
     }
 

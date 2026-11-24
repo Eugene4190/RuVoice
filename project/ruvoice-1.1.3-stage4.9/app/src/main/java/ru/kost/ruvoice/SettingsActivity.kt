@@ -365,12 +365,28 @@ class SettingsActivity : AppCompatActivity() {
                 // те же акцентор и BERT, что у сервиса (SileroModels.shared); если сервис их выгрузил, Stress догрузит
                 val models = SileroModels.shared(ctx)
                 val lang = speaker?.lang ?: "ru"
-                val stress = Stress(d, models, prefs.userDict(lang), rules, layer = layer)
+                // The diagnostic path must exercise the same independent corrector as the TTS service.
+                // Warm up all four ONNX sessions off the UI thread before constructing Stress.
+                val ruAccentReady = lang == "ru" && models.refreshIndependentStressCorrector(warmUp = true)
+                val stress = Stress(
+                    d, models, prefs.userDict(lang), rules, layer = layer,
+                    independentCorrector = if (ruAccentReady) models.independentStressCorrector else null,
+                )
+                val independentTrace = ArrayList<String>()
+                if (ruAccentReady) stress.independentTrace = independentTrace
                 // «Разбор» — как «Прослушать»: запрос из самого приложения сервис читает по правилам книг
                 val enEngine = if (rules.on("en_proxy_books")) EnglishProxy.chosen(ctx, prefs.enEngine) else null
                 val segments = Pipeline.plan(text, d, prefs.sentencePauseMs, prefs.paragraphPauseMs, prefs.replacements(lang), rules,
                     if (enEngine == null) 0 else prefs.enMinWords.coerceIn(English.MIN_WORDS, English.MAX_WORDS), layer = layer, allowed = allowed)
                 buildString {
+                    if (lang == "ru") {
+                        appendLine(
+                            if (ruAccentReady) "RUAccent: четыре ONNX-модели прогреты; независимая проверка включена ниже."
+                            else "RUAccent: НЕ ПОДКЛЮЧЕНА — ниже показан только штатный RuVoice."
+                        )
+                    } else {
+                        appendLine("RUAccent: не используется, выбранный голос не русский.")
+                    }
                     // Пометки словами, не значками: «[¶]» и «→» TalkBack не произносит, «[речь]» — через скобки
                     for (seg in segments) {
                         appendLine(seg.text)
@@ -385,10 +401,11 @@ class SettingsActivity : AppCompatActivity() {
                         // монитор models — тот же, что у синтеза и выгрузки в сервисе: форварды не параллелим; акцентор —
                         // голоса разбора (сервис мог оставить акцентор другого языка)
                         val trace = ArrayList<String>().also { if (rules.on("verbose_log")) stress.trace = it }
+                        independentTrace.clear()
                         val accented = synchronized(models) { models.ensureStress(speaker?.pack); Pipeline.accent(seg.text, d, stress, allowed, rules) }
                         appendLine(getString(R.string.analyze_model, stress.forModel(stress.stretchShort(accented)).split(' ').joinToString(" ") { DictLines.accentDisplay(it) }))
-                        // правило verbose_log — по проходам: какой поставил ударение, и вероятности акцентора по гласным слова
                         trace.forEach { appendLine(it) }
+                        independentTrace.forEach { appendLine(it) }
                         if (seg.breakMs > 0) appendLine(getString(R.string.analyze_pause, seg.breakMs))
                         appendLine()
                     }
