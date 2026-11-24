@@ -75,6 +75,48 @@ class StressCorrectionMergerTest {
         )
     }
 
+    @Test fun `contextual yo guess cannot invent yo or move stress in prose`() {
+        val result = StressCorrectionMerger.merge(
+            original = "самое",
+            ruVoice = "с+амое",
+            prediction = IndependentStressPrediction(
+                "самоё\\u0301",
+                listOf(StressDecision.STRESSED),
+                listOf(YoDecision.RESTORE_YO),
+                listOf(YoDecisionSource.CONTEXTUAL_HOMOGRAPH),
+            ),
+        )
+        assertEquals("с+амое", result)
+    }
+
+    @Test fun `contextual no yo guess cannot erase baseline yo and stress`() {
+        val result = StressCorrectionMerger.merge(
+            original = "объем",
+            ruVoice = "объ+ём",
+            prediction = IndependentStressPrediction(
+                "об+ем",
+                listOf(StressDecision.STRESSED),
+                listOf(YoDecision.KEEP_E),
+                listOf(YoDecisionSource.CONTEXTUAL_HOMOGRAPH),
+            ),
+        )
+        assertEquals("объ+ём", result)
+    }
+
+    @Test fun `fixed dictionary yo decision can still correct a word`() {
+        val result = StressCorrectionMerger.merge(
+            original = "желтый",
+            ruVoice = "желтый",
+            prediction = IndependentStressPrediction(
+                "жё\\u0301лтый",
+                listOf(StressDecision.STRESSED),
+                listOf(YoDecision.RESTORE_YO),
+                listOf(YoDecisionSource.FIXED_DICTIONARY),
+            ),
+        )
+        assertEquals("ж+ёлтый", result)
+    }
+
     @Test fun `restore yo changes only positions returned by the model`() {
         val result = StressCorrectionMerger.merge(
             original = "ее",
