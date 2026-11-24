@@ -127,9 +127,9 @@ internal class RuAccentModelInstaller(context: Context) {
             relative.endsWith(".onnx") -> check(file.length() > 16_384L) {
                 "ONNX-файл подозрительно мал: $relative"
             }
-            relative.endsWith(".txt") -> check(file.readLines().size > 100) {
-                "Словарь токенизатора неполный: $relative"
-            }
+            relative.endsWith(".txt") -> RuAccentCharAccentPolicy.parseVocab(
+                file.readLines(Charsets.UTF_8)
+            )
             else -> check(file.length() > 0L) { "Пустой файл: $relative" }
         }
         val expected = RuAccentInt8ModelManifest.expectedSha256[relative]
