@@ -663,7 +663,7 @@ class UploadedEpubPairedEvaluationTest {
         val baselineData = SileroData(StressBin.File(ByteBuffer.wrap(
             StressBin.write(baselineJson, yoAsset.readLines(Charsets.UTF_8).asSequence())
         )))
-        // The current JSON has the reviewed phrase hint applied by phrases_extra.py.
+        // The current JSON has exactly one book-reviewed phrase hint applied by the isolated helper.
         val data = SileroData(StressBin.File(ByteBuffer.wrap(
             StressBin.write(json, yoAsset.readLines(Charsets.UTF_8).asSequence())
         )))
