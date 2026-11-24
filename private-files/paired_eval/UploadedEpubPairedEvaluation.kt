@@ -14,6 +14,7 @@ import org.junit.Test
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import ru.kost.ruvoice.Pipeline
+import ru.kost.ruvoice.DictLines
 import ru.kost.ruvoice.SileroData
 import ru.kost.ruvoice.bin.StressBin
 
@@ -652,14 +653,29 @@ class UploadedEpubPairedEvaluationTest {
         YoDict.shared = yo
         HardE.shared = hardE
 
+        // Use the exact same generated system stress dictionary that the Android app installs.
+        // Without it, the offline paired evaluator would not exercise user/system dictionary priority.
+        val systemStressFile = File(projectDir, "app/src/main/assets/dicts/stress/Системный.txt")
+        check(systemStressFile.isFile && systemStressFile.length() > 0L) {
+            "Missing generated RuVoice system stress dictionary: $systemStressFile"
+        }
+        val systemStressDict = LinkedHashMap<String, String>()
+        for (line in systemStressFile.readLines(Charsets.UTF_8)) {
+            val (word, variant) = DictLines.parseStress(line) ?: continue
+            systemStressDict[word.lowercase(Locale.ROOT)] = variant.lowercase(Locale.ROOT)
+        }
+        check(systemStressDict["снято"] == "сн+ято") {
+            "System stress dictionary does not contain the normative сня́то entry"
+        }
+
         val rules = Rules()
         val torchModels = PairedTorchLiteStressModels(
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
-        val baselineStress = Stress(data, torchModels, morph = morph, yo = yo, hardE = hardE)
+        val baselineStress = Stress(data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val corrector = PairedRemoteRuAccentCorrector(modelRoot, bridgeClasspath, nativeDir)
         val combinedStress = Stress(
-            data, torchModels, morph = morph, yo = yo, hardE = hardE,
+            data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE,
             independentCorrector = corrector
         )
 
