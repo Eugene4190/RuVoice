@@ -1,0 +1,323 @@
+package ru.kost.ruvoice.text
+
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.Locale
+
+private const val ACUTE = '\u0301'
+private val WORD_RE = Regex("[\\p{L}\\u0301]+")
+
+private data class WordResult(
+    val word: String,
+    val total: Int = 0,
+    val correct: Int = 0,
+    val noMark: Int = 0,
+)
+
+private fun sha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(1024 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+private fun plain(word: String): String =
+    word.replace(ACUTE.toString(), "").lowercase(Locale.ROOT).replace('ё', 'е')
+
+/** The reference corpus writes the acute after the stressed vowel: "замо́к". */
+private fun markedVowelIndex(word: String): Int {
+    val marker = word.indexOf(ACUTE)
+    if (marker < 1 || word.indexOf(ACUTE, marker + 1) >= 0) return -1
+    return marker - 1
+}
+
+private fun evaluateHomographs(corrector: RuAccentOnnxCorrector, corpusFile: File): JSONObject {
+    val items = JSONArray(corpusFile.readText(Charsets.UTF_8))
+    require(items.length() > 0) { "Homograph gold corpus is empty" }
+
+    var correct = 0
+    var noMark = 0
+    var wrongPosition = 0
+    var missingTarget = 0
+    var alignmentErrors = 0
+    val byWord = LinkedHashMap<String, IntArray>()
+    val misses = JSONArray()
+
+    val started = System.nanoTime()
+    for (itemIndex in 0 until items.length()) {
+        val item = items.getJSONObject(itemIndex)
+        val context = item.getString("context")
+        val gold = item.getString("homograph")
+        val goldWord = gold.replace(ACUTE.toString(), "")
+        val goldPosition = markedVowelIndex(gold)
+        require(goldPosition >= 0) {
+            "Gold item \${item.optString("id")} has no single acute mark: $gold"
+        }
+
+        val sourceTokens = WORD_RE.findAll(context).map { it.value }.toList()
+        val candidates = sourceTokens.indices.filter { plain(sourceTokens[it]) == plain(goldWord) }
+        if (candidates.isEmpty()) {
+            missingTarget++
+            continue
+        }
+        val occurrence = item.optInt("occurrence", 0).coerceAtLeast(0)
+        val sourceIndex = candidates[minOf(occurrence, candidates.lastIndex)]
+
+        val prediction = corrector.correct(context)
+            ?: error("RUAccent returned null for gold item \${item.optString("id")}")
+        val predictedTokens = WORD_RE.findAll(prediction.text).map { it.value }.toList()
+        if (predictedTokens.size != sourceTokens.size ||
+            prediction.decisions.size != sourceTokens.size ||
+            prediction.yoDecisions.size != sourceTokens.size
+        ) {
+            alignmentErrors++
+            val row = JSONObject()
+                .put("id", item.optInt("id"))
+                .put("context", context)
+                .put("expected", gold)
+                .put("actual", "ALIGNMENT_ERROR")
+                .put("source_tokens", sourceTokens.size)
+                .put("predicted_tokens", predictedTokens.size)
+                .put("decisions", prediction.decisions.size)
+            if (misses.length() < 100) misses.put(row)
+            continue
+        }
+
+        val observed = predictedTokens[sourceIndex]
+        val predictedPosition = markedVowelIndex(observed)
+        val key = plain(goldWord)
+        val stat = byWord.getOrPut(key) { intArrayOf(0, 0, 0) }
+        stat[0]++
+        val decision = prediction.decisions[sourceIndex].name
+
+        if (predictedPosition == goldPosition) {
+            correct++
+            stat[1]++
+        } else {
+            if (predictedPosition < 0) {
+                noMark++
+                stat[2]++
+            } else {
+                wrongPosition++
+            }
+            if (misses.length() < 100) {
+                misses.put(
+                    JSONObject()
+                        .put("id", item.optInt("id"))
+                        .put("word", goldWord)
+                        .put("context", context)
+                        .put("expected", gold)
+                        .put("actual", observed)
+                        .put("decision", decision)
+                )
+            }
+        }
+
+        if ((itemIndex + 1) % 100 == 0) {
+            println("HOMOGRAPH_PROGRESS=\${itemIndex + 1}/\${items.length()}")
+        }
+    }
+
+    val elapsedMs = (System.nanoTime() - started) / 1_000_000
+    val evaluated = items.length() - missingTarget
+    val coverage = if (evaluated == 0) 0.0 else (evaluated - noMark - alignmentErrors).toDouble() / evaluated
+    val report = JSONObject()
+        .put("corpus", corpusFile.name)
+        .put("source_note", "HomographResolutionEval gold-labelled contexts; one target homograph per sentence.")
+        .put("items_total", items.length())
+        .put("items_scored", evaluated)
+        .put("correct_exact_stress", correct)
+        .put("wrong_stress_position", wrongPosition)
+        .put("no_stress_mark", noMark)
+        .put("missing_target", missingTarget)
+        .put("alignment_errors", alignmentErrors)
+        .put("exact_accuracy", if (evaluated == 0) 0.0 else correct.toDouble() / evaluated)
+        .put("stress_mark_coverage", coverage)
+        .put("elapsed_ms", elapsedMs)
+        .put("misses", misses)
+
+    val wordArray = JSONArray()
+    byWord.entries
+        .map { (word, stats) -> word to stats }
+        .sortedWith(compareByDescending<Pair<String, IntArray>> { it.second[0] - it.second[1] }
+            .thenByDescending { it.second[0] })
+        .take(40)
+        .forEach { (word, stats) ->
+            wordArray.put(
+                JSONObject()
+                    .put("word", word)
+                    .put("total", stats[0])
+                    .put("correct", stats[1])
+                    .put("no_mark", stats[2])
+                    .put("accuracy", stats[1].toDouble() / stats[0])
+            )
+        }
+    report.put("worst_repeated_word_forms", wordArray)
+
+    println("\n=== GOLD HOMOGRAPH EVALUATION ===")
+    println("Dataset: \${items.length()} sentences, \${byWord.size} distinct unaccented forms")
+    println("Exact stress: $correct / $evaluated (\${"%.2f".format(Locale.ROOT, 100.0 * correct / evaluated.coerceAtLeast(1))}%)")
+    println("Wrong vowel: $wrongPosition; no stress mark: $noMark; target missing: $missingTarget; alignment errors: $alignmentErrors")
+    println("Time: \${elapsedMs} ms")
+    println("Worst repeated forms:")
+    for (i in 0 until wordArray.length().coerceAtMost(15)) {
+        val item = wordArray.getJSONObject(i)
+        println("  \${item.getString("word")}: \${item.getInt("correct")}/\${item.getInt("total")}")
+    }
+    println("=================================\n")
+    return report
+}
+
+private fun evaluateLabelCorpus(
+    corrector: RuAccentOnnxCorrector,
+    corpusFile: File,
+    kind: String,
+): JSONObject {
+    val corpus = JSONObject(corpusFile.readText(Charsets.UTF_8))
+    require(corpus.optInt("schema_version") == 1) { "$kind corpus schema version is not supported" }
+    val cases = corpus.getJSONArray("cases")
+    var total = 0
+    var passed = 0
+    var missing = 0
+    val misses = JSONArray()
+
+    for (caseIndex in 0 until cases.length()) {
+        val case = cases.getJSONObject(caseIndex)
+        val text = case.getString("text")
+        val expected = case.getJSONArray("expect")
+        val prediction = corrector.correct(text) ?: error("RUAccent returned null in $kind case")
+        val tokens = WORD_RE.findAll(text).map { it.value }.toList()
+        val predictedTokens = WORD_RE.findAll(prediction.text).map { it.value }.toList()
+        require(tokens.size == prediction.decisions.size && tokens.size == prediction.yoDecisions.size) {
+            "Decision alignment failed in $kind case \${case.getString("id")}"
+        }
+        require(predictedTokens.size == tokens.size) {
+            "Text alignment failed in $kind case \${case.getString("id")}"
+        }
+
+        for (checkIndex in 0 until expected.length()) {
+            val check = expected.getJSONObject(checkIndex)
+            val target = check.getString("word")
+            val occurrence = check.optInt("occurrence", 0).coerceAtLeast(0)
+            val matching = tokens.indices.filter { plain(tokens[it]) == plain(target) }
+            total++
+            if (matching.isEmpty() || occurrence >= matching.size) {
+                missing++
+                if (misses.length() < 100) misses.put(
+                    JSONObject().put("case", case.getString("id")).put("word", target).put("status", "MISSING")
+                )
+                continue
+            }
+            val index = matching[occurrence]
+            val actual = if (kind == "stress_usage") {
+                prediction.decisions[index].name
+            } else {
+                when (prediction.yoDecisions[index]) {
+                    YoDecision.RESTORE_YO -> "YO"
+                    YoDecision.KEEP_E -> "NO_YO"
+                    YoDecision.UNKNOWN -> "UNKNOWN"
+                }
+            }
+            val expectedLabel = check.getString("label")
+            if (actual == expectedLabel) passed++ else if (misses.length() < 100) {
+                misses.put(
+                    JSONObject()
+                        .put("case", case.getString("id"))
+                        .put("text", text)
+                        .put("word", target)
+                        .put("expected", expectedLabel)
+                        .put("actual", actual)
+                )
+            }
+        }
+    }
+
+    val scored = total - missing
+    val report = JSONObject()
+        .put("corpus", corpus.optString("name", kind))
+        .put("total_checks", total)
+        .put("scored", scored)
+        .put("passed", passed)
+        .put("mismatches", scored - passed)
+        .put("missing", missing)
+        .put("accuracy", if (scored == 0) 0.0 else passed.toDouble() / scored)
+        .put("warning", "Small component smoke set only; not a general quality estimate.")
+        .put("misses", misses)
+
+    println("$kind: $passed/$scored passed; mismatches=\${scored - passed}; missing=$missing")
+    return report
+}
+
+fun main(args: Array<String>) {
+    require(args.size == 4) {
+        "Usage: Evaluate_ruaccent_qualityKt homograph.json stress_usage.json yo.json output.json"
+    }
+    val corpusFile = File(args[0])
+    val stressUsageFile = File(args[1])
+    val yoFile = File(args[2])
+    val reportFile = File(args[3])
+
+    val root = Files.createTempDirectory("ruvoice-ruaccent-quality").toFile()
+    val downloader = RuAccentHttpDownloader(connectTimeoutMillis = 30_000, readTimeoutMillis = 120_000)
+    val hashes = linkedMapOf<String, String>()
+
+    try {
+        println("Pinned model revision: \${RuAccentInt8ModelManifest.revision}")
+        println("Downloading \${RuAccentInt8ModelManifest.files.size} manifest-pinned files")
+        RuAccentInt8ModelManifest.files.forEachIndexed { index, relative ->
+            val destination = File(root, relative)
+            check(destination.parentFile?.exists() == true || destination.parentFile?.mkdirs() == true) {
+                "Cannot create model directory for $relative"
+            }
+            downloader.download(RuAccentInt8ModelManifest.downloadUrl(relative), destination) { bytes ->
+                if (bytes == 0L || bytes % (64L * 1024 * 1024) < 1024 * 1024) {
+                    System.err.print("\rModel \${index + 1}/\${RuAccentInt8ModelManifest.files.size}: $relative — $bytes bytes")
+                }
+            }
+            val actual = sha256(destination)
+            val expected = RuAccentInt8ModelManifest.expectedSha256[relative]
+                ?: error("No pinned SHA-256 for $relative")
+            check(actual == expected) { "SHA-256 mismatch for $relative: $actual != $expected" }
+            hashes[relative] = actual
+        }
+        println("\nPASS: all \${hashes.size} downloaded files match pinned SHA-256 values")
+
+        val corrector = RuAccentOnnxCorrector(root)
+        try {
+            check(corrector.warmUp()) { "Four ONNX models failed to warm up" }
+            println("PASS: all four production Kotlin ONNX sessions are loaded")
+
+            val homographs = evaluateHomographs(corrector, corpusFile)
+            val stressUsage = evaluateLabelCorpus(corrector, stressUsageFile, "stress_usage")
+            val yo = evaluateLabelCorpus(corrector, yoFile, "yo")
+
+            val report = JSONObject()
+                .put("schema_version", 1)
+                .put("model_repository", RuAccentInt8ModelManifest.repository)
+                .put("model_revision", RuAccentInt8ModelManifest.revision)
+                .put("runtime", "Production Kotlin RuAccentOnnxCorrector + ONNX Runtime CPU")
+                .put("model_hashes", JSONObject(hashes))
+                .put("homograph_eval", homographs)
+                .put("stress_usage_smoke", stressUsage)
+                .put("yo_smoke", yo)
+                .put("interpretation", "Gold homograph accuracy measures RUAccent's independent output on labelled target words. It is not by itself proof of improvement over the separate stock RuVoice pipeline.")
+            reportFile.parentFile?.mkdirs()
+            reportFile.writeText(report.toString(2) + "\n", Charsets.UTF_8)
+            println("QUALITY_REPORT=\${reportFile.absolutePath}")
+            println("PASS: RUAccent quality evaluation completed")
+        } finally {
+            corrector.close()
+        }
+    } finally {
+        root.deleteRecursively()
+    }
+}
