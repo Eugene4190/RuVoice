@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 VOWELS = set("аеёиоуыэюя")
+WIKT_SKIP_TAGS = {"romanization", "table-tags", "inflection-template", "class", "canonical"}
 ACUTE = "\u0301"
 CYR = re.compile(r"^[а-яё]+$")
 CYR_ACCENTED = re.compile(r"^[а-яё\u0301-]+$")
@@ -171,6 +172,8 @@ def load_wiktionary(path: Path, target_words: set[str]) -> dict[str, dict[int, s
             forms = list(data.get("forms", []))
             forms.append({"form": data.get("word", ""), "tags": ["lemma"]})
             for form_data in forms:
+                if WIKT_SKIP_TAGS.intersection(str(tag) for tag in form_data.get("tags", [])):
+                    continue
                 form_text = str(form_data.get("form", "")).lower()
                 parsed = wikt_mark(form_text)
                 if parsed is None:
