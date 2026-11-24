@@ -646,10 +646,25 @@ class UploadedEpubPairedEvaluationTest {
         }
 
         val json = File(projectDir, "app/src/main/assets/silero/silero_ru.json").readText(Charsets.UTF_8)
-        val yoLines = File(projectDir, "app/src/main/assets/eyo_safe.txt").readLines(Charsets.UTF_8).asSequence()
-        val data = SileroData(StressBin.File(ByteBuffer.wrap(StressBin.write(json, yoLines))))
+        val baselineJsonFile = File(checkNotNull(System.getenv("RUVOICE_BASELINE_SILERO_JSON"))).canonicalFile
+        check(baselineJsonFile.isFile && baselineJsonFile.length() > 0L) {
+            "Missing pre-override Silero phrase data: $baselineJsonFile"
+        }
+        val baselineJson = baselineJsonFile.readText(Charsets.UTF_8)
+        val yoAsset = File(projectDir, "app/src/main/assets/eyo_safe.txt")
+        val baselineData = SileroData(StressBin.File(ByteBuffer.wrap(
+            StressBin.write(baselineJson, yoAsset.readLines(Charsets.UTF_8).asSequence())
+        )))
+        // The current JSON has the reviewed phrase hint applied by phrases_extra.py.
+        val data = SileroData(StressBin.File(ByteBuffer.wrap(
+            StressBin.write(json, yoAsset.readLines(Charsets.UTF_8).asSequence())
+        )))
+        val reviewedPhraseEntries = data.phrases["сети"].orEmpty()
+        check(reviewedPhraseEntries.any { it.first == "сети значений" && it.second == "с+ети" }) {
+            "Reviewed phrase override 'сети значений = с+ети' is missing from production Stress data"
+        }
         val morph = Morph.open(File(projectDir, "app/src/main/assets/morph.bin"))
-        val yo = YoDict(data.yo)
+        val yo = YoDict(baselineData.yo)
         val hardE = HardE(File(projectDir, "app/src/main/assets/hard_e.txt").readLines(Charsets.UTF_8))
         Normalizer.morph = morph
         YoDict.shared = yo
@@ -707,26 +722,29 @@ class UploadedEpubPairedEvaluationTest {
         val torchModels = PairedTorchLiteStressModels(
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
-        val baselineStress = Stress(data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
+        // Three independent full-book passes: untouched production baseline; production with
+        // the reviewed phrase hint and five book-only dictionary corrections; RUAccent on top
+        // of the untouched baseline. This isolates the impact of RuVoice-specific fixes.
+        val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
         val corrector = PairedRemoteRuAccentCorrector(modelRoot, bridgeClasspath, nativeDir)
         val combinedStress = Stress(
-            data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE,
+            baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE,
             independentCorrector = corrector
         )
 
         try {
-            fun readable(text: String, stress: Stress): String =
-                StressDiagnosticFormatter.readable(Pipeline.accent(text, data, stress, data.allowed, rules))
+            fun readable(text: String, stress: Stress, inputData: SileroData): String =
+                StressDiagnosticFormatter.readable(Pipeline.accent(text, inputData, stress, inputData.allowed, rules))
             val sanity = JSONObject()
-            val genitiveHouse = readable("строительство дома", baselineStress)
-            val genitiveHouseCombined = readable("строительство дома", combinedStress)
-            val genitiveEye = readable("отражается от глаза", baselineStress)
-            val genitiveEyeCombined = readable("отражается от глаза", combinedStress)
-            val handsBaseline = readable("дать разуму в руки инструмент", baselineStress)
-            val handsCombined = readable("дать разуму в руки инструмент", combinedStress)
-            val networkBaseline = readable("Сети значений в потоке энергии сознания", baselineStress)
-            val networkCombined = readable("Сети значений в потоке энергии сознания", combinedStress)
+            val genitiveHouse = readable("строительство дома", baselineStress, baselineData)
+            val genitiveHouseCombined = readable("строительство дома", combinedStress, baselineData)
+            val genitiveEye = readable("отражается от глаза", baselineStress, baselineData)
+            val genitiveEyeCombined = readable("отражается от глаза", combinedStress, baselineData)
+            val handsBaseline = readable("дать разуму в руки инструмент", baselineStress, baselineData)
+            val handsCombined = readable("дать разуму в руки инструмент", combinedStress, baselineData)
+            val networkBaseline = readable("Сети значений в потоке энергии сознания", baselineStress, baselineData)
+            val networkCombined = readable("Сети значений в потоке энергии сознания", combinedStress, baselineData)
             sanity.put("строительство дома_baseline", genitiveHouse)
             sanity.put("строительство дома_combined", genitiveHouseCombined)
             sanity.put("строительство дома_expected", "до́ма")
@@ -742,13 +760,19 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("дать разуму в руки инструмент_expected", "ру́ки")
             sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
             sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
+            val networkReviewed = readable("Сети значений в потоке энергии сознания", reviewedStress, data)
             sanity.put("Сети значений_baseline", networkBaseline)
+            sanity.put("Сети значений_reviewed", networkReviewed)
             sanity.put("Сети значений_combined", networkCombined)
             sanity.put("Сети значений_expected", "Се́ти значений")
-            sanity.put("Сети значений_baseline_matches_expected", networkBaseline.contains("Се́ти значений", ignoreCase = true))
-            sanity.put("Сети значений_combined_matches_expected", networkCombined.contains("Се́ти значений", ignoreCase = true))
-            check(networkBaseline.contains("Се́ти значений", ignoreCase = true)) {
-                "Phrase-specific stress regression failed for 'Сети значений': $networkBaseline"
+            sanity.put("Сети значений_baseline_matches_expected", networkBaseline.contains("сети́", ignoreCase = true))
+            sanity.put("Сети значений_reviewed_matches_expected", networkReviewed.contains("Се́ти значений", ignoreCase = true))
+            sanity.put("Сети значений_combined_matches_expected", networkCombined.contains("сети́", ignoreCase = true))
+            check(networkBaseline.contains("сети́", ignoreCase = true)) {
+                "Untouched production baseline did not reproduce the original 'сети' stress: $networkBaseline"
+            }
+            check(networkReviewed.contains("Се́ти значений", ignoreCase = true)) {
+                "Phrase-specific stress correction failed for 'Сети значений': $networkReviewed"
             }
 
             // Run the five manually reviewed stress cases before the separate ё suite.
@@ -923,7 +947,7 @@ class UploadedEpubPairedEvaluationTest {
 
             for ((segmentIndex, segment) in segments.withIndex()) {
                 val baseline = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, data, baselineStress, data.allowed, rules)
+                    Pipeline.accent(segment.text, baselineData, baselineStress, baselineData.allowed, rules)
                 )
                 val reviewed = StressDiagnosticFormatter.readable(
                     Pipeline.accent(segment.text, data, reviewedStress, data.allowed, rules)
@@ -1128,6 +1152,10 @@ class UploadedEpubPairedEvaluationTest {
                         put(JSONObject().put("word", word).put("variant", variant))
                     }
                 })
+                .put("book_reviewed_phrase_overrides", JSONArray().put(
+                    JSONObject().put("word", "сети")
+                        .put("phrase", "сети значений").put("variant", "с+ети")
+                ))
                 .put("baseline_tokens", baselineTokens)
                 .put("reviewed_tokens", reviewedTokens)
                 .put("combined_tokens", combinedTokens)
