@@ -356,8 +356,8 @@ def main() -> int:
             f"baseline={len(tokens)}"
         )
     override_entries = paired.get("book_reviewed_override_entries", [])
-    if len(override_entries) != 4:
-        raise SystemExit(f"Ожидалось 4 проверенных книжных исправления, найдено {len(override_entries)}")
+    if len(override_entries) != 5:
+        raise SystemExit(f"Ожидалось 5 проверенных книжных исправлений, найдено {len(override_entries)}")
 
     # Use the complete independently merged token stream, not only changed-token samples.
     ruaccent_by_occurrence: dict[tuple[int, int], str] = {}
