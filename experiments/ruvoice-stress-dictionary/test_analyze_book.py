@@ -48,7 +48,7 @@ class BookAnalyzerTests(unittest.TestCase):
             self.assertNotIn("вредныйтекст", text)
 
     def test_coverage_counts_tokens_and_missing_contexts(self):
-        summary, counts, contexts, missing = tool.analyze(
+        summary, counts, contexts, missing, hit_contexts = tool.analyze(
             "Творог и молоко. Творог стоял рядом.",
             {"творог": "твор+ог"},
             context_radius=2,
@@ -60,6 +60,7 @@ class BookAnalyzerTests(unittest.TestCase):
         self.assertEqual(counts["творог"], 2)
         self.assertIn("и", missing)
         self.assertLessEqual(len(contexts["молоко"]), 2)
+        self.assertEqual(len(hit_contexts["творог"]), 2)
 
 
 if __name__ == "__main__":
