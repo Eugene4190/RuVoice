@@ -1,0 +1,59 @@
+name: Evaluate real uploaded EPUB with RUAccent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "private-files/8.Iskusstvo..epub"
+      - "project/ruvoice-1.1.3-stage4.9/tools/test_ruaccent_uploaded_book.kt"
+      - "project/ruvoice-1.1.3-stage4.9/tools/run_ruaccent_uploaded_book_eval.sh"
+      - ".github/workflows/evaluate-uploaded-epub.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate-book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out private repository and uploaded book
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install pinned Kotlin compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip \
+            --output /tmp/kotlin-compiler.zip
+          echo "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd  /tmp/kotlin-compiler.zip" | sha256sum --check
+          unzip -q /tmp/kotlin-compiler.zip -d /tmp/kotlin
+          echo "/tmp/kotlin/kotlinc/bin" >> "$GITHUB_PATH"
+
+      - name: Run production RUAccent Kotlin/ONNX pipeline over the whole EPUB
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/run_ruaccent_uploaded_book_eval.sh \
+            "$GITHUB_WORKSPACE/private-files/8.Iskusstvo..epub" \
+            "$GITHUB_WORKSPACE/project/ruvoice-1.1.3-stage4.9/app/build/reports/ruaccent-uploaded-book.json"
+
+      - name: Upload private book evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruaccent-uploaded-book-evaluation
+          path: project/ruvoice-1.1.3-stage4.9/app/build/reports/ruaccent-uploaded-book.json
+          if-no-files-found: error
+          retention-days: 14
