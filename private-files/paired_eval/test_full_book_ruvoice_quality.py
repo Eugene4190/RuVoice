@@ -22,7 +22,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
 
     def test_variant_supported_by_both_sources_is_accepted(self) -> None:
         status, _ = quality.verdict(
-            "маркирована", 2, 1, {1: {"маркировать:short"}},
+            "маркирована", 1, 1, {1: {"маркировать:short"}},
             {1: {"маркировать:short"}, 2: {"маркированный:meaning"}}, set()
         )
         self.assertEqual(status, "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS")
