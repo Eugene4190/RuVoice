@@ -38,6 +38,22 @@ jobs:
             -s experiments/ruvoice-stress-dictionary \
             -p "test_*.py" -v
 
+      - name: Build a book-specific supplement from the reference EPUB
+        if: hashFiles('private-files/8.Iskusstvo..epub') != ''
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/ruvoice-book-first"
+          python experiments/ruvoice-stress-dictionary/build_book_dictionary.py \
+            "private-files/8.Iskusstvo..epub" \
+            --output-dir "$OUT"
+          python - "$OUT/Book_Report.json" <<'PY'
+          import json, pathlib, sys
+          data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print("BOOK_FIRST_DICTIONARY_SUMMARY=" + json.dumps(data, ensure_ascii=False, sort_keys=True))
+          assert data["new_candidate_forms"] >= 0
+          assert data["cumulative_approved_entries"] == 0
+          PY
+
       - name: Validate shell syntax
         run: bash -n experiments/ruvoice-stress-dictionary/run_pipeline.sh
 
