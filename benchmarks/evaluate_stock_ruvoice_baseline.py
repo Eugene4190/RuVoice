@@ -64,7 +64,7 @@ def main() -> int:
     # Same packaged homo.ptl and resolver path as the Android app's gold test.
     accentor = load_accentor()
     accentor.homosolver.model = _load_for_lite_interpreter(
-        os.environ.get("HOMO") or str(PROJECT / "app/src/main/assets/silero/homo.ptl")
+        os.environ.get("HOMO") or str(PROJECT / "app/src/full/assets/silero/homo.ptl")
     )
 
     corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
