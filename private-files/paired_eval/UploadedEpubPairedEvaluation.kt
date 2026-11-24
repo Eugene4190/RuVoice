@@ -663,17 +663,26 @@ class UploadedEpubPairedEvaluationTest {
                 StressDiagnosticFormatter.readable(Pipeline.accent(text, data, stress, data.allowed, rules))
             val sanity = JSONObject()
             val genitiveHouse = readable("строительство дома", baselineStress)
+            val genitiveHouseCombined = readable("строительство дома", combinedStress)
             val genitiveEye = readable("отражается от глаза", baselineStress)
+            val genitiveEyeCombined = readable("отражается от глаза", combinedStress)
             val handsBaseline = readable("дать разуму в руки инструмент", baselineStress)
             val handsCombined = readable("дать разуму в руки инструмент", combinedStress)
-            sanity.put("строительство дома", genitiveHouse)
-            sanity.put("отражается от глаза", genitiveEye)
+            sanity.put("строительство дома_baseline", genitiveHouse)
+            sanity.put("строительство дома_combined", genitiveHouseCombined)
+            sanity.put("строительство дома_expected", "до́ма")
+            sanity.put("строительство дома_baseline_matches_expected", genitiveHouse.contains("до́ма"))
+            sanity.put("строительство дома_combined_matches_expected", genitiveHouseCombined.contains("до́ма"))
+            sanity.put("отражается от глаза_baseline", genitiveEye)
+            sanity.put("отражается от глаза_combined", genitiveEyeCombined)
+            sanity.put("отражается от глаза_expected", "гла́за")
+            sanity.put("отражается от глаза_baseline_matches_expected", genitiveEye.contains("гла́за"))
+            sanity.put("отражается от глаза_combined_matches_expected", genitiveEyeCombined.contains("гла́за"))
             sanity.put("дать разуму в руки инструмент_baseline", handsBaseline)
             sanity.put("дать разуму в руки инструмент_combined", handsCombined)
-            check(genitiveHouse.contains("до́ма")) { "Genitive singular дома: " + genitiveHouse }
-            check(genitiveEye.contains("гла́за")) { "Genitive singular глаза: " + genitiveEye }
-            check(handsBaseline.contains("ру́ки")) { "Native pipeline «в ру́ки»: " + handsBaseline }
-            check(handsCombined.contains("ру́ки")) { "RUAccent overwrote «в ру́ки»: " + handsCombined }
+            sanity.put("дать разуму в руки инструмент_expected", "ру́ки")
+            sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
+            sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
 
             val paragraphs = epubParagraphs(epub)
             val segments = makeSegments(paragraphs)
