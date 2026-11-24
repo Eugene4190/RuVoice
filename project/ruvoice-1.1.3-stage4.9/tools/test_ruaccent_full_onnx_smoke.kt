@@ -1,6 +1,8 @@
 package ru.kost.ruvoice.text
 
 import java.io.File
+import java.util.Locale
+import org.json.JSONObject
 import java.nio.file.Files
 import java.security.MessageDigest
 
@@ -72,6 +74,49 @@ fun main() {
                 println("INFERENCE ${index + 1}: ${prediction.text}")
             }
             println("PASS: four real Russian sentence inferences completed")
+
+            // Run the actual four-model + dictionary corrector over the exact 29 book contexts.
+            // This is deliberately separate from the raw nn_yo_homograph probe: yo_words and
+            // yo_homographs can override the classifier, so raw labels alone are not final output.
+            val regressionPath = File("tools/data/ruaccent_yo_book_regressions.json")
+            check(regressionPath.isFile) { "Missing ё book regression corpus: $regressionPath" }
+            val corpus = JSONObject(regressionPath.readText(Charsets.UTF_8))
+            val cases = corpus.getJSONArray("cases")
+            val tokenPattern = Regex("[\\p{L}+\\u0301]+")
+            fun canonical(word: String): String = word
+                .replace("+", "")
+                .replace("\u0301", "")
+                .lowercase(Locale.ROOT)
+                .replace('ё', 'е')
+            var matched = 0
+            for (caseIndex in 0 until cases.length()) {
+                val item = cases.getJSONObject(caseIndex)
+                val caseId = item.getString("id")
+                val sentence = item.getString("text")
+                val expected = item.getJSONArray("expect").getJSONObject(0)
+                val target = expected.getString("word")
+                val expectedLabel = expected.getString("label")
+                val sourceTokens = tokenPattern.findAll(sentence).map { it.value }.toList()
+                val targetIndex = sourceTokens.indexOfFirst { canonical(it) == canonical(target) }
+                check(targetIndex >= 0) { "Case $caseId: target '$target' is absent from its sentence" }
+                val result = corrector.correct(sentence)
+                    ?: error("RUAccent returned null for book regression case $caseId")
+                val outputTokens = tokenPattern.findAll(result.text).map { it.value }.toList()
+                val outputToken = outputTokens.getOrNull(targetIndex)
+                val decision = result.yoDecisions.getOrNull(targetIndex)
+                val actual = when {
+                    outputToken == null -> "MISSING"
+                    outputToken.any { it == 'ё' || it == 'Ё' } -> "YO"
+                    else -> "NO_YO"
+                }
+                val ok = actual == expectedLabel
+                if (ok) matched++
+                println(
+                    "BOOK_YO $caseId expected=$expectedLabel actual=$actual " +
+                    "decision=$decision token=" + (outputToken ?: "<missing>")
+                )
+            }
+            println("BOOK_YO_SUMMARY matched=" + matched + " total=" + cases.length())
         } finally {
             corrector.close()
         }
