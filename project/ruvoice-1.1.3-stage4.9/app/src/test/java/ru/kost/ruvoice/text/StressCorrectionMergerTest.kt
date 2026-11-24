@@ -44,6 +44,37 @@ class StressCorrectionMergerTest {
         assertEquals("все", result)
     }
 
+    @Test fun `curated safe dictionary yo cannot be rolled back by RUAccent`() {
+        val protected = SafeYoDictionaryProtection.findProtectedIndices(
+            original = "объем",
+            ruVoice = "объ+ём",
+        ) { word -> if (word == "объем") "объём" else null }
+        assertEquals(setOf(0), protected)
+
+        val result = StressCorrectionMerger.merge(
+            original = "объем",
+            ruVoice = "объ+ём",
+            prediction = IndependentStressPrediction(
+                "объем", listOf(StressDecision.UNSTRESSED), listOf(YoDecision.KEEP_E)
+            ),
+            protectedYoIndices = protected,
+        )
+        assertEquals("объ+ём", result)
+    }
+
+    @Test fun `safe yo protection does not trust unrelated model generated yo`() {
+        assertEquals(
+            emptySet<Int>(),
+            SafeYoDictionaryProtection.findProtectedIndices("самое", "само+ё") { null },
+        )
+        assertEquals(
+            emptySet<Int>(),
+            SafeYoDictionaryProtection.findProtectedIndices("объем лес", "объ+ём лес") {
+                if (it == "объем") "объём" else null
+            },
+        )
+    }
+
     @Test fun `restore yo changes only positions returned by the model`() {
         val result = StressCorrectionMerger.merge(
             original = "ее",
