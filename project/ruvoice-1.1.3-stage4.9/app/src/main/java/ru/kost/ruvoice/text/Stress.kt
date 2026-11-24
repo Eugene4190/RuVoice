@@ -87,7 +87,7 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
             val grammarTokens = correctionWordRe.findAll(grammarOutput).toList()
             if (sourceTokens.size != grammarTokens.size) emptySet()
             else sourceTokens.indices.filterTo(LinkedHashSet()) { index ->
-                grammarTokens[index].value.contains('+') || grammarTokens[index].value.contains('\\u0301')
+                grammarTokens[index].value.contains('+') || grammarTokens[index].value.contains('\u0301')
             }
         }.getOrDefault(emptySet()) else emptySet()
         val merged = StressCorrectionMerger.merge(
