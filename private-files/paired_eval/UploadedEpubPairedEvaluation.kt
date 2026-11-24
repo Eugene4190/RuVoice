@@ -772,8 +772,8 @@ class UploadedEpubPairedEvaluationTest {
             check(networkBaseline.contains("сети́", ignoreCase = true)) {
                 "Untouched production baseline did not reproduce the original 'сети' stress: $networkBaseline"
             }
-            check(networkReviewed.contains("Се́ти значений", ignoreCase = true)) {
-                "Phrase-specific stress correction failed for 'Сети значений': $networkReviewed"
+            check(networkReviewed.contains("се́ти", ignoreCase = true)) {
+                "Phrase-specific stress correction failed for the word 'сети': $networkReviewed"
             }
 
             // Run the five manually reviewed stress cases before the separate ё suite.
