@@ -1,12 +1,11 @@
-name: Evaluate uploaded EPUB after grammar-priority fix
+name: Paired baseline vs RUAccent evaluation on uploaded EPUB
 
 on:
   push:
     branches: [main]
     paths:
       - "private-files/8.Iskusstvo..epub"
-      - "project/ruvoice-1.1.3-stage4.9/tools/test_ruaccent_uploaded_book.kt"
-      - "project/ruvoice-1.1.3-stage4.9/tools/run_ruaccent_uploaded_book_eval.sh"
+      - "private-files/paired_eval/**"
       - ".github/workflows/evaluate-uploaded-epub.yml"
   workflow_dispatch:
 
@@ -14,9 +13,9 @@ permissions:
   contents: read
 
 jobs:
-  evaluate-book:
+  paired-evaluation:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Check out private repository and uploaded book
         uses: actions/checkout@v4
@@ -27,8 +26,90 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Rust toolchain
+      - name: Set up Python 3.12 and CPU PyTorch Lite runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install PyTorch CPU runtime for the original Silero Lite models
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          python - <<'PY'
+          import torch
+          from torch.jit.mobile import _load_for_lite_interpreter
+          print("PYTORCH_VERSION=" + torch.__version__)
+          print("TORCH_LITE_LOADER=AVAILABLE")
+          PY
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Install pinned Android SDK platform and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="$RUNNER_TEMP/android-sdk"
+          TOOL_ZIP="$RUNNER_TEMP/android-command-line-tools.zip"
+          mkdir -p "$SDK_ROOT/cmdline-tools/latest" "$RUNNER_TEMP/android-cli-unpack"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip \
+            --output "$TOOL_ZIP"
+          echo "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583  $TOOL_ZIP" | sha256sum --check
+          unzip -q "$TOOL_ZIP" -d "$RUNNER_TEMP/android-cli-unpack"
+          cp -a "$RUNNER_TEMP/android-cli-unpack/cmdline-tools/." "$SDK_ROOT/cmdline-tools/latest/"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          set +o pipefail
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Rust for the real RUAccent tokenizer JNI
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Download and extract the official RuVoice 1.1.3 stress models
+        shell: bash
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ruvoice-upstream app/src/full/assets/silero
+          curl --fail --location --retry 3 --silent --show-error \
+            https://github.com/kost-t-human/ruvoice-tts/releases/download/v1.1.3/ruvoice-tts-1.1.3.apk \
+            --output /tmp/ruvoice-upstream/ruvoice-tts-1.1.3.apk
+          echo "b67e64ec05749032c8edfd746b4e039e6f261ac9801ff17c6ccdfc8e7c4d6acb  /tmp/ruvoice-upstream/ruvoice-tts-1.1.3.apk" | sha256sum --check
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          source = Path("/tmp/ruvoice-upstream/ruvoice-tts-1.1.3.apk")
+          target = Path("app/src/full/assets/silero")
+          required = ["accentor.ptl", "backbone.pte", "head.ptl", "homo.ptl", "stress.bin", "tts_mel.ptl"]
+          with ZipFile(source) as apk:
+              for name in required:
+                  data = apk.read("assets/silero/" + name)
+                  if not data:
+                      raise SystemExit("Empty official Silero asset: " + name)
+                  (target / name).write_bytes(data)
+                  print(name + ": " + str(len(data)) + " bytes")
+          PY
+
+      - name: Download ExecuTorch AAR required by the Android test variant
+        shell: bash
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          set -euo pipefail
+          mkdir -p app/libs
+          curl --fail --location --retry 3 --silent --show-error \
+            https://ossci-android.s3.amazonaws.com/executorch/release/1.5.0-xnnpack/executorch.aar \
+            --output app/libs/executorch-1.5.0-xnnpack.aar
+          unzip -tq app/libs/executorch-1.5.0-xnnpack.aar
 
       - name: Install pinned Kotlin compiler
         shell: bash
@@ -36,24 +117,47 @@ jobs:
           set -euo pipefail
           curl --fail --location --silent --show-error \
             https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip \
-            --output /tmp/kotlin-compiler.zip
-          echo "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd  /tmp/kotlin-compiler.zip" | sha256sum --check
-          unzip -q /tmp/kotlin-compiler.zip -d /tmp/kotlin
-          echo "/tmp/kotlin/kotlinc/bin" >> "$GITHUB_PATH"
+            --output "$RUNNER_TEMP/kotlin-compiler.zip"
+          echo "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd  $RUNNER_TEMP/kotlin-compiler.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/kotlin-compiler.zip" -d "$RUNNER_TEMP/kotlin"
+          echo "$RUNNER_TEMP/kotlin/kotlinc/bin" >> "$GITHUB_PATH"
 
-      - name: Run production RUAccent Kotlin/ONNX pipeline over the whole EPUB
+      - name: Restore UTF-8 dictionary asset names
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: python tools/restore_unicode_asset_names.py
+
+      - name: Build the production RUAccent server for paired JVM inference
+        shell: bash
+        run: bash private-files/paired_eval/build_ruaccent_bridge.sh
+
+      - name: Stage the private paired evaluator and configure runtime paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT="$GITHUB_WORKSPACE/project/ruvoice-1.1.3-stage4.9"
+          mkdir -p "$PROJECT/app/src/test/java/ru/kost/ruvoice/text"
+          cp private-files/paired_eval/UploadedEpubPairedEvaluation.kt \
+            "$PROJECT/app/src/test/java/ru/kost/ruvoice/text/UploadedEpubPairedEvaluation.kt"
+          echo "RUVOICE_PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
+          echo "RUVOICE_BOOK_PATH=$GITHUB_WORKSPACE/private-files/8.Iskusstvo..epub" >> "$GITHUB_ENV"
+          echo "RUVOICE_REPORT_PATH=$GITHUB_WORKSPACE/private-files/ruvoice-paired-book-analysis.json" >> "$GITHUB_ENV"
+          echo "RUVOICE_SILERO_ASSETS=$PROJECT/app/src/full/assets/silero" >> "$GITHUB_ENV"
+          echo "RUVOICE_TORCH_BRIDGE=$GITHUB_WORKSPACE/private-files/paired_eval/torch_lite_bridge.py" >> "$GITHUB_ENV"
+
+      - name: Run the real baseline and merged pipelines over every EPUB fragment
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
           set -euo pipefail
-          bash tools/run_ruaccent_uploaded_book_eval.sh \
-            "$GITHUB_WORKSPACE/private-files/8.Iskusstvo..epub" \
-            "$GITHUB_WORKSPACE/private-files/ruaccent-real-book-analysis.json"
+          gradle --no-daemon --stacktrace \
+            :app:testFullDebugUnitTest \
+            --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
 
-      - name: Upload private book evaluation report
+      - name: Upload the private paired comparison report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ruaccent-uploaded-book-evaluation
-          path: private-files/ruaccent-real-book-analysis.json
-          if-no-files-found: error
+          name: ruvoice-paired-whole-book-comparison
+          path: private-files/ruvoice-paired-book-analysis.json
+          if-no-files-found: warn
           retention-days: 14
