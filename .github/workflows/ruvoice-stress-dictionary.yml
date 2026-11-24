@@ -5,12 +5,6 @@ on:
     paths:
       - "experiments/ruvoice-stress-dictionary/**"
       - ".github/workflows/ruvoice-stress-dictionary.yml"
-  push:
-    branches:
-      - stress-dictionary-pipeline
-    paths:
-      - "experiments/ruvoice-stress-dictionary/**"
-      - ".github/workflows/ruvoice-stress-dictionary.yml"
   workflow_dispatch:
 
 permissions:
