@@ -769,20 +769,20 @@ class UploadedEpubPairedEvaluationTest {
                 // so whole-sentence token counts are not a valid alignment invariant.
                 // Match the same occurrence ordinal of the target word in each stream instead.
                 val targetKey = plain(targetWord).replace('ё', 'е')
-                val targetOccurrence = sourceTokens.take(targetIndex + 1).count {
+                val targetOccurrenceOrdinal = sourceTokens.take(targetIndex + 1).count {
                     plain(it.value).replace('ё', 'е') == targetKey
                 } - 1
-                fun targetOccurrence(tokens: List<MatchResult>): String? =
+                fun findTargetOccurrence(tokens: List<MatchResult>): String? =
                     tokens.asSequence()
                         .map { it.value }
                         .filter { plain(it).replace('ё', 'е') == targetKey }
-                        .drop(targetOccurrence)
+                        .drop(targetOccurrenceOrdinal)
                         .firstOrNull()
-                val baselineWord = targetOccurrence(baselineTokens)
+                val baselineWord = findTargetOccurrence(baselineTokens)
                     ?: error("Ё regression $caseId: target occurrence missing from baseline")
-                val mergedWord = targetOccurrence(mergedTokens)
+                val mergedWord = findTargetOccurrence(mergedTokens)
                     ?: error("Ё regression $caseId: target occurrence missing from merged output")
-                println("YO_REGRESSION_CASE=$caseId source_tokens=${sourceTokens.size} baseline_tokens=${baselineTokens.size} merged_tokens=${mergedTokens.size} target_occurrence=$targetOccurrence baseline_target='$baselineWord' merged_target='$mergedWord'")
+                println("YO_REGRESSION_CASE=$caseId source_tokens=${sourceTokens.size} baseline_tokens=${baselineTokens.size} merged_tokens=${mergedTokens.size} target_occurrence=$targetOccurrenceOrdinal baseline_target='$baselineWord' merged_target='$mergedWord'")
                 val actualLabel = if (mergedWord.any { it == 'ё' || it == 'Ё' }) "YO" else "NO_YO"
                 check(actualLabel == expectedLabel) {
                     "Ё regression $caseId: expected $expectedLabel, baseline='$baselineWord', " +
