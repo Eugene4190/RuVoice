@@ -49,13 +49,13 @@ experiments/ruvoice-stress-dictionary/data/raw/
 
 ~~~bash
 cd experiments/ruvoice-stress-dictionary
-DOWNLOAD_WIKT=1 ./run_pipeline.sh
+DOWNLOAD_WIKT=1 bash run_pipeline.sh
 ~~~
 
 Если файл уже лежит в другом месте:
 
 ~~~bash
-WIKT_JSONL=/путь/к/kaikki.org-dictionary-Russian.jsonl ./run_pipeline.sh
+WIKT_JSONL=/путь/к/kaikki.org-dictionary-Russian.jsonl bash run_pipeline.sh
 ~~~
 
 Скрипт выполняет следующий проход:
