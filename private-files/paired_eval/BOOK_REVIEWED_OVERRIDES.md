@@ -10,7 +10,7 @@ RuVoice pass over `8.Iskusstvo..epub`.
 | шумы | шумы́ | шу́мы | Nominative plural of the noun `шум` in this book context |
 | двадцать | unmarked in two number-expanded passages | два́дцать | Numeral form; both independent sources give first-syllable stress |
 | десять | деся́ть | де́сять | Number expansion of 10 in the range 10–20; AOT and Wiktionary agree on first-syllable stress |
-| издревле | и́здревле | издре́вле | Two occurrences; normatively only издре́вле (the initial-stress variant is explicitly marked nonrecommended in modern dictionaries) |
+| издревле (`издр+евле`) | и́здревле | издре́вле | Two occurrences; normatively only издре́вле (the initial-stress variant is explicitly marked nonrecommended in modern dictionaries) |
 
 The existing `утра́м` in the phrase `по утра́м` is deliberately left unchanged: this is a normative adverbial variant, distinct from isolated dative `у́трам`.
 
