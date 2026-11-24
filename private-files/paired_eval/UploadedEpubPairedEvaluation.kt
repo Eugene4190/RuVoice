@@ -326,7 +326,7 @@ fun main(args: Array<String>) {
                                 .put("paragraph", segment.paragraph)
                                 .put("source_word", sourceWord)
                                 .put("ruaccent_word", outputWord)
-                                .put("context", shortContext(segment.text, sourceWords[wordIndex], 40)))
+                                )
                         }
                     }
                     if (normalizedSource.replace('ё', 'е') == normalizedOutput.replace('ё', 'е') && sourceWord.lowercase(Locale.ROOT).contains('е') &&
@@ -354,7 +354,7 @@ fun main(args: Array<String>) {
                                 .put("chapter", segment.chapter)
                                 .put("source_word", sourceWord)
                                 .put("ruaccent_word", outputWord)
-                                .put("context", shortContext(segment.text, sourceWords[wordIndex], 40)))
+                                )
                         }
                     }
                     if (normalizedSource in reviewHomographs && homographSamples.length() < 50) {
@@ -367,7 +367,7 @@ fun main(args: Array<String>) {
                                 .put("source_word", sourceWord)
                                 .put("ruaccent_word", outputWord)
                                 .put("decision", prediction.decisions.getOrNull(wordIndex)?.name ?: "UNKNOWN")
-                                .put("context", shortContext(segment.text, sourceWords[wordIndex], 50)))
+                                )
                         }
                     }
                 }
@@ -423,8 +423,7 @@ fun main(args: Array<String>) {
                 val item = homographSamples.getJSONObject(i)
                 if (item.optString("type") == "HOMOGRAPH_REVIEW") {
                     println(item.optString("chapter") + " | " + item.optString("source_word") + " -> " +
-                        item.optString("ruaccent_word") + " | " + item.optString("decision") + " | " +
-                        item.optString("context"))
+                        item.optString("ruaccent_word") + " | " + item.optString("decision"))
                 }
             }
             println("BOOK_EVAL_HOMOGRAPH_SAMPLES_END")
@@ -432,7 +431,7 @@ fun main(args: Array<String>) {
             for (i in 0 until functionSamples.length()) {
                 val item = functionSamples.getJSONObject(i)
                 println(item.optString("chapter") + " | " + item.optString("source_word") + " -> " +
-                    item.optString("ruaccent_word") + " | " + item.optString("context"))
+                    item.optString("ruaccent_word"))
             }
             println("BOOK_EVAL_FUNCTION_WORD_SAMPLES_END")
             check(alignmentErrors == 0 && lexicalChanges == 0) {
@@ -908,7 +907,7 @@ class UploadedEpubPairedEvaluationTest {
                                 .put("part", segment.part)
                                 .put("before", before)
                                 .put("after", after)
-                                .put("context", segment.text.take(500)))
+                                )
                         }
                         continue
                     }
@@ -941,7 +940,7 @@ class UploadedEpubPairedEvaluationTest {
                             .put("after", after)
                             .put("stress_before_vowel_index", beforeStress ?: JSONObject.NULL)
                             .put("stress_after_vowel_index", afterStress ?: JSONObject.NULL)
-                            .put("context", segment.text.take(500)))
+                            )
                     }
                 }
                 if (segmentChanged) changedSegments++
