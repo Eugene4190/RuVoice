@@ -43,7 +43,7 @@ jobs:
             python3 project/ruvoice-1.1.3-stage4.9/tools/restore_unicode_asset_names.py
             STRESS_DICT="project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
             if ! grep -Fxq 'снято сн+ято' "$STRESS_DICT"; then
-              printf '%s\\n' 'снято сн+ято' >> "$STRESS_DICT"
+              printf '%s\n' 'снято сн+ято' >> "$STRESS_DICT"
             fi
             grep -Fxq 'снято сн+ято' "$STRESS_DICT"
             zip -qr "$OUTPUT" project/ruvoice-1.1.3-stage4.9 \
