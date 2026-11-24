@@ -83,7 +83,7 @@ from pathlib import Path
 p = Path("tools/wikt_forms.py")
 s = p.read_text(encoding="utf-8")
 s = s.replace("import json, os, sys, collections, re", "import gzip, json, os, sys, collections, re")
-old = '    with open(SRC, encoding="utf-8") as src:'
+old = "    with open(SRC, encoding='utf-8') as src:"
 new = '    opener = gzip.open if SRC.endswith(".gz") else open\n    with opener(SRC, "rt", encoding="utf-8") as src:'
 if old not in s:
     raise SystemExit("Не удалось безопасно адаптировать wikt_forms.py к gzip")
