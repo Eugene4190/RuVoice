@@ -10,6 +10,11 @@ on:
       - "project/ruvoice-1.1.3-stage4.9/**"
   workflow_dispatch:
 
+# Do not let two packaging runs publish archives from different snapshots at once.
+concurrency:
+  group: package-stage4.11-source-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -23,34 +28,48 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Create and verify source ZIP
+      - name: Create, verify, and publish the current source ZIP
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p private-files
           OUTPUT="private-files/ruvoice-1.1.3-stage4.11-source.zip"
-          rm -f "$OUTPUT"
-          python3 project/ruvoice-1.1.3-stage4.9/tools/restore_unicode_asset_names.py
-          zip -qr "$OUTPUT" project/ruvoice-1.1.3-stage4.9 \
-            -x '*/.git/*' '*/.gradle/*' '*/app/build/*' '*/native/target/*' \
-               '*/local.properties' '*/dist/*' '*/app/libs/*.aar'
-          unzip -tq "$OUTPUT"
-          sha256sum "$OUTPUT"
-          ls -lh "$OUTPUT"
+          mkdir -p private-files
 
-      - name: Commit source ZIP to the private repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts
-          git add private-files/ruvoice-1.1.3-stage4.11-source.zip
-          if ! git diff --cached --quiet; then
+          # A newer source commit can land while this job is packaging. In that
+          # case, discard the stale local attempt, fetch main again, and rebuild
+          # the ZIP from the new snapshot instead of pushing an outdated archive.
+          for attempt in 1 2 3 4 5; do
+            echo "Preparing Stage 4.11 source archive (attempt ${attempt}/5)."
+            git fetch --no-tags origin main
+            git reset --hard FETCH_HEAD
+
+            rm -f "$OUTPUT"
+            python3 project/ruvoice-1.1.3-stage4.9/tools/restore_unicode_asset_names.py
+            zip -qr "$OUTPUT" project/ruvoice-1.1.3-stage4.9 \
+              -x '*/.git/*' '*/.gradle/*' '*/app/build/*' '*/native/target/*' \
+                 '*/local.properties' '*/dist/*' '*/app/libs/*.aar'
+            unzip -tq "$OUTPUT"
+            sha256sum "$OUTPUT"
+            ls -lh "$OUTPUT"
+
+            git add -A project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts
+            git add "$OUTPUT"
+            if git diff --cached --quiet; then
+              echo "Source tree and archive are already up to date."
+              exit 0
+            fi
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "Restore Unicode dictionary asset names and package Stage 4.11 source"
-          else
-            echo "No source/archive changes to commit."
-          fi
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+
+            if git push origin HEAD:main; then
+              echo "Published Stage 4.11 source archive."
+              exit 0
+            fi
+
+            echo "main advanced during publication; refreshing and rebuilding."
+          done
+
+          echo "Could not publish a current source archive after 5 attempts." >&2
+          exit 1
