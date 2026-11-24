@@ -1,0 +1,60 @@
+{
+  "book": "8.Iskusstvo..epub",
+  "book_sha256": "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119",
+  "dictionary": "RuVoice_AutoStress.txt",
+  "dictionary_sha256": "4685aacdd4aa97b5191bb00380daf26e0276d7ed141b660d6607aa122446ca4e",
+  "total_word_tokens": 62848,
+  "unique_word_forms": 14166,
+  "stage49": {
+    "total_word_tokens": 62848,
+    "unique_word_forms": 14166,
+    "dictionary_entries": 1924,
+    "matched_word_tokens": 288,
+    "matched_unique_forms": 23,
+    "weighted_token_coverage_percent": 0.46,
+    "unique_form_coverage_percent": 0.16,
+    "unmatched_unique_forms": 14143,
+    "note": "Coverage is dictionary lookup coverage, not a measured stress-accuracy score."
+  },
+  "combined_auto_dictionary": {
+    "total_word_tokens": 62848,
+    "unique_word_forms": 14166,
+    "dictionary_entries": 4587,
+    "matched_word_tokens": 295,
+    "matched_unique_forms": 28,
+    "weighted_token_coverage_percent": 0.47,
+    "unique_form_coverage_percent": 0.2,
+    "unmatched_unique_forms": 14138,
+    "note": "Coverage is dictionary lookup coverage, not a measured stress-accuracy score."
+  },
+  "additional_automatic_entries": 2661,
+  "additional_automatic_word_forms_found_in_book": 5,
+  "additional_automatic_word_tokens_matched": 7,
+  "top_automatic_hits_word_and_count_only": [
+    {
+      "word": "следа",
+      "count": 3
+    },
+    {
+      "word": "несчастлив",
+      "count": 1
+    },
+    {
+      "word": "обо",
+      "count": 1
+    },
+    {
+      "word": "утрам",
+      "count": 1
+    },
+    {
+      "word": "экзальтированному",
+      "count": 1
+    }
+  ],
+  "dictionary_conflicts": {
+    "stage49": 0,
+    "combined_auto_dictionary": 0
+  },
+  "interpretation": "Exact stress-dictionary lookup coverage only. This is not a stress-accuracy score; missing words may still be handled by the model or replacement rules. No book excerpts or paragraph contexts are included."
+}
