@@ -362,6 +362,7 @@ def main() -> int:
         "отнята": "отнят+а",
         "шумы": "ш+умы",
         "двадцать": "д+вадцать",
+        "десять": "д+есять",
     }
     actual_overrides = {
         str(row.get("word", "")): str(row.get("variant", ""))
