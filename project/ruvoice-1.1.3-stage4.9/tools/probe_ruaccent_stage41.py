@@ -113,14 +113,21 @@ def validate_tokenizer(path: Path) -> str:
 def validate_config(path: Path) -> str:
     data = _read_json(path)
     labels = data.get("id2label")
-    if not isinstance(labels, dict) or len(labels) != 2:
-        raise ValueError(f"config.json must define two id2label classes: {path}")
+    if not isinstance(labels, dict) or len(labels) not in {2, 3}:
+        raise ValueError(f"config.json must define two stress classes and optional PUNCT: {path}")
+    try:
+        indices = {int(key) for key in labels}
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"config.json has a non-numeric id2label key: {path}") from exc
+    if indices != set(range(len(labels))):
+        raise ValueError(f"config.json id2label indices must be contiguous from zero: {path}")
     normalized = {str(value).upper() for value in labels.values()}
     required = {"STRESS", "NO_STRESS"}
-    if not required.issubset(normalized):
+    allowed = required | {"PUNCT"}
+    if not required.issubset(normalized) or not normalized.issubset(allowed):
         raise ValueError(
             f"Unexpected stress classifier labels {sorted(normalized)}; "
-            f"expected at least {sorted(required)}"
+            f"expected STRESS/NO_STRESS and optional PUNCT"
         )
     return "labels=" + ", ".join(str(labels[key]) for key in sorted(labels, key=str))
 

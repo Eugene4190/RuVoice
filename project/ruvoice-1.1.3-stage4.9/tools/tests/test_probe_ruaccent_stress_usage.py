@@ -13,6 +13,7 @@ from tools.probe_ruaccent_stress_usage import (
     normalize_ruaccent_text,
     run_probe,
     validate_session_signature,
+    validate_stress_label_map,
 )
 
 
@@ -160,3 +161,21 @@ def test_probe_refuses_to_silently_truncate_overlong_input():
             "очень длинный текст", session, LongTokenizer(), tokenizer_spec(),
             {"0": "NO_STRESS", "1": "STRESS"},
         )
+
+
+def test_stress_label_map_accepts_optional_punctuation_class():
+    labels = validate_stress_label_map({
+        "0": "NO_STRESS",
+        "1": "PUNCT",
+        "2": "STRESS",
+    })
+    assert labels == {
+        "0": "NO_STRESS",
+        "1": "PUNCT",
+        "2": "STRESS",
+    }
+
+
+def test_stress_label_map_rejects_missing_stress_class():
+    with pytest.raises(ProbeError, match="must define STRESS/NO_STRESS"):
+        validate_stress_label_map({"0": "NO_STRESS", "1": "PUNCT"})

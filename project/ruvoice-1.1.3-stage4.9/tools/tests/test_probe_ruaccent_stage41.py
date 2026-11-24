@@ -35,8 +35,8 @@ def make_fixture(root: Path) -> None:
     config = root / CONFIG_RELATIVE
     config.write_text(json.dumps({
         "model_type": "bert",
-        "num_labels": 2,
-        "id2label": {"0": "NO_STRESS", "1": "STRESS"},
+        "num_labels": 3,
+        "id2label": {"0": "NO_STRESS", "1": "PUNCT", "2": "STRESS"},
     }), encoding="utf-8")
 
 

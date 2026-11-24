@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run one real ONNX smoke test for RUAccent's nn_stress_usage model.
 
-This stage intentionally tests only the BERT classifier's STRESS/NO_STRESS
-word labels. It does NOT place stress on a vowel and does NOT resolve
-homographs. No Android app files or RuVoice runtime code are changed here.
+This stage tests the BERT classifier's STRESS/NO_STRESS word labels; the model
+may also expose a PUNCT class for punctuation tokens. It does NOT place stress
+on a vowel and does NOT resolve homographs. No Android app files or RuVoice runtime code are changed here.
 """
 from __future__ import annotations
 
@@ -66,9 +66,9 @@ def load_tokenizer_spec(path: Path) -> dict[str, Any]:
 
 
 def validate_stress_label_map(raw: Any) -> dict[str, str]:
-    """Validate the exact two-class label map required by nn_stress_usage."""
-    if not isinstance(raw, dict) or len(raw) != 2:
-        raise ProbeError("config.json id2label must contain exactly two classes")
+    """Validate the two stress classes and optional punctuation class."""
+    if not isinstance(raw, dict) or len(raw) not in {2, 3}:
+        raise ProbeError("config.json id2label must define STRESS/NO_STRESS and optional PUNCT")
     normalized: dict[str, str] = {}
     for key, value in raw.items():
         try:
@@ -78,9 +78,13 @@ def validate_stress_label_map(raw: Any) -> dict[str, str]:
         if not isinstance(value, str):
             raise ProbeError(f"Invalid id2label value for class {key!r}")
         normalized[numeric_key] = value.upper()
-    if set(normalized) != {"0", "1"} or set(normalized.values()) != {"STRESS", "NO_STRESS"}:
+    if set(normalized) != {str(index) for index in range(len(normalized))}:
+        raise ProbeError(f"Non-contiguous stress classifier labels: {normalized}")
+    labels = set(normalized.values())
+    required = {"STRESS", "NO_STRESS"}
+    if not required.issubset(labels) or not labels.issubset(required | {"PUNCT"}):
         raise ProbeError(
-            "nn_stress_usage must define class 0/1 as exactly STRESS and NO_STRESS; "
+            "nn_stress_usage must define STRESS/NO_STRESS and optional PUNCT; "
             f"got {normalized}"
         )
     return normalized
