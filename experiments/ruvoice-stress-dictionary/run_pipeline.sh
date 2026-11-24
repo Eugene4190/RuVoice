@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HERE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
 CACHE="$HERE/.cache"
 RAW="$HERE/data/raw"
-WIKT_JSONL="\${WIKT_JSONL:-$RAW/kaikki.org-dictionary-Russian.jsonl}"
+WIKT_JSONL="${WIKT_JSONL:-$RAW/kaikki.org-dictionary-Russian.jsonl}"
 AOT_REPO="$CACHE/morph_dict"
 VENV="$CACHE/venv"
 PY="$VENV/bin/python"
@@ -23,7 +23,7 @@ done
 mkdir -p "$CACHE" "$RAW" "$HERE/output" "$HERE/reports"
 
 if [[ ! -f "$WIKT_JSONL" ]]; then
-  if [[ "\${DOWNLOAD_WIKT:-0}" == "1" ]]; then
+  if [[ "${DOWNLOAD_WIKT:-0}" == "1" ]]; then
     echo "Скачиваю словарный корпус Kaikki (~900 МБ)."
     curl --fail --location --retry 3 --continue-at - "$WIKT_URL" -o "$WIKT_JSONL"
   else
@@ -106,7 +106,7 @@ if [[ -f "$UPSTREAM/app/build/stress_fixes_new.txt" ]]; then
   ARGS+=(--review-candidates "$UPSTREAM/app/build/stress_fixes_new.txt")
 fi
 
-"$PY" "$HERE/build_dictionary.py" "\${ARGS[@]}" \
+"$PY" "$HERE/build_dictionary.py" "${ARGS[@]}" \
   --output "$HERE/output/RuVoice_AutoStress.txt" \
   --report "$HERE/reports/RuVoice_AutoStress_review.tsv" \
   --manifest "$HERE/reports/run_manifest.json"
