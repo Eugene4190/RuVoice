@@ -148,7 +148,6 @@ private fun evaluateHomographs(
         val key = plain(goldWord)
         val stat = byWord.getOrPut(key) { intArrayOf(0, 0, 0) }
         stat[0]++
-        val decision = prediction.decisions[sourceIndex].name
 
         if (predictedPosition == goldPosition) {
             correct++
