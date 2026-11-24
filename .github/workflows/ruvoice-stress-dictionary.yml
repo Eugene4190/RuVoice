@@ -53,6 +53,18 @@ jobs:
             --report "$RUNNER_TEMP/Stage4.9_review.tsv" \
             --manifest "$RUNNER_TEMP/Stage4.9_manifest.json"
 
+      - name: Validate curated stress overrides
+        run: |
+          set -euo pipefail
+          python experiments/ruvoice-stress-dictionary/build_dictionary.py \
+            --source-list project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt \
+            --source-list experiments/ruvoice-stress-dictionary/data/curated/reviewed_overrides.txt \
+            --output "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt" \
+            --report "$RUNNER_TEMP/ReviewedOverrides_review.tsv" \
+            --manifest "$RUNNER_TEMP/ReviewedOverrides_manifest.json"
+          grep -Fxq 'трёхгорке трёхг+орке' "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt"
+          grep -Fxq 'трёхгорку трёхг+орку' "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt"
+
       - name: Scan uploaded book against Stage 4.9 correction list
         if: hashFiles('private-files/8.Iskusstvo..epub') != ''
         run: |
