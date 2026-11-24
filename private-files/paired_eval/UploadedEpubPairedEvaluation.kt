@@ -566,8 +566,13 @@ private class PairedRemoteRuAccentCorrector(
         val response = JSONObject(line)
         val decisionArray = response.getJSONArray("decisions")
         val yoArray = response.getJSONArray("yo_decisions")
+        val yoSourceArray = response.getJSONArray("yo_decision_sources")
         val decisions = List(decisionArray.length()) { StressDecision.valueOf(decisionArray.getString(it)) }
         val yo = List(yoArray.length()) { YoDecision.valueOf(yoArray.getString(it)) }
+        val yoSources = List(yoSourceArray.length()) { YoDecisionSource.valueOf(yoSourceArray.getString(it)) }
+        check(decisions.size == yo.size && yo.size == yoSources.size) {
+            "RUAccent bridge returned unaligned stress / ё decisions / provenance"
+        }
         calls++
         decisions.forEach {
             when (it) {
@@ -576,7 +581,7 @@ private class PairedRemoteRuAccentCorrector(
                 StressDecision.UNKNOWN -> unknown++
             }
         }
-        return IndependentStressPrediction(response.getString("text"), decisions, yo)
+        return IndependentStressPrediction(response.getString("text"), decisions, yo, yoSources)
     }
 
     override fun close() {
