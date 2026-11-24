@@ -146,7 +146,7 @@ jobs:
           python tools/restore_unicode_asset_names.py
           STRESS_DICT="app/src/main/assets/dicts/stress/Системный.txt"
           if ! grep -Fxq 'снято сн+ято' "$STRESS_DICT"; then
-            printf '%s\\n' 'снято сн+ято' >> "$STRESS_DICT"
+            printf '%s\n' 'снято сн+ято' >> "$STRESS_DICT"
           fi
           grep -Fxq 'снято сн+ято' "$STRESS_DICT"
 
