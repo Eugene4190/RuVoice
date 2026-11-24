@@ -29,7 +29,7 @@ The 9,513 removed marks need interpretation, not a quality claim. Of these, 9,44
 
 The 141 movement events represent 71 unique written-word pairs. Most frequent were:
 - `одновреме́нно → одновре́менно` — 31 occurrences;
-- `эгре́горами → эгрегора́ми` — 10 occurrences;
+- `эгре́горами → эгрего́рами` — 10 occurrences;
 - `созда́ли → со́здали` — 6 occurrences;
 - `навсе́го → на́всего` — 5 occurrences.
 
