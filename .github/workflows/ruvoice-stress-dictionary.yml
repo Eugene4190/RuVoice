@@ -52,7 +52,8 @@ jobs:
           import json, pathlib, sys
           data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
           print("BOOK_FIRST_DICTIONARY_SUMMARY=" + json.dumps(data, ensure_ascii=False, sort_keys=True))
-          assert data["new_candidate_forms"] >= 0
+          assert data["new_candidate_forms"] == 1
+          assert data["withheld_by_context_rules_forms"] == 4
           assert data["cumulative_approved_entries"] == 0
           PY
 
