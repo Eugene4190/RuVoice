@@ -21,7 +21,7 @@ class BookAnalyzerTests(unittest.TestCase):
             dictionary, conflicts = tool.parse_dictionary(path)
             self.assertEqual(dictionary["творог"], "твор+ог")
             self.assertEqual(dictionary["холеной"], "хол+ёной")
-            self.assertNotIn("дом", dictionary)
+            self.assertEqual(dictionary["дом"], "д+ом")  # lookup coverage keeps valid imported rows, even if one syllable
             self.assertEqual(conflicts, [])
 
     def test_conflicting_dictionary_entry_is_removed(self):
