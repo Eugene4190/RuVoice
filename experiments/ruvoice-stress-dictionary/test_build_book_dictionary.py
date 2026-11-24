@@ -59,6 +59,10 @@ class BookDictionaryTests(unittest.TestCase):
             self.assertEqual(report["already_in_system_tokens"], 1)
             self.assertEqual(report["already_in_approved_supplement_tokens"], 1)
             self.assertEqual(report["unresolved_forms"], 2)
+            book_approved = (out / "Book_Approved_Additions.txt").read_text(encoding="utf-8")
+            self.assertNotIn("творог", book_approved)  # Master approval is included only when present in a book and missing from system.
+            cumulative = (out / "RuVoice_Accumulated_Approved.txt").read_text(encoding="utf-8")
+            self.assertIn("творог твор+ог", cumulative)
 
     def test_system_dictionary_conflict_is_not_auto_overridden(self):
         with tempfile.TemporaryDirectory() as tmp:
