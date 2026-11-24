@@ -3,17 +3,11 @@ package ru.kost.ruvoice.text
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.StringReader
 import java.net.URLDecoder
 import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
-import javax.swing.text.MutableAttributeSet
-import javax.swing.text.html.HTML
-import javax.swing.text.html.HTMLEditorKit
-import javax.swing.text.html.parser.ParserDelegator
-import org.xml.sax.InputSource
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Test
@@ -40,7 +34,7 @@ private val reviewHomographs = setOf(
 )
 
 private data class Paragraph(val chapter: String, val number: Int, val text: String)
-private data class Segment(val chapter: String, val paragraph: Int, val part: Int, val text: String)
+private data class BookSegment(val chapter: String, val paragraph: Int, val part: Int, val text: String)
 
 private fun localName(node: Node): String =
     (node.localName ?: node.nodeName.substringAfter(':')).lowercase(Locale.ROOT)
@@ -100,39 +94,9 @@ private fun resolveHref(baseFile: String, href: String): String {
 }
 
 private fun extractBlocksFromXhtml(bytes: ByteArray): List<String> {
-    val doc = try {
-        secureDocument(bytes)
-    } catch (_: Throwable) {
-        // Some commercial EPUBs use HTML named entities or a legacy XHTML doctype.
-        // Fall back to the JDK HTML parser without fetching external DTDs.
-        val fallback = ArrayList<String>()
-        val current = StringBuilder()
-        val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br", "div", "section", "article")
-        fun flushFallback() {
-            val text = current.toString().replace(Regex("\\s+"), " ").trim()
-            current.setLength(0)
-            val letters = text.count { it.isLetter() }
-            val cyrillic = text.count { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }
-            if (text.length >= 3 && letters >= 2 && cyrillic >= letters * 0.45) fallback += text
-        }
-        val callback = object : HTMLEditorKit.ParserCallback() {
-            override fun handleText(data: CharArray, pos: Int) {
-                current.append(data).append(' ')
-            }
-            override fun handleStartTag(t: HTML.Tag, a: MutableAttributeSet, pos: Int) {
-                if (t.toString().lowercase(Locale.ROOT) in blockTags) flushFallback()
-            }
-            override fun handleEndTag(t: HTML.Tag, pos: Int) {
-                if (t.toString().lowercase(Locale.ROOT) in blockTags) flushFallback()
-            }
-            override fun handleSimpleTag(t: HTML.Tag, a: MutableAttributeSet, pos: Int) {
-                if (t.toString().lowercase(Locale.ROOT) == "br") flushFallback()
-            }
-        }
-        ParserDelegator().parse(StringReader(String(bytes, Charsets.UTF_8)), callback, true)
-        flushFallback()
-        return fallback
-    }
+    // EPUB spine items are XHTML. Use the secure XML parser only; java.desktop's Swing HTML
+    // parser is not available on the Android unit-test boot classpath.
+    val doc = secureDocument(bytes)
     val result = ArrayList<String>()
     val current = StringBuilder()
     val blocks = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br", "tr", "td", "th", "div", "section", "article")
@@ -226,8 +190,8 @@ private fun splitLongSentence(text: String, limit: Int = 320): List<String> {
     return result
 }
 
-private fun makeSegments(paragraphs: List<Paragraph>): List<Segment> {
-    val result = ArrayList<Segment>()
+private fun makeSegments(paragraphs: List<Paragraph>): List<BookSegment> {
+    val result = ArrayList<BookSegment>()
     for (paragraph in paragraphs) {
         val iterator = java.text.BreakIterator.getSentenceInstance(Locale("ru"))
         iterator.setText(paragraph.text)
@@ -242,7 +206,7 @@ private fun makeSegments(paragraphs: List<Paragraph>): List<Segment> {
             for (piece in splitLongSentence(sentence)) {
                 if (piece.length < 3 || piece.count { it.isLetter() } < 2) continue
                 part++
-                result += Segment(paragraph.chapter, paragraph.number, part, piece)
+                result += BookSegment(paragraph.chapter, paragraph.number, part, piece)
             }
         }
     }
@@ -771,7 +735,7 @@ class UploadedEpubPairedEvaluationTest {
                         continue
                     }
                     val stressChanged = beforeStress != afterStress
-                    val yoChanged = ('ё' in beforePlain) != ('ё' in afterPlain)
+                    val yoChanged = beforePlain != afterPlain
                     if (!stressChanged && !yoChanged) continue
                     changedTokens++
                     segmentChanged = true
