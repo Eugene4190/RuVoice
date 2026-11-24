@@ -734,7 +734,7 @@ class UploadedEpubPairedEvaluationTest {
         )
 
         try {
-            fun readable(text: String, stress: Stress, inputData: SileroData): String =
+            fun readable(text: String, stress: Stress, inputData: SileroData = baselineData): String =
                 StressDiagnosticFormatter.readable(Pipeline.accent(text, inputData, stress, inputData.allowed, rules))
             val sanity = JSONObject()
             val genitiveHouse = readable("строительство дома", baselineStress, baselineData)
@@ -953,7 +953,7 @@ class UploadedEpubPairedEvaluationTest {
                     Pipeline.accent(segment.text, data, reviewedStress, data.allowed, rules)
                 )
                 val combined = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, data, combinedStress, data.allowed, rules)
+                    Pipeline.accent(segment.text, baselineData, combinedStress, baselineData.allowed, rules)
                 )
                 val oldWords = wordRegex.findAll(baseline).toList()
                 val reviewedWords = wordRegex.findAll(reviewed).toList()
