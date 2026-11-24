@@ -101,7 +101,7 @@ private fun extractBlocksFromXhtml(bytes: ByteArray): List<String> {
         // Fall back to the JDK HTML parser without fetching external DTDs.
         val fallback = ArrayList<String>()
         val current = StringBuilder()
-        val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br")
+        val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br", "div", "section", "article")
         fun flushFallback() {
             val text = current.toString().replace(Regex("\\s+"), " ").trim()
             current.setLength(0)
@@ -129,7 +129,7 @@ private fun extractBlocksFromXhtml(bytes: ByteArray): List<String> {
     }
     val result = ArrayList<String>()
     val current = StringBuilder()
-    val blocks = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br", "tr", "td", "th")
+    val blocks = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "br", "tr", "td", "th", "div", "section", "article")
     val ignored = setOf("head", "script", "style", "svg", "math", "noscript")
     fun flush() {
         val text = current.toString().replace(Regex("\\s+"), " ").trim()
