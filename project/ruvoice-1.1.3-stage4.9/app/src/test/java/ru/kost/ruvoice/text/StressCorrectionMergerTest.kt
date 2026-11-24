@@ -77,6 +77,19 @@ class StressCorrectionMergerTest {
         )
     }
 
+    @Test fun `system stress dictionary protects normative снято from RUAccent`() {
+        val result = StressCorrectionMerger.merge(
+            original = "снято",
+            ruVoice = "сн+ято",
+            prediction = IndependentStressPrediction(
+                "снят+о",
+                listOf(StressDecision.STRESSED),
+            ),
+            userDictionaryKeys = setOf("снято"),
+        )
+        assertEquals("сн+ято", result)
+    }
+
     @Test fun `contextual yo guess cannot invent yo or move stress in prose`() {
         val result = StressCorrectionMerger.merge(
             original = "самое",
