@@ -740,6 +740,55 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("book_yo_regression_results", yoRegressionResults)
             println("BOOK_YO_END_TO_END=PASS cases=$yoRegressionPassed/${yoCases.length()}")
 
+            // Independently validate stress changes where a current dictionary source
+            // provides an unambiguous position or explicitly accepted variants.
+            val stressRegressionFile = File(projectDir, "tools/data/ruvoice_stress_book_regressions.json")
+            check(stressRegressionFile.isFile) { "Missing stress regression corpus: $stressRegressionFile" }
+            val stressCases = JSONObject(stressRegressionFile.readText(Charsets.UTF_8)).getJSONArray("cases")
+            var stressRegressionPassed = 0
+            val stressRegressionResults = JSONArray()
+            for (caseIndex in 0 until stressCases.length()) {
+                val item = stressCases.getJSONObject(caseIndex)
+                val caseId = item.getString("id")
+                val sourceText = item.getString("text")
+                val targetWord = item.getString("word")
+                val accepted = item.getJSONArray("accepted_vowel_indices")
+                val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
+                val sourceTokens = wordRegex.findAll(sourceText).toList()
+                val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
+                check(targetIndex >= 0) { "Stress regression $caseId: target '$targetWord' is missing" }
+
+                val baselineText = readable(sourceText, baselineStress)
+                val mergedText = readable(sourceText, combinedStress)
+                val baselineTokens = wordRegex.findAll(baselineText).toList()
+                val mergedTokens = wordRegex.findAll(mergedText).toList()
+                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
+                    "Stress regression $caseId: token alignment changed"
+                }
+                val baselineWord = baselineTokens[targetIndex].value
+                val mergedWord = mergedTokens[targetIndex].value
+                val actualPosition = stressPosition(mergedWord)
+                check(actualPosition in acceptedPositions) {
+                    "Stress regression $caseId: expected one of $acceptedPositions, " +
+                        "baseline='$baselineWord', merged='$mergedWord', actual=$actualPosition"
+                }
+                stressRegressionPassed++
+                stressRegressionResults.put(JSONObject()
+                    .put("id", caseId)
+                    .put("accepted_vowel_indices", JSONArray(acceptedPositions.toList()))
+                    .put("baseline", baselineWord)
+                    .put("merged", mergedWord)
+                    .put("actual_vowel_index", actualPosition)
+                    .put("result", "PASS"))
+            }
+            check(stressRegressionPassed == stressCases.length()) {
+                "Only $stressRegressionPassed/${stressCases.length()} end-to-end stress regression cases passed"
+            }
+            sanity.put("book_stress_regression_cases_passed", stressRegressionPassed)
+            sanity.put("book_stress_regression_cases_total", stressCases.length())
+            sanity.put("book_stress_regression_results", stressRegressionResults)
+            println("BOOK_STRESS_END_TO_END=PASS cases=$stressRegressionPassed/${stressCases.length()}")
+
             val paragraphs = epubParagraphs(epub)
             val segments = makeSegments(paragraphs)
             require(segments.isNotEmpty()) { "No text segments extracted from EPUB" }
