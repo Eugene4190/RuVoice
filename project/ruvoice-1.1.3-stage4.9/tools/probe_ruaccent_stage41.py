@@ -25,10 +25,9 @@ MODEL_RELATIVE = STAGE_DIR / "model.int8.onnx"
 TOKENIZER_RELATIVE = STAGE_DIR / "tokenizer.json"
 CONFIG_RELATIVE = STAGE_DIR / "config.json"
 FILES = (MODEL_RELATIVE, TOKENIZER_RELATIVE, CONFIG_RELATIVE)
-# The upstream ~111 MB figure refers to the fp32 reference graph. The int8
-# artefact is smaller; 50 MB is only a corruption/LFS-pointer guard, not an
-# exact size pin.
-MIN_ONNX_BYTES = 50 * 1024 * 1024
+# The upstream ~111 MB figure refers to the fp32 reference graph. The pinned
+# INT8 artefact is ~29 MB; 20 MB is only a corruption/LFS-pointer guard.
+MIN_ONNX_BYTES = 20 * 1024 * 1024
 USER_AGENT = "RuVoice-RUAccent-Stage4.2/1.0"
 
 
