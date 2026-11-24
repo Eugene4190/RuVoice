@@ -705,6 +705,42 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
             sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
 
+            // Run the five manually reviewed stress cases before the separate ё suite.
+            // This makes a failure in spelling alignment unable to hide the stress-only result.
+            val earlyStressFile = File(projectDir, "tools/data/ruvoice_stress_book_regressions.json")
+            check(earlyStressFile.isFile) { "Missing stress regression corpus: $earlyStressFile" }
+            val earlyStressCases = JSONObject(earlyStressFile.readText(Charsets.UTF_8)).getJSONArray("cases")
+            var earlyStressPassed = 0
+            for (caseIndex in 0 until earlyStressCases.length()) {
+                val item = earlyStressCases.getJSONObject(caseIndex)
+                val caseId = item.getString("id")
+                val sourceText = item.getString("text")
+                val targetWord = item.getString("word")
+                val accepted = item.getJSONArray("accepted_vowel_indices")
+                val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
+                val sourceTokens = wordRegex.findAll(sourceText).toList()
+                val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
+                check(targetIndex >= 0) { "Stress precheck $caseId: target '$targetWord' is missing" }
+                val baselineText = readable(sourceText, baselineStress)
+                val mergedText = readable(sourceText, combinedStress)
+                val baselineTokens = wordRegex.findAll(baselineText).toList()
+                val mergedTokens = wordRegex.findAll(mergedText).toList()
+                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
+                    "Stress precheck $caseId: token alignment changed (source=${sourceTokens.size}, " +
+                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
+                }
+                val baselineWord = baselineTokens[targetIndex].value
+                val mergedWord = mergedTokens[targetIndex].value
+                val actualPosition = stressPosition(mergedWord)
+                println("STRESS_PRECHECK_CASE=$caseId baseline='$baselineWord' merged='$mergedWord' actual=$actualPosition accepted=$acceptedPositions")
+                check(actualPosition != null && actualPosition in acceptedPositions) {
+                    "Stress precheck $caseId: expected one of $acceptedPositions, " +
+                        "baseline='$baselineWord', merged='$mergedWord', actual=$actualPosition"
+                }
+                earlyStressPassed++
+            }
+            println("BOOK_STRESS_PRECHECK=PASS cases=$earlyStressPassed/${earlyStressCases.length()}")
+
             // End-to-end spelling regressions: the real Silero + RUAccent + production merge
             // must preserve safe book spellings and reject the 28 known contextual ё mistakes.
             val yoRegressionFile = File(projectDir, "tools/data/ruaccent_yo_book_regressions.json")
@@ -729,6 +765,7 @@ class UploadedEpubPairedEvaluationTest {
                 val mergedText = readable(sourceText, combinedStress)
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
                 val mergedTokens = wordRegex.findAll(mergedText).toList()
+                println("YO_REGRESSION_CASE=$caseId source_tokens=${sourceTokens.size} baseline_tokens=${baselineTokens.size} merged_tokens=${mergedTokens.size}")
                 check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
                     "Ё regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
                         "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
