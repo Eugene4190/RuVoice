@@ -149,9 +149,10 @@ jobs:
           BASELINE_JSON="$RUNNER_TEMP/ruvoice_silero_ru_baseline.json"
           cp app/src/main/assets/silero/silero_ru.json "$BASELINE_JSON"
           echo "RUVOICE_BASELINE_SILERO_JSON=$BASELINE_JSON" >> "$GITHUB_ENV"
-          # Apply the reviewed phrase hints to the staged production stress data.
-          # This changes the contextual phrase table, not the installed stress dictionary.
-          python tools/phrases_extra.py apply
+          # Apply only the single book-reviewed phrase hint. Do not apply the
+          # experimental phrases_extra.txt collection to the production book run.
+          python "$GITHUB_WORKSPACE/private-files/paired_eval/apply_book_phrase_override.py" \
+            app/src/main/assets/silero/silero_ru.json
           STRESS_DICT="app/src/main/assets/dicts/stress/Системный.txt"
           if ! grep -Fxq 'снято сн+ято' "$STRESS_DICT"; then
             printf '%s\n' 'снято сн+ято' >> "$STRESS_DICT"
