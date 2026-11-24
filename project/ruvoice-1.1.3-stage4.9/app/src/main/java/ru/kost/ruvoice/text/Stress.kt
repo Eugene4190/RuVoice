@@ -37,6 +37,8 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
     private val splitRe = Regex("([\\s\\p{Zs}\\u0085\\u2028\\u2029\\u001C-\\u001F.,!?;:<>=()/\\\\«»„“”\"'‘’‹›]+)")
     private val nonCyr = Regex("[^А-Яа-яёЁ]")
     private val wordRe = Regex("[а-яё+]+", RegexOption.IGNORE_CASE)
+    /** Same token boundaries as StressCorrectionMerger when protecting trusted grammar marks. */
+    private val correctionWordRe = Regex("[\\p{L}+\\u0301]+")
 
     /** Ударения языка слоя (у белорусского — акцентор пака и словарь); null — русский конвейер ниже. */
     private val own = layer.stress(models, userDict, rules)
@@ -75,7 +77,22 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         val unstressed = prediction.decisions.count { it == StressDecision.UNSTRESSED }
         val restoredYo = prediction.yoDecisions.count { it == YoDecision.RESTORE_YO }
         val keptE = prediction.yoDecisions.count { it == YoDecision.KEEP_E }
-        val merged = StressCorrectionMerger.merge(sentence, ruResult, prediction, userDict.keys)
+        // Re-run only the deterministic grammar pass to identify words whose case/form
+        // was explicitly resolved by RuVoice. These marks must not be overwritten by a
+        // conflicting context-free or erroneous independent prediction.
+        val grammarProtectedWords = if (rules.on("gram")) runCatching {
+            val grammarInput = StressInputSanitizer.stripMarkers(sentence)
+            val grammarOutput = gramPass(surnamePass(grammarInput, source), source = source)
+            val sourceTokens = correctionWordRe.findAll(grammarInput).toList()
+            val grammarTokens = correctionWordRe.findAll(grammarOutput).toList()
+            if (sourceTokens.size != grammarTokens.size) emptySet()
+            else sourceTokens.indices.filterTo(LinkedHashSet()) { index ->
+                grammarTokens[index].value.contains('+') || grammarTokens[index].value.contains('\\u0301')
+            }
+        }.getOrDefault(emptySet()) else emptySet()
+        val merged = StressCorrectionMerger.merge(
+            sentence, ruResult, prediction, userDict.keys, grammarProtectedWords
+        )
 
         // Не показываем внутренние плюсы как будто это текст: "+о" — это «о́».
         // Сначала даём два читаемых результата, затем — только те слова, в которых есть разница.
