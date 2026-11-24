@@ -17,6 +17,13 @@ curl --fail --location --silent --show-error \
   "$MAVEN/org/json/json/$JSON_VERSION/json-$JSON_VERSION.jar" \
   --output "$WORK/json.jar"
 
+# Independent upstream Python implementation of the very same stress-usage ONNX classifier.
+# This isolates model output from the custom Kotlin token/offset aggregation.
+PY_STRESS_MODEL="$WORK/python-stress-model"
+python3 "$PROJECT/tools/probe_ruaccent_stage41.py" download "$PY_STRESS_MODEL"
+python3 "$PROJECT/tools/evaluate_ruaccent_stress_usage.py" "$PY_STRESS_MODEL" --json \
+  > "$PROJECT/app/build/ruaccent_stress_usage_python_probe.json"
+
 cd "$PROJECT/native"
 cargo build --release
 
