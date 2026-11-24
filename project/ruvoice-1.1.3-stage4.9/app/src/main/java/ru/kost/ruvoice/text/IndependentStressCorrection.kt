@@ -1,5 +1,6 @@
 package ru.kost.ruvoice.text
 
+import ru.kost.ruvoice.DictLines
 import java.util.Locale
 
 /**
@@ -467,4 +468,37 @@ internal object RuAccentInputSafety {
             })
         }
     }
+}
+
+
+/**
+ * Форматирование диагностики для человека: внутренний маркер "+" превращается в знак ударения,
+ * а сравнение показывает только слова, реально отличающиеся от результата штатного RuVoice.
+ */
+internal object StressDiagnosticFormatter {
+    private val wordRegex = Regex("[\\p{L}+\\u0301]+")
+
+    fun readable(text: String): String =
+        wordRegex.replace(text) { match -> DictLines.accentDisplay(match.value) }
+
+    fun differences(before: String, after: String): List<String> {
+        val oldWords = wordRegex.findAll(before).toList()
+        val newWords = wordRegex.findAll(after).toList()
+        if (oldWords.size != newWords.size) return emptyList()
+        return oldWords.indices.mapNotNull { index ->
+            val oldWord = oldWords[index].value
+            val newWord = newWords[index].value
+            if (key(oldWord) != key(newWord)) return@mapNotNull null
+            val oldDisplay = DictLines.accentDisplay(oldWord)
+            val newDisplay = DictLines.accentDisplay(newWord)
+            if (oldDisplay == newDisplay) null
+            else "${plain(oldWord)}: $oldDisplay → $newDisplay"
+        }
+    }
+
+    private fun plain(word: String): String =
+        word.replace("+", "").replace("\\u0301", "")
+
+    private fun key(word: String): String =
+        plain(word).lowercase(Locale.ROOT).replace('ё', 'е')
 }

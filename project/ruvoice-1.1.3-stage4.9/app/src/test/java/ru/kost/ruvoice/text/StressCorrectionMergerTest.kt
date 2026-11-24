@@ -273,4 +273,27 @@ class StressCorrectionMergerTest {
         assertEquals(emptySet<Int>(), RuAccentInputSafety.unsafeWordsJoinedByDroppedSeparators("дом лес", spacedRanges))
     }
 
+
+    @Test fun `diagnostics render internal plus as visible acute accent`() {
+        assertEquals("по́езд отходи́л", StressDiagnosticFormatter.readable("п+оезд отход+ил"))
+    }
+
+    @Test fun `diagnostics list only changed stress positions`() {
+        assertEquals(
+            listOf("замок: за́мок → замо́к"),
+            StressDiagnosticFormatter.differences("з+амок", "зам+ок")
+        )
+    }
+
+    @Test fun `diagnostics show contextual yo changes`() {
+        assertEquals(
+            listOf("все: все → всё"),
+            StressDiagnosticFormatter.differences("все", "всё")
+        )
+    }
+
+    @Test fun `diagnostics mark no differences when RuVoice and RUAccent agree`() {
+        assertEquals(emptyList<String>(), StressDiagnosticFormatter.differences("з+амок", "з+амок"))
+    }
+
 }

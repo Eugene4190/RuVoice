@@ -75,16 +75,26 @@ class Stress(private val d: SileroData, private val models: StressModels, privat
         val unstressed = prediction.decisions.count { it == StressDecision.UNSTRESSED }
         val restoredYo = prediction.yoDecisions.count { it == YoDecision.RESTORE_YO }
         val keptE = prediction.yoDecisions.count { it == YoDecision.KEEP_E }
-        independentTrace?.add(
-            "RUAccent: инференс выполнен; ударение — уверенно STRESS: $stressed, NO_STRESS: $unstressed; «ё» восстановлено: $restoredYo, оставлено «е»: $keptE"
-        )
         val merged = StressCorrectionMerger.merge(sentence, ruResult, prediction, userDict.keys)
-        if (merged != ruResult) {
-            independentTrace?.add("RUAccent: исправленный вариант: $merged")
-            trace?.add("independent: $merged")
-        } else {
-            independentTrace?.add("RUAccent: результат совпал со штатным RuVoice")
+
+        // Не показываем внутренние плюсы как будто это текст: "+о" — это «о́».
+        // Сначала даём два читаемых результата, затем — только те слова, в которых есть разница.
+        independentTrace?.let { report ->
+            report.add(
+                "RUAccent: проверка выполнена; слов с ударением: $stressed, без ударения: $unstressed; " +
+                    "«ё» восстановлено: $restoredYo, «е» сохранено: $keptE."
+            )
+            report.add("Штатный RuVoice (до RUAccent): ${StressDiagnosticFormatter.readable(ruResult)}")
+            report.add("После RUAccent: ${StressDiagnosticFormatter.readable(merged)}")
+            val changes = StressDiagnosticFormatter.differences(ruResult, merged)
+            if (changes.isEmpty()) {
+                report.add("Сравнение: изменений нет — RUAccent согласился со штатным RuVoice.")
+            } else {
+                report.add("Сравнение: RUAccent изменил ${changes.size} слов(а):")
+                changes.forEach { report.add("  $it") }
+            }
         }
+        if (merged != ruResult) trace?.add("independent: $merged")
         return merged
     }
 
