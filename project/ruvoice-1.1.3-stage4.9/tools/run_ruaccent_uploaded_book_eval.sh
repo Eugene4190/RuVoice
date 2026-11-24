@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EPUB="\${1:?Usage: run_ruaccent_uploaded_book_eval.sh <book.epub> [report.json]}"
-REPORT="\${2:-$ROOT/app/build/reports/ruaccent-uploaded-book.json}"
+EPUB="${1:?Usage: run_ruaccent_uploaded_book_eval.sh <book.epub> [report.json]}"
+REPORT="${2:-$ROOT/app/build/reports/ruaccent-uploaded-book.json}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
