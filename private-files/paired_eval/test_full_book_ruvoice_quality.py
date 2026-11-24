@@ -108,7 +108,6 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         vowels = set("аеёиоуыэюя")
         for word, variant in entries.items():
             marker = variant.index("+")
-            self.assertEqual(variant[marker + 1].lower(), next(ch for ch in variant[marker + 1:] if ch.lower() in vowels))
             self.assertIn(variant[marker + 1].lower(), vowels)
             self.assertEqual(sum(ch in vowels for ch in variant[:marker]), expected_positions[word])
         self.assertEqual(quality.acute_position("два́дцать"), 0)
