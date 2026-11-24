@@ -5,15 +5,15 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
 CACHE="$HERE/.cache"
 RAW="$HERE/data/raw"
-WIKT_JSONL="${WIKT_JSONL:-$RAW/kaikki.org-dictionary-Russian.jsonl}"
+WIKT_GZ="${WIKT_GZ:-$RAW/raw-wiktextract-data.jsonl.gz}"
 AOT_REPO="$CACHE/morph_dict"
 VENV="$CACHE/venv"
 PY="$VENV/bin/python"
-WIKT_URL="https://kaikki.org/dictionary/Russian/kaikki.org-dictionary-Russian.jsonl"
+WIKT_URL="https://kaikki.org/ruwiktionary/raw-wiktextract-data.jsonl.gz"
 UPSTREAM_URL="https://github.com/kost-t-human/ruvoice-tts.git"
 AOT_URL="https://github.com/sokirko74/morph_dict.git"
 
-for command in git curl python3; do
+for command in git curl python3 gzip sha256sum; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "Не найдена команда: $command" >&2
     exit 1
@@ -22,24 +22,14 @@ done
 
 mkdir -p "$CACHE" "$RAW" "$HERE/output" "$HERE/reports"
 
-if [[ ! -f "$WIKT_JSONL" ]]; then
-  if [[ "${DOWNLOAD_WIKT:-0}" == "1" ]]; then
-    echo "Скачиваю словарный корпус Kaikki (~900 МБ)."
-    curl --fail --location --retry 3 --continue-at - "$WIKT_URL" -o "$WIKT_JSONL"
-  else
-    cat >&2 <<EOF
-Не найден дамп Викисловаря:
-  $WIKT_JSONL
-
-Файл большой (около 900 МБ) и не включается в Git.
-Положите JSONL туда или запустите:
-  DOWNLOAD_WIKT=1 $0
-
-Можно указать другой путь через WIKT_JSONL=/путь/к/файлу.jsonl.
-EOF
-    exit 2
-  fi
+if [[ ! -s "$WIKT_GZ" ]] || ! gzip -t "$WIKT_GZ" >/dev/null 2>&1; then
+  echo "Скачиваю сжатый raw Wiktextract JSONL (~272.5 МБ по снимку от 2026-11-01)."
+  curl --fail --location --retry 3 --continue-at - "$WIKT_URL" -o "$WIKT_GZ"
 fi
+gzip -t "$WIKT_GZ" || {
+  echo "Загруженный архив повреждён: $WIKT_GZ" >&2
+  exit 2
+}
 
 if [[ ! -d "$AOT_REPO/.git" ]]; then
   echo "Загружаю словарь AOT..."
@@ -86,7 +76,20 @@ echo "Строю формы AOT и Викисловаря..."
 (
   cd "$UPSTREAM"
   "$PY" tools/aot_forms.py "$AOT_DIR"
-  "$PY" tools/wikt_forms.py "$WIKT_JSONL"
+  # The current Kaikki download is raw Wiktextract JSONL in gzip format.
+  # Patch only this disposable upstream checkout so the official parser streams gzip without a 2.3 GB unpack.
+  "$PY" - <<'PY'
+from pathlib import Path
+p = Path("tools/wikt_forms.py")
+s = p.read_text(encoding="utf-8")
+s = s.replace("import json, os, sys, collections, re", "import gzip, json, os, sys, collections, re")
+old = '    with open(SRC, encoding="utf-8") as src:'
+new = '    opener = gzip.open if SRC.endswith(".gz") else open\n    with opener(SRC, "rt", encoding="utf-8") as src:'
+if old not in s:
+    raise SystemExit("Не удалось безопасно адаптировать wikt_forms.py к gzip")
+p.write_text(s.replace(old, new), encoding="utf-8")
+PY
+  "$PY" tools/wikt_forms.py "$WIKT_GZ"
   "$PY" tools/aot_survey.py
   # Перезаписывается только tools/stress_fixes.txt во временном клоне, не в твоём репозитории.
   "$PY" tools/stress_fixes.py build
@@ -112,8 +115,12 @@ fi
   --manifest "$HERE/reports/run_manifest.json"
 
 printf '{\n  "upstream_repository": "%s",\n  "upstream_commit": "%s",\n  "aot_repository": "%s",\n  "wikt_dump": "%s"\n}\n' \
-  "$UPSTREAM_URL" "$UPSTREAM_SHA" "$AOT_URL" "$WIKT_JSONL" \
+  "$UPSTREAM_URL" "$UPSTREAM_SHA" "$AOT_URL" "$WIKT_GZ" \
   > "$HERE/reports/source_versions.json"
+WIKT_SHA256="$(sha256sum "$WIKT_GZ" | cut -d ' ' -f 1)"
+printf '{\n  "url": "%s",\n  "sha256": "%s",\n  "compressed_bytes": %s\n}\n' \
+  "$WIKT_URL" "$WIKT_SHA256" "$(wc -c < "$WIKT_GZ" | tr -d ' ')" \
+  > "$HERE/reports/wiktionary_source.json"
 
 echo
 echo "Готово. Все постоянные результаты сохранены в:"
