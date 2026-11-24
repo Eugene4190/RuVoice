@@ -95,6 +95,9 @@ jobs:
           set -euo pipefail
           DICT="project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
           test -s "$DICT"
+          echo "FULL_SYSTEM_TREKH_GORKA_ROWS_BEGIN"
+          grep -nE '^трёхгорк(е|у) ' "$DICT" || true
+          echo "FULL_SYSTEM_TREKH_GORKA_ROWS_END"
           OUT="$RUNNER_TEMP/ruvoice-full-system-book-scan"
           python experiments/ruvoice-stress-dictionary/analyze_book.py \
             "private-files/8.Iskusstvo..epub" \
