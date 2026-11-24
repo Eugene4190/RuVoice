@@ -81,7 +81,7 @@ def load_provenance(path: Path) -> dict[str, str]:
 def load_candidate_rules(path: Path) -> dict[str, tuple[str, str, str]]:
     rules: dict[str, tuple[str, str, str]] = {}
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
-        reader = csv.DictReader(stream, delimiter="\\t")
+        reader = csv.DictReader(stream, delimiter="\t")
         required = {"word", "action", "reason", "source"}
         if not reader.fieldnames or not required.issubset(reader.fieldnames):
             raise ValueError(f"Некорректные правила контекстной проверки: {path}")
