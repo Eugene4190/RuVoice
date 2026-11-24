@@ -7,7 +7,10 @@ on:
       - "private-files/8.Iskusstvo..epub"
       - "private-files/paired_eval/**"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/IndependentStressCorrection.kt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/RuAccentOnnxCorrector.kt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/Stress.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/IndependentStressCorrectionTest.kt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/StressCorrectionMergerTest.kt"
       - ".github/workflows/evaluate-uploaded-epub.yml"
   workflow_dispatch:
 
