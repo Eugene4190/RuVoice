@@ -287,21 +287,22 @@ jobs:
               print(f"Verified voice pack: {meta.get('title')} — Ilya speaker id {speakers['ilya']}")
           PY
 
-      - name: Write Stage 4.11 build report and source ZIP
+      - name: Write Stage 4.12 build report and source ZIP
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
           set -euo pipefail
           APK_SHA="$(sha256sum dist/ruvoice-improved-1.1.3.apk | awk '{print $1}')"
           APK_SIZE="$(stat -c%s dist/ruvoice-improved-1.1.3.apk)"
-          cat > PHASE4_11_STATUS_RU.md <<EOF
-          # Этап 4.11 — первый APK RuVoice Improved
+          cat > PHASE4_12_STATUS_RU.md <<EOF
+          # Этап 4.12 — исправление проверки словаря RUAccent
 
           ## Что подтверждено
 
           - Реальный RUAccent INT8 загружен из закреплённой ревизии Hugging Face: 16 файлов, 144 301 606 байт.
           - Все четыре ONNX-сессии созданы, warm-up и четыре русских smoke-примера пройдены в JVM на Linux.
           - Для всех 16 файлов закреплены SHA-256; установщик сверяет каждый файл до пометки «установлено».
+          - `nn_accent/vocab.txt` проверяется по фиксированным спецтокенам и русским гласным, а не по ошибочному порогу в 100 строк; штатный словарь содержит 44 токена и 140 байт.
           - Настоящий HTTP Range downloader прошёл локальные сценарии прерывания/возобновления, игнорирования Range, неверного Content-Range и HTTP 416.
           - Официальный пакет ru_voices проверен: speaker \`ilya\` присутствует под id 20.
           - Минимальная версия Android для этой модификации: API 24 (Android 7.0), требование ONNX Runtime 1.32.0; целевой Xiaomi работает на Android 13.
@@ -335,47 +336,35 @@ jobs:
           EOF
           cd ..
           mkdir -p ../private-files
-          zip -qr ../private-files/ruvoice-1.1.3-stage4.11.zip ruvoice-1.1.3-stage4.9 \
+          zip -qr ../private-files/ruvoice-1.1.3-stage4.12.zip ruvoice-1.1.3-stage4.9 \
             -x '*/.git/*' '*/.gradle/*' '*/app/build/*' '*/native/target/*' '*/local.properties' '*/dist/*'
-          unzip -tq ../private-files/ruvoice-1.1.3-stage4.11.zip
+          unzip -tq ../private-files/ruvoice-1.1.3-stage4.12.zip
 
-      - name: Commit reproducible project ZIP, report and Ilya voice pack
+      - name: Keep generated report in the release archive without pushing from CI
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Keep large binary bundles out of Git history. The APK, full source
-          # archive, and official voice pack are attached to the private GitHub Release below.
-          git add project/ruvoice-1.1.3-stage4.9/PHASE4_11_STATUS_RU.md
-          if ! git diff --cached --quiet; then
-            git commit -m "Package RuVoice Improved Stage 4.11 APK and project"
-          fi
-          # The dictionary-name restoration step renames two tracked assets locally.
-          # The source-packaging workflow persists those same renames to origin/main.
-          # Drop only this duplicate local rename before rebasing; the packaged project
-          # ZIP above already contains the correctly named files.
+          # The report and reproducible source ZIP are attached to the release.
+          # Do not push a report commit from parallel CI jobs: that previously
+          # caused races and rebase conflicts after the APK had already built.
           git restore --worktree --source=HEAD -- \
             project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts
           if ! git diff --quiet || ! git diff --cached --quiet; then
-            echo "Unexpected tracked worktree changes remain before rebase:"
+            echo "Unexpected tracked worktree changes remain:"
             git status --short
             exit 1
           fi
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
 
       - name: Publish private test release with APK and source archives
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ruvoice-improved-1.1.3-stage4.11
-          name: RuVoice Improved 1.1.3 — Stage 4.11 test build
+          tag_name: ruvoice-improved-1.1.3-stage4.12
+          name: RuVoice Improved 1.1.3 — Stage 4.12 tokenizer vocabulary fix
           prerelease: true
           generate_release_notes: true
           files: |
             project/ruvoice-1.1.3-stage4.9/dist/ruvoice-improved-1.1.3.apk
-            private-files/ruvoice-1.1.3-stage4.11.zip
+            private-files/ruvoice-1.1.3-stage4.12.zip
             private-files/ruvoice-pack-ru_voices.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

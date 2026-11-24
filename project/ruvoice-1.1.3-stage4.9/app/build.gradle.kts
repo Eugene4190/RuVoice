@@ -18,8 +18,8 @@ android {
         // ONNX Runtime Android 1.32.0 requires API 24; official RuVoice stays untouched.
         minSdk = 24
         targetSdk = 35
-        versionCode = 10104
-        versionName = "1.1.3-improved"
+        versionCode = 10105
+        versionName = "1.1.3-improved-4.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
