@@ -6,6 +6,7 @@ on:
     paths:
       - "private-files/8.Iskusstvo..epub"
       - "private-files/paired_eval/**"
+      - "private-files/paired_eval/build_book_stress_audit.py"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/IndependentStressCorrection.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/RuAccentOnnxCorrector.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/Stress.kt"
@@ -177,6 +178,31 @@ jobs:
           gradle --no-daemon --stacktrace \
             :app:testFullDebugUnitTest \
             --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
+
+      - name: Build full-book contextual stress review against built-in and independent dictionary sources
+        if: always() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/build_book_stress_audit.py
+          python private-files/paired_eval/build_book_stress_audit.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --system-dictionary "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt" \
+            --auto-dictionary experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt \
+            --provenance experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_accepted.tsv \
+            --output-dir private-files/ruvoice-full-book-stress-audit
+
+      - name: Upload the whole-book stress review with short text contexts
+        if: always() && hashFiles('private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-whole-book-stress-review
+          path: |
+            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv
+            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Change_Pairs.tsv
+            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Summary.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Print concise paired test diagnostics
         if: always()
