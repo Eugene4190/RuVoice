@@ -183,6 +183,7 @@ def build(args: argparse.Namespace) -> int:
             if len(variants) > 1:
                 review_rows.append([word, frequency, "", "CONFLICT", "во встроенном словаре конфликт после нормализации е/ё"])
                 conflict_tokens += frequency
+                conflict_forms += 1
                 continue
         if base_rows:
             already_system_tokens += frequency
@@ -191,10 +192,12 @@ def build(args: argparse.Namespace) -> int:
         if key in approved_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "в накопительном словаре несколько вариантов"])
             conflict_tokens += frequency
+            conflict_forms += 1
             continue
         if len(approved_rows) > 1 and len({norm(marked) for _, marked in approved_rows}) > 1:
             review_rows.append([word, frequency, "", "CONFLICT", "накопительный словарь содержит конфликтующие ударения"])
             conflict_tokens += frequency
+            conflict_forms += 1
             continue
         if approved_rows:
             already_approved_tokens += frequency
@@ -203,6 +206,7 @@ def build(args: argparse.Namespace) -> int:
             except (ValueError, IndexError) as exc:
                 review_rows.append([word, frequency, approved_rows[0][1], "INVALID_APPROVED", str(exc)])
                 conflict_tokens += frequency
+                conflict_forms += 1
                 continue
             book_approved_entries.append(Entry(word, approved_marked, "accumulated_approved", f"book_frequency={frequency}"))
             continue
@@ -210,6 +214,7 @@ def build(args: argparse.Namespace) -> int:
         if key in pool_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "пул кандидатов содержит несколько вариантов"])
             conflict_tokens += frequency
+            conflict_forms += 1
             continue
 
         rule = candidate_rules.get(key)
@@ -225,6 +230,7 @@ def build(args: argparse.Namespace) -> int:
             rendered = " / ".join(sorted(variants.values()))
             review_rows.append([word, frequency, rendered, "CONFLICT", "источники-кандидаты дают разные ударения"])
             conflict_tokens += frequency
+            conflict_forms += 1
             continue
         if not pool_rows:
             unresolved_rows.append([word, frequency, "нет подтверждённой записи в пуле AOT/Wiktionary"])
@@ -236,6 +242,7 @@ def build(args: argparse.Namespace) -> int:
         except (ValueError, IndexError) as exc:
             review_rows.append([word, frequency, source_marked, "INVALID", str(exc)])
             conflict_tokens += frequency
+            conflict_forms += 1
             continue
 
         candidates.append(Entry(word, proposed, source, f"book_frequency={frequency}"))
