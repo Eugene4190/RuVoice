@@ -316,13 +316,19 @@ internal object StressCorrectionMerger {
             // Без полного выравнивания decision-меток безопасно считаем все слова UNKNOWN.
             val decision = prediction.decisions.getOrNull(i)
                 ?.takeIf { prediction.decisions.size == src.size } ?: StressDecision.UNKNOWN
+            val hyphenatedClitics = setOf("то", "нибудь", "либо", "таки", "ка")
+            val isHyphenatedClitic = i > 0 &&
+                normalizeKey(sourceParsed.base) in hyphenatedClitics &&
+                original.substring(src[i - 1].range.last + 1, src[i].range.first).contains('-')
             val selectedStress = when (decision) {
                 // Если модель заявила STRESSED, но не указала позицию U+0301,
                 // прогноз внутренне противоречив: не стираем и не переносим знак.
                 StressDecision.STRESSED -> predictedParsed.stressed.ifEmpty { currentParsed.stressed }
-                StressDecision.UNSTRESSED -> if (currentParsed.base.count { it.lowercaseChar() in VOWELS } >= 2) {
-                    currentParsed.stressed
-                } else emptySet()
+                // Preserve the native mark on ordinary polysyllabic words. Hyphenated Russian
+                // enclitics are a deliberate exception: -то/-нибудь/-либо/-таки/-ка are unstressed.
+                StressDecision.UNSTRESSED -> if (
+                    currentParsed.base.count { it.lowercaseChar() in VOWELS } >= 2 && !isHyphenatedClitic
+                ) currentParsed.stressed else emptySet()
                 StressDecision.UNKNOWN -> currentParsed.stressed
             }
             val rendered = buildString(mergedBase.length + selectedStress.size) {
