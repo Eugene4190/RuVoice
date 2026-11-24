@@ -141,6 +141,30 @@ class StressTest {
         assertEquals("RUAccent не должен заменять грамматически подтверждённое «р+уки» на «руки́»", baseline, combined)
     }
 
+    @Test fun ruAccentCannotOverwriteTrustedBertHomographDecision() {
+        val phrase = "строительство дома"
+        val baseline = Stress(d, firstVowel).apply(phrase)
+        assertTrue("штатный контекстный BERT должен выбрать родительный падеж дом+а: $baseline", baseline.contains("дом+а"))
+
+        val wrongIndependentModel = IndependentStressCorrector { input ->
+            val words = Regex("[\\p{L}\\u0301]+").findAll(input).toList()
+            val target = words.firstOrNull { it.value.equals("дома", ignoreCase = true) }
+                ?: return@IndependentStressCorrector null
+            // Deliberately wrong adverbial stress: до́ма instead of genitive домá.
+            val predicted = StringBuilder(input).insert(target.range.first + 2, '\u0301').toString()
+            IndependentStressPrediction(
+                text = predicted,
+                decisions = words.map {
+                    if (it.value.equals("дома", ignoreCase = true)) StressDecision.STRESSED
+                    else StressDecision.UNKNOWN
+                },
+                yoDecisions = words.map { YoDecision.UNKNOWN },
+            )
+        }
+        val combined = Stress(d, firstVowel, independentCorrector = wrongIndependentModel).apply(phrase)
+        assertEquals("RUAccent не должен заменять решение BERT «дом+а» на «до́ма»", baseline, combined)
+    }
+
     @Test fun gramPassPicksCaseByPrecedingWord() {
         val s = Stress(d, firstVowel)
         // род. ед. после предлога родительного и числительного; вин. мн. после «в»; сущ. после предлога; глагол после местоимения
