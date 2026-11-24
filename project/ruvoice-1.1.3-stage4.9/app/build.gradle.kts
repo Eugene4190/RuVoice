@@ -63,7 +63,12 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         // перезапись эталона RuPathSnapshotTest: ./gradlew … -Druvoice.snapshot.write=true
-        unitTests.all { t -> System.getProperty("ruvoice.snapshot.write")?.let { t.systemProperty("ruvoice.snapshot.write", it) } }
+        unitTests.all { t ->
+            // Whole-book paired evaluation retains per-token diagnostics until the JSON report is written.
+            // Give the test worker its own heap; org.gradle.jvmargs configures only the Gradle daemon.
+            t.maxHeapSize = "3g"
+            System.getProperty("ruvoice.snapshot.write")?.let { t.systemProperty("ruvoice.snapshot.write", it) }
+        }
     }
     // libfbjni/libc++_shared есть и в pytorch_android_lite, и в executorch; из lite годятся обоим
     packaging { jniLibs.useLegacyPackaging = false; jniLibs.pickFirsts += listOf("lib/*/libfbjni.so", "lib/*/libc++_shared.so") }
