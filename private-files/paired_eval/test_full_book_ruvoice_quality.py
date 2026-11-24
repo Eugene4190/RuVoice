@@ -78,6 +78,12 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         self.assertEqual(quality.acute_position("далёко"), 1)
         self.assertEqual(quality.acute_position("поздне́е"), 1)
 
+    def test_expanded_numeral_twenty_is_stressed_on_first_syllable(self) -> None:
+        overlay = SOURCE.with_name("book_reviewed_overrides.txt")
+        entries = dict(line.split() for line in overlay.read_text(encoding="utf-8").splitlines() if line.strip())
+        self.assertEqual(entries["двадцать"], "два+дцать")
+        self.assertEqual(quality.acute_position("два́дцать"), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
