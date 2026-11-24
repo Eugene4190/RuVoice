@@ -107,7 +107,7 @@ private fun extractBlocksFromXhtml(bytes: ByteArray): List<String> {
             current.setLength(0)
             val letters = text.count { it.isLetter() }
             val cyrillic = text.count { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }
-            if (text.length >= 30 && letters >= 20 && cyrillic >= letters * 0.45) fallback += text
+            if (text.length >= 3 && letters >= 2 && cyrillic >= letters * 0.45) fallback += text
         }
         val callback = object : HTMLEditorKit.ParserCallback() {
             override fun handleText(data: CharArray, pos: Int) {
@@ -232,9 +232,9 @@ private fun makeSegments(paragraphs: List<Paragraph>): List<Segment> {
             if (end == java.text.BreakIterator.DONE) break
             val sentence = paragraph.text.substring(start, end).trim()
             start = end
-            if (sentence.length < 25) continue
+            if (sentence.length < 3 || sentence.count { it.isLetter() } < 2) continue
             for (piece in splitLongSentence(sentence)) {
-                if (piece.length < 25) continue
+                if (piece.length < 3 || piece.count { it.isLetter() } < 2) continue
                 part++
                 result += Segment(paragraph.chapter, paragraph.number, part, piece)
             }
