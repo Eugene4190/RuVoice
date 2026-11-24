@@ -52,3 +52,33 @@ jobs:
             --output "$RUNNER_TEMP/RuVoice_Stage4.9_ExistingFixes.txt" \
             --report "$RUNNER_TEMP/Stage4.9_review.tsv" \
             --manifest "$RUNNER_TEMP/Stage4.9_manifest.json"
+
+      - name: Scan uploaded book against Stage 4.9 correction list
+        if: hashFiles('private-files/8.Iskusstvo..epub') != ''
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/ruvoice-book-scan"
+          python experiments/ruvoice-stress-dictionary/analyze_book.py \
+            "private-files/8.Iskusstvo..epub" \
+            --dictionary experiments/ruvoice-stress-dictionary/output/RuVoice_Stage4.9_ExistingFixes.txt \
+            --min-frequency 3 \
+            --output-dir "$OUT"
+          python - "$OUT" <<'PY'
+          import csv, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          data = json.loads((root / "coverage.json").read_text(encoding="utf-8"))
+          print("BOOK_SCAN_SUMMARY=" + json.dumps(data, ensure_ascii=False, sort_keys=True))
+          with (root / "missing_words.tsv").open(encoding="utf-8-sig", newline="") as f:
+              rows = list(csv.DictReader(f, delimiter="\t"))
+          print("TOP_UNMATCHED_WORD_FORMS_BEGIN")
+          for row in rows[:40]:
+              print(row["word"] + "\t" + row["frequency"])
+          print("TOP_UNMATCHED_WORD_FORMS_END")
+          with (root / "dictionary_hits.tsv").open(encoding="utf-8-sig", newline="") as f:
+              hits = list(csv.DictReader(f, delimiter="\t"))
+          hits.sort(key=lambda row: int(row["frequency"]), reverse=True)
+          print("TOP_CORRECTION_HITS_BEGIN")
+          for row in hits[:40]:
+              print(row["word"] + "\t" + row["dictionary_stress"] + "\t" + row["frequency"])
+          print("TOP_CORRECTION_HITS_END")
+          PY
