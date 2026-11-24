@@ -731,7 +731,7 @@ class UploadedEpubPairedEvaluationTest {
                         lexicalMismatches++
                         changedTokens++
                         segmentChanged = true
-                        if (changeRows.length() < 5000) {
+                        if (changeRows.length() < 15000) {
                             changeRows.put(JSONObject()
                                 .put("type", "TOKEN_ALIGNMENT_OR_LEXICAL_CHANGE")
                                 .put("chapter", segment.chapter)
@@ -757,7 +757,7 @@ class UploadedEpubPairedEvaluationTest {
                         }
                     }
                     if (yoChanged) yoChanges++
-                    if (changeRows.length() < 5000) {
+                    if (changeRows.length() < 15000) {
                         changeRows.put(JSONObject()
                             .put("type", when {
                                 stressChanged && yoChanged -> "STRESS_AND_YO"
