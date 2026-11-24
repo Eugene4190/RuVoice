@@ -62,7 +62,7 @@ A few high-frequency changes were checked against independent normative referenc
 
 - `одновреме́нно → одновре́менно`: Gramota's metadictionary lists both as variants. This is an allowed variant, not proof that the new form is uniquely correct in the book: https://gramota.ru/meta/odnovremenno
 - `созда́ли → со́здали`: Gramota calls `сОздали` exemplary and `создАли` conversational, while explicitly stating that both are normative: https://gramota.ru/spravka/vopros/308981
-- `создана́ → со́здана`: Gramota's reference answer records both variants as correct for this form: https://gramota.ru/poisk?mode=spravka&query=начата
+- `создана́ → со́здана`: Gramota's reference answer records both variants as correct for this form: https://gramota.ru/spravka/vopros/205625
 - `лека́рства → ле́карства`: Gramota distinguishes the stress by meaning: `лека́рство` as a medicinal substance and `ле́карство` in the older sense “occupation of a healer”. Without the exact sentence we cannot decide which meaning applies: https://gramota.ru/poisk?mode=slovari&query=лекарство
 - `эгре́гор → эгрего́р`: Wiktionary records the stress on `е` and also notes a variant on `о`; that is a lexical variant check, not a full verification of every inflected form: https://ru.wiktionary.org/wiki/эгрегор
 
