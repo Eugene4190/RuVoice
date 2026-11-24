@@ -142,27 +142,35 @@ class StressTest {
     }
 
     @Test fun ruAccentCannotOverwriteTrustedBertHomographDecision() {
-        val phrase = "строительство дома"
+        val phrase = "замок"
         val baseline = Stress(d, firstVowel).apply(phrase)
-        assertTrue("штатный контекстный BERT должен выбрать родительный падеж дом+а: $baseline", baseline.contains("дом+а"))
+        val variants = d.homodict.getValue("замок").sorted()
+        assertTrue("штатный BERT должен выбрать один из вариантов омографа: $baseline", baseline in variants)
 
+        // Deliberately predict the other stress position from the one the native BERT selected.
+        // This tests precedence without assuming which lexical meaning the stub model should pick.
+        val baselineVowelOrdinal = baseline.substring(0, baseline.indexOf('+')).count { it in "аеёиоуыэюя" }
+        val oppositeVowelOrdinal = if (baselineVowelOrdinal == 0) 1 else 0
+        var vowelOrdinal = 0
+        val wrongPrediction = buildString {
+            for (ch in phrase) {
+                append(ch)
+                if (ch in "аеёиоуыэюя") {
+                    if (vowelOrdinal == oppositeVowelOrdinal) append('\u0301')
+                    vowelOrdinal++
+                }
+            }
+        }
         val wrongIndependentModel = IndependentStressCorrector { input ->
-            val words = Regex("[\\p{L}\\u0301]+").findAll(input).toList()
-            val target = words.firstOrNull { it.value.equals("дома", ignoreCase = true) }
-                ?: return@IndependentStressCorrector null
-            // Deliberately wrong adverbial stress: до́ма instead of genitive домá.
-            val predicted = StringBuilder(input).insert(target.range.first + 2, '\u0301').toString()
+            if (input != phrase) return@IndependentStressCorrector null
             IndependentStressPrediction(
-                text = predicted,
-                decisions = words.map {
-                    if (it.value.equals("дома", ignoreCase = true)) StressDecision.STRESSED
-                    else StressDecision.UNKNOWN
-                },
-                yoDecisions = words.map { YoDecision.UNKNOWN },
+                text = wrongPrediction,
+                decisions = listOf(StressDecision.STRESSED),
+                yoDecisions = listOf(YoDecision.UNKNOWN),
             )
         }
         val combined = Stress(d, firstVowel, independentCorrector = wrongIndependentModel).apply(phrase)
-        assertEquals("RUAccent не должен заменять решение BERT «дом+а» на «до́ма»", baseline, combined)
+        assertEquals("RUAccent не должен перезаписывать решение контекстного BERT по омографу", baseline, combined)
     }
 
     @Test fun gramPassPicksCaseByPrecedingWord() {
