@@ -724,7 +724,7 @@ class UploadedEpubPairedEvaluationTest {
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
         // Three independent full-book passes: untouched production baseline; production with
-        // the reviewed phrase hint and five book-only dictionary corrections; RUAccent on top
+        // the reviewed phrase hint and six book-only dictionary corrections; RUAccent on top
         // of the untouched baseline. This isolates the impact of RuVoice-specific fixes.
         val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
