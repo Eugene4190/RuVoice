@@ -175,6 +175,45 @@ internal object StressInputSanitizer {
 }
 
 /**
+ * Protects high-confidence е→ё restorations made by RuVoice's curated eyo_safe dictionary.
+ *
+ * RUAccent analyses the unmarked input again. Its contextual classifier can disagree with a
+ * curated spelling entry (for example, it can turn объём back into объем). Those dictionary
+ * decisions must survive the later merge, while unrelated model-generated ё remains overridable.
+ */
+internal object SafeYoDictionaryProtection {
+    private const val ACUTE = '\\u0301'
+    private val wordRegex = Regex("[\\\\p{L}+\\\\u0301]+")
+
+    fun findProtectedIndices(
+        original: String,
+        ruVoice: String,
+        restoreFromSafeDictionary: (String) -> String?,
+    ): Set<Int> {
+        val source = wordRegex.findAll(original).map { it.value }.toList()
+        val current = wordRegex.findAll(ruVoice).map { it.value }.toList()
+        if (source.isEmpty() || source.size != current.size) return emptySet()
+
+        return source.indices.filterTo(LinkedHashSet()) { index ->
+            val sourceToken = source[index]
+            // The safe dictionary is only consulted for unmarked input without author-written ё.
+            if ('+' in sourceToken || ACUTE in sourceToken ||
+                sourceToken.any { it == 'ё' || it == 'Ё' }) {
+                false
+            } else {
+                val restored = restoreFromSafeDictionary(sourceToken) ?: return@filterTo false
+                if (restored.length != sourceToken.length || restored.none { it == 'ё' || it == 'Ё' }) {
+                    false
+                } else {
+                    val currentPlain = current[index].replace("+", "").replace(ACUTE.toString(), "")
+                    currentPlain.equals(restored, ignoreCase = true)
+                }
+            }
+        }
+    }
+}
+
+/**
  * Сливает независимый прогноз с результатом штатного конвейера RuVoice.
  *
  * Независимая модель может переопределить автоматически поставленное RuVoice ударение и
@@ -202,6 +241,7 @@ internal object StressCorrectionMerger {
         independent: String,
         userDictionaryKeys: Set<String> = emptySet(),
         protectedStressIndices: Set<Int> = emptySet(),
+        protectedYoIndices: Set<Int> = emptySet(),
     ): String {
         val sourceWords = wordRegex.findAll(original).map { it.value }.toList()
         val currentWords = wordRegex.findAll(ruVoice).map { it.value }.toList()
@@ -225,7 +265,7 @@ internal object StressCorrectionMerger {
         return merge(
             original, ruVoice,
             IndependentStressPrediction(independent, decisions, yoDecisions),
-            userDictionaryKeys, protectedStressIndices,
+            userDictionaryKeys, protectedStressIndices, protectedYoIndices,
         )
     }
 
@@ -235,6 +275,7 @@ internal object StressCorrectionMerger {
         prediction: IndependentStressPrediction,
         userDictionaryKeys: Set<String> = emptySet(),
         protectedStressIndices: Set<Int> = emptySet(),
+        protectedYoIndices: Set<Int> = emptySet(),
     ): String {
         val src = wordRegex.findAll(original).toList()
         val current = wordRegex.findAll(ruVoice).toList()
@@ -294,7 +335,11 @@ internal object StressCorrectionMerger {
                 // Original author-written ё always wins. RESTORE_YO uses only the exact ё
                 // positions predicted by the model; KEEP_E removes automatic ё; UNKNOWN preserves
                 // RuVoice's current choice. Never turn every е in a word into ё at once.
-                val useYo = p in originalYo || when (yoDecision) {
+                // A curated safe-dictionary restoration outranks RUAccent's later
+                // contextual NO_YO decision. The model may still choose stress independently.
+                val useYo = p in originalYo || if (i in protectedYoIndices) {
+                    p in currentYo
+                } else when (yoDecision) {
                     YoDecision.RESTORE_YO -> p in predictedParsed.yo
                     YoDecision.KEEP_E -> false
                     YoDecision.UNKNOWN -> p in currentYo
