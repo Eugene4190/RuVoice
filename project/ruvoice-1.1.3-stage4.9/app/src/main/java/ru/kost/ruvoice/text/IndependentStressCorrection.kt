@@ -1,6 +1,5 @@
 package ru.kost.ruvoice.text
 
-import ru.kost.ruvoice.DictLines
 import java.util.Locale
 
 /**
@@ -479,7 +478,14 @@ internal object StressDiagnosticFormatter {
     private val wordRegex = Regex("[\\p{L}+\\u0301]+")
 
     fun readable(text: String): String =
-        wordRegex.replace(text) { match -> DictLines.accentDisplay(match.value) }
+        wordRegex.replace(text) { match -> readableWord(match.value) }
+
+    private fun readableWord(word: String): String {
+        val marker = word.indexOf('+')
+        if (marker < 0 || marker + 1 >= word.length) return word.replace("+", "")
+        return word.substring(0, marker) + word[marker + 1] + '\u0301' +
+            word.substring(marker + 2).replace("+", "")
+    }
 
     fun differences(before: String, after: String): List<String> {
         val oldWords = wordRegex.findAll(before).toList()
@@ -489,8 +495,8 @@ internal object StressDiagnosticFormatter {
             val oldWord = oldWords[index].value
             val newWord = newWords[index].value
             if (key(oldWord) != key(newWord)) return@mapNotNull null
-            val oldDisplay = DictLines.accentDisplay(oldWord)
-            val newDisplay = DictLines.accentDisplay(newWord)
+            val oldDisplay = readableWord(oldWord)
+            val newDisplay = readableWord(newWord)
             if (oldDisplay == newDisplay) null
             else "${plain(oldWord)}: $oldDisplay → $newDisplay"
         }
