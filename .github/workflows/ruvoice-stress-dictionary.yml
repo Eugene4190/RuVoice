@@ -56,6 +56,15 @@ jobs:
           assert data["cumulative_approved_entries"] == 0
           PY
 
+      - name: Upload book-specific candidate and aggregate reports
+        if: always() && hashFiles('private-files/8.Iskusstvo..epub') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-book-first-reference-output
+          path: ${{ runner.temp }}/ruvoice-book-first/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Validate shell syntax
         run: bash -n experiments/ruvoice-stress-dictionary/run_pipeline.sh
 
