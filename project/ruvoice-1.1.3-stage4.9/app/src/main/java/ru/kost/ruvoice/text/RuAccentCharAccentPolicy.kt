@@ -12,6 +12,29 @@ internal object RuAccentCharAccentPolicy {
 
     private const val ACUTE = '\u0301'
     private const val VOWELS = "аеёиоуыэюя"
+    private val SPECIAL_TOKENS = listOf("[pad]", "[unk]", "[bos]", "[eos]")
+
+    /**
+     * Reads the character-level vocabulary in the exact order expected by RUAccent.
+     * This is intentionally a small alphabet (not a BERT subword vocabulary), so a
+     * generic "more than 100 lines" completeness threshold is incorrect.
+     */
+    fun parseVocab(lines: List<String>): Map<String, Int> {
+        val tokens = lines.map { it.trimEnd('\r') }
+        require(tokens.size > EOS_ID.toInt()) {
+            "Словарь nn_accent не содержит фиксированные ID UNK/BOS/EOS"
+        }
+        require(tokens.take(SPECIAL_TOKENS.size) == SPECIAL_TOKENS) {
+            "Словарь nn_accent: неверный порядок специальных токенов PAD/UNK/BOS/EOS"
+        }
+        require(tokens.none { it.isEmpty() } && tokens.size == tokens.toSet().size) {
+            "Словарь nn_accent содержит пустые или повторяющиеся токены"
+        }
+        require(VOWELS.all { vowel -> tokens.contains(vowel.toString()) }) {
+            "Словарь nn_accent не содержит все русские гласные"
+        }
+        return tokens.mapIndexed { index, token -> token to index }.toMap()
+    }
 
     /** RUAccent hard-codes the special IDs; they are not inferred from token spellings. */
     fun buildInputIds(word: String, charVocab: Map<String, Int>): LongArray {
