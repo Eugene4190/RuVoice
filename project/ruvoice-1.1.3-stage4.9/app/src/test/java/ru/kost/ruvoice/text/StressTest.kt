@@ -118,6 +118,29 @@ class StressTest {
         assertEquals("л+юдмила толст+ая", Stress(d, firstVowel).apply("людмила толстая"))
     }
 
+    @Test fun ruAccentCannotOverwriteTrustedPluralCaseWithGenitiveHomograph() {
+        val phrase = "дать разуму в руки инструмент"
+        val baseline = Stress(d, firstVowel).apply(phrase)
+        assertTrue("штатный RuVoice должен распознать винительный множественного числа: $baseline", baseline.contains("р+уки"))
+
+        val wrongIndependentModel = IndependentStressCorrector { input ->
+            val words = Regex("[\\p{L}\\u0301]+").findAll(input).toList()
+            val target = words.firstOrNull { it.value.equals("руки", ignoreCase = true) }
+                ?: return@IndependentStressCorrector null
+            val predicted = StringBuilder(input).insert(target.range.last + 1, '\u0301').toString()
+            IndependentStressPrediction(
+                text = predicted,
+                decisions = words.map {
+                    if (it.value.equals("руки", ignoreCase = true)) StressDecision.STRESSED
+                    else StressDecision.UNKNOWN
+                },
+                yoDecisions = words.map { YoDecision.UNKNOWN },
+            )
+        }
+        val combined = Stress(d, firstVowel, independentCorrector = wrongIndependentModel).apply(phrase)
+        assertEquals("RUAccent не должен заменять грамматически подтверждённое «р+уки» на «руки́»", baseline, combined)
+    }
+
     @Test fun gramPassPicksCaseByPrecedingWord() {
         val s = Stress(d, firstVowel)
         // род. ед. после предлога родительного и числительного; вин. мн. после «в»; сущ. после предлога; глагол после местоимения
