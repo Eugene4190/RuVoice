@@ -227,6 +227,8 @@ def verdict(
             ruaccent_ok = ruaccent_position == agreed
             if base_ok and ruaccent_ok:
                 return "BOTH_MATCH_AOT_WIKT", "RuVoice и RUAccent совпали с единственным AOT/Wiktionary вариантом"
+            if not base_ok and ruaccent_ok and base_position in system:
+                return "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT", "Встроенный словарь поддерживает RuVoice, но AOT и Wiktionary согласны с RUAccent"
             if not base_ok and ruaccent_ok:
                 return "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE", "RUAccent и оба словаря согласны против RuVoice"
             if base_ok and not ruaccent_ok:
@@ -355,6 +357,7 @@ def main() -> int:
     # Rank unique words by severity and how often they appear.
     priority_order = {
         "BOTH_DIFFER_FROM_AOT_WIKT": 0,
+        "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT": 1,
         "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE": 1,
         "SHARED_VARIANTS_BUT_BASELINE_OUTSIDE": 2,
         "SINGLE_SOURCE_DIFFERS_FROM_BOTH": 3,
@@ -417,9 +420,9 @@ def main() -> int:
             counts["BOTH_DIFFER_FROM_AOT_WIKT"]
         ),
         "ruvoice_matches_two_source_consensus_and_variants": counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"],
-        "ruvoice_suspected_mismatches_against_two_sources": counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] + counts["SHARED_VARIANTS_BUT_BASELINE_OUTSIDE"],
+        "ruvoice_suspected_mismatches_against_two_sources": counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] + counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] + counts["SHARED_VARIANTS_BUT_BASELINE_OUTSIDE"],
         "ruaccent_matches_two_source_consensus_and_variants": counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"],
-        "ruaccent_suspected_mismatches_against_two_sources": counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"],
+        "ruaccent_suspected_mismatches_against_two_sources": counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"] + counts["BOTH_DIFFER_FROM_AOT_WIKT"],
         "unscored_function_word_occurrences": counts["FUNCTION_WORD_CONTEXT_REQUIRED"],
         "unscored_monosyllable_occurrences": counts["MONOSYLLABLE_NOT_SCORED"],
         "no_independent_reference_occurrences": counts["NO_INDEPENDENT_REFERENCE"],
