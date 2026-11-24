@@ -61,6 +61,11 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The long dictionary run may finish after other commits land on this branch.
+          # Rebase onto its latest head so the push only adds generated outputs and
+          # does not try to rewrite workflow files without the workflows permission.
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
           git add \
             experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt \
             experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_review.tsv \
