@@ -80,7 +80,7 @@ class StressCorrectionMergerTest {
             original = "самое",
             ruVoice = "с+амое",
             prediction = IndependentStressPrediction(
-                "самоё\\u0301",
+                "самоё\u0301",
                 listOf(StressDecision.STRESSED),
                 listOf(YoDecision.RESTORE_YO),
                 listOf(YoDecisionSource.CONTEXTUAL_HOMOGRAPH),
@@ -108,7 +108,7 @@ class StressCorrectionMergerTest {
             original = "желтый",
             ruVoice = "желтый",
             prediction = IndependentStressPrediction(
-                "жё\\u0301лтый",
+                "жё\u0301лтый",
                 listOf(StressDecision.STRESSED),
                 listOf(YoDecision.RESTORE_YO),
                 listOf(YoDecisionSource.FIXED_DICTIONARY),
