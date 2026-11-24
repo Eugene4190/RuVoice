@@ -285,13 +285,20 @@ def main() -> int:
     wikt = load_wiktionary(args.wiktionary_gz, target_words)
     system = read_ruvoice_system(args.system_dictionary)
 
-    # Reconstruct the independent RUAccent merged output by occurrence coordinates.
+    # Use the complete independently merged token stream, not only changed-token samples.
     ruaccent_by_occurrence: dict[tuple[int, int], str] = {}
-    for row in paired.get("changes", []):
-        if "segment_index" not in row or "word_index" not in row:
-            continue
-        if row.get("type") in {"STRESS", "STRESS_AND_YO", "YO"}:
-            ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(row.get("after", ""))
+    for row in paired.get("combined_tokens", []):
+        if "segment_index" in row and "word_index" in row:
+            ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(
+                row.get("ruaccent_merged_output", "")
+            )
+    # Backward-compatible fallback for an older paired report.
+    if not ruaccent_by_occurrence:
+        for row in paired.get("changes", []):
+            if "segment_index" not in row or "word_index" not in row:
+                continue
+            if row.get("type") in {"STRESS", "STRESS_AND_YO", "YO"}:
+                ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(row.get("after", ""))
 
     occurrence_rows: list[list[Any]] = []
     aggregate: dict[str, dict[str, Any]] = {}
