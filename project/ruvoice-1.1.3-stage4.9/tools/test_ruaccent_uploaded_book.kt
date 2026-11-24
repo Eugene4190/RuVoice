@@ -136,7 +136,7 @@ private fun extractBlocksFromXhtml(bytes: ByteArray): List<String> {
         current.setLength(0)
         val letters = text.count { it.isLetter() }
         val cyrillic = text.count { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }
-        if (text.length >= 30 && letters >= 20 && cyrillic >= letters * 0.45) result += text
+        if (text.length >= 3 && letters >= 2 && cyrillic >= letters * 0.45) result += text
     }
     fun visit(node: Node, inIgnored: Boolean = false) {
         if (node.nodeType == Node.TEXT_NODE || node.nodeType == Node.CDATA_SECTION_NODE) {
