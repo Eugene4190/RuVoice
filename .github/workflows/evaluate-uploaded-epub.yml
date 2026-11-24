@@ -21,6 +21,27 @@ jobs:
       - name: Check out private repository and uploaded book
         uses: actions/checkout@v4
 
+      - name: Record this evaluation run ID for direct diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p private-files
+          cat > private-files/ruaccent-book-run.json <<EOF
+          {
+            "run_id": "$GITHUB_RUN_ID",
+            "run_attempt": "$GITHUB_RUN_ATTEMPT",
+            "run_url": "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID",
+            "commit": "$GITHUB_SHA"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f private-files/ruaccent-book-run.json
+          git commit -m "Record real EPUB RUAccent evaluation run"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
