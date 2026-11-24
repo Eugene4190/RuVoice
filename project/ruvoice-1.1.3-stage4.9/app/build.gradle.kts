@@ -14,12 +14,12 @@ android {
     defaultConfig {
         // Isolated Stage 4.13 package: can be installed beside official RuVoice and Stage 4.12
         // without uninstalling the previous test build or deleting its downloaded RUAccent model.
-        applicationId = "ru.kost.ruvoice.improved.stage414"
+        applicationId = "ru.kost.ruvoice.improved.stage415"
         // ONNX Runtime Android 1.32.0 requires API 24; official RuVoice stays untouched.
         minSdk = 24
         targetSdk = 35
-        versionCode = 10108
-        versionName = "1.1.3-improved-4.14"
+        versionCode = 10109
+        versionName = "1.1.3-improved-4.15"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
