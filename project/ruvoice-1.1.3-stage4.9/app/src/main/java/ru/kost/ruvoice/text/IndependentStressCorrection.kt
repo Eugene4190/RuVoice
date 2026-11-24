@@ -12,7 +12,7 @@ import java.util.Locale
 enum class StressDecision {
     /** Модель уверенно определила ударное слово и вернула позицию в [IndependentStressPrediction.text]. */
     STRESSED,
-    /** Классификатор контекста явно выбрал NO_STRESS: автоматический знак RuVoice можно снять. */
+    /** RUAccent leaves the token unmarked. The hybrid keeps Silero's existing mark on polysyllabic fallback words. */
     UNSTRESSED,
     /** Слово не распознано, находится вне словаря/контекста или прогноз неуверенный. */
     UNKNOWN,
@@ -308,8 +308,11 @@ internal object StressCorrectionMerger {
                 mergedBase.setCharAt(p, replacement)
             }
 
-            // STRESSED переопределяет автоматическую позицию RuVoice, UNSTRESSED снимает её,
-            // UNKNOWN сохраняет прежний результат (например, если слово вне словаря модели).
+            // RUAccent STRESS задаёт/исправляет позицию. NO_STRESS означает, что сам RUAccent
+            // оставляет токен без отметки, а не то, что нужно стирать Silero fallback:
+            // для многосложного слова сохраняем штатное ударение, как в ruaccent-silero.
+            // Односложные токены оставляем без плюса: их ударение однозначно и не требует
+            // подсказки синтезатору. UNKNOWN всегда сохраняет исходный результат.
             // Без полного выравнивания decision-меток безопасно считаем все слова UNKNOWN.
             val decision = prediction.decisions.getOrNull(i)
                 ?.takeIf { prediction.decisions.size == src.size } ?: StressDecision.UNKNOWN
@@ -317,7 +320,9 @@ internal object StressCorrectionMerger {
                 // Если модель заявила STRESSED, но не указала позицию U+0301,
                 // прогноз внутренне противоречив: не стираем и не переносим знак.
                 StressDecision.STRESSED -> predictedParsed.stressed.ifEmpty { currentParsed.stressed }
-                StressDecision.UNSTRESSED -> emptySet()
+                StressDecision.UNSTRESSED -> if (currentParsed.base.count { it.lowercaseChar() in VOWELS } >= 2) {
+                    currentParsed.stressed
+                } else emptySet()
                 StressDecision.UNKNOWN -> currentParsed.stressed
             }
             val rendered = buildString(mergedBase.length + selectedStress.size) {
