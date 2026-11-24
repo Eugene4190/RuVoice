@@ -927,6 +927,7 @@ class UploadedEpubPairedEvaluationTest {
                         if (changeRows.length() < 15000) {
                             changeRows.put(JSONObject()
                                 .put("type", "TOKEN_ALIGNMENT_OR_LEXICAL_CHANGE")
+                                .put("segment_index", segmentIndex)
                                 .put("chapter", segment.chapter)
                                 .put("paragraph", segment.paragraph)
                                 .put("part", segment.part)
@@ -988,6 +989,7 @@ class UploadedEpubPairedEvaluationTest {
                                 stressChanged -> "STRESS"
                                 else -> "YO"
                             })
+                            .put("segment_index", segmentIndex)
                             .put("chapter", segment.chapter)
                             .put("paragraph", segment.paragraph)
                             .put("part", segment.part)
