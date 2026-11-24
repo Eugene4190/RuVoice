@@ -77,6 +77,29 @@ class StressCorrectionMergerTest {
         )
     }
 
+    @Test fun `safe dictionary ё survives a contextual keep-e prediction`() {
+        val yo = YoDict(sequenceOf("объём"))
+        val protected = SafeYoDictionaryProtection.findProtectedIndices(
+            original = "объем",
+            ruVoice = "об+ъём",
+            restoreFromSafeDictionary = yo::restore,
+        )
+        assertEquals(setOf(0), protected)
+
+        val result = StressCorrectionMerger.merge(
+            original = "объем",
+            ruVoice = "об+ъём",
+            prediction = IndependentStressPrediction(
+                "обе́м",
+                listOf(StressDecision.UNKNOWN),
+                listOf(YoDecision.KEEP_E),
+                listOf(YoDecisionSource.CONTEXTUAL_HOMOGRAPH),
+            ),
+            protectedYoIndices = protected,
+        )
+        assertEquals("об+ъём", result)
+    }
+
     @Test fun `system stress dictionary protects normative снято from RUAccent`() {
         val result = StressCorrectionMerger.merge(
             original = "снято",
