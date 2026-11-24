@@ -25,7 +25,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "маркирована", 2, 1, {1: {"маркировать:short"}},
             {1: {"маркировать:short"}, 2: {"маркированный:meaning"}}, set()
         )
-        self.assertEqual(status, "BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT")
+        self.assertEqual(status, "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS")
 
     def test_two_source_consensus_can_identify_a_candidate(self) -> None:
         status, _ = quality.verdict(
