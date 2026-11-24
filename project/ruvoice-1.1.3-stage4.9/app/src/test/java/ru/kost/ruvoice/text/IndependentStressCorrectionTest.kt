@@ -78,6 +78,19 @@ class IndependentStressCorrectionTest {
         assertEquals("+это и", merged)
     }
 
+    @Test fun noStressDecisionRemovesHyphenatedEnclitics() {
+        val prediction = IndependentStressPrediction(
+            text = "кто-нибудь, что-либо, всё-таки",
+            decisions = List(6) { StressDecision.UNSTRESSED },
+        )
+        val merged = StressCorrectionMerger.merge(
+            original = "кто-нибудь, что-либо, всё-таки",
+            ruVoice = "кто-н+ибудь, что-л+ибо, всё-та+ки",
+            prediction = prediction,
+        )
+        assertEquals("кто-нибудь, что-либо, всё-таки", merged)
+    }
+
     @Test fun unknownDecisionDoesNotEraseExistingMark() {
         val prediction = IndependentStressPrediction(
             text = "редкое имя",
