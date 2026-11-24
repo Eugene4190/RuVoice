@@ -691,8 +691,8 @@ class UploadedEpubPairedEvaluationTest {
                 "Conflicting duplicate book override: $key ($previous vs $value)"
             }
         }
-        check(bookOverrides.size == 4) {
-            "Expected exactly four reviewed book-specific overrides, found ${bookOverrides.size}"
+        check(bookOverrides.size == 5) {
+            "Expected exactly five reviewed book-specific overrides, found ${bookOverrides.size}"
         }
         val reviewedStressDict = LinkedHashMap(systemStressDict).apply { putAll(bookOverrides) }
 
