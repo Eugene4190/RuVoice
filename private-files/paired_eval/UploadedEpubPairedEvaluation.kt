@@ -689,6 +689,57 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
             sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
 
+            // End-to-end spelling regressions: the real Silero + RUAccent + production merge
+            // must preserve safe book spellings and reject the 28 known contextual ё mistakes.
+            val yoRegressionFile = File(projectDir, "tools/data/ruaccent_yo_book_regressions.json")
+            check(yoRegressionFile.isFile) { "Missing ё book regression corpus: $yoRegressionFile" }
+            val yoCases = JSONObject(yoRegressionFile.readText(Charsets.UTF_8)).getJSONArray("cases")
+            var yoRegressionPassed = 0
+            val yoRegressionResults = JSONArray()
+            for (caseIndex in 0 until yoCases.length()) {
+                val item = yoCases.getJSONObject(caseIndex)
+                val caseId = item.getString("id")
+                val sourceText = item.getString("text")
+                val expected = item.getJSONArray("expect").getJSONObject(0)
+                val targetWord = expected.getString("word")
+                val expectedLabel = expected.getString("label")
+                val sourceTokens = wordRegex.findAll(sourceText).toList()
+                val targetIndex = sourceTokens.indexOfFirst {
+                    plain(it.value).replace('ё', 'е') == plain(targetWord).replace('ё', 'е')
+                }
+                check(targetIndex >= 0) { "Ё regression $caseId: target '$targetWord' is missing" }
+
+                val baselineText = readable(sourceText, baselineStress)
+                val mergedText = readable(sourceText, combinedStress)
+                val baselineTokens = wordRegex.findAll(baselineText).toList()
+                val mergedTokens = wordRegex.findAll(mergedText).toList()
+                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
+                    "Ё regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
+                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
+                }
+                val baselineWord = baselineTokens[targetIndex].value
+                val mergedWord = mergedTokens[targetIndex].value
+                val actualLabel = if (mergedWord.any { it == 'ё' || it == 'Ё' }) "YO" else "NO_YO"
+                check(actualLabel == expectedLabel) {
+                    "Ё regression $caseId: expected $expectedLabel, baseline='$baselineWord', " +
+                        "merged='$mergedWord', expected word='$targetWord'"
+                }
+                yoRegressionPassed++
+                yoRegressionResults.put(JSONObject()
+                    .put("id", caseId)
+                    .put("expected", expectedLabel)
+                    .put("baseline", baselineWord)
+                    .put("merged", mergedWord)
+                    .put("result", "PASS"))
+            }
+            check(yoRegressionPassed == yoCases.length()) {
+                "Only $yoRegressionPassed/${yoCases.length()} end-to-end ё regression cases passed"
+            }
+            sanity.put("book_yo_regression_cases_passed", yoRegressionPassed)
+            sanity.put("book_yo_regression_cases_total", yoCases.length())
+            sanity.put("book_yo_regression_results", yoRegressionResults)
+            println("BOOK_YO_END_TO_END=PASS cases=$yoRegressionPassed/${yoCases.length()}")
+
             val paragraphs = epubParagraphs(epub)
             val segments = makeSegments(paragraphs)
             require(segments.isNotEmpty()) { "No text segments extracted from EPUB" }
