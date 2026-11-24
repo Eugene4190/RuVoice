@@ -255,7 +255,7 @@ def build(args: argparse.Namespace) -> int:
 
     candidate_review_tsv = output_dir / "Book_AutoStress_Candidate_Review.tsv"
     with candidate_review_tsv.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.writer(stream, delimiter="\\t")
+        writer = csv.writer(stream, delimiter="\t")
         writer.writerow(["word", "proposed_stress", "frequency_in_book", "source", "status"])
         for entry in candidates:
             frequency = entry.note.split("=", 1)[1] if "=" in entry.note else ""
