@@ -169,7 +169,7 @@ jobs:
           python3 tools/system_dicts.py
           test -s "app/src/main/assets/dicts/stress/Системный.txt"
           test -s "app/src/main/assets/dicts/replace/Системный.txt"
-          grep -Eq '^снято[[:space:]]+сн\\+ято([[:space:]]|$)' "app/src/main/assets/dicts/stress/Системный.txt"
+          grep -Fxq 'снято сн+ято' "app/src/main/assets/dicts/stress/Системный.txt"
 
       - name: Run Android unit tests and build separate RuVoice Improved APK
         id: android-build
