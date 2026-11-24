@@ -115,17 +115,17 @@ class BookDictionaryTests(unittest.TestCase):
             out = root / "out"
 
             book.write_text("обо", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
-            approved.write_text("# empty\\n", encoding="utf-8")
-            pool.write_text("обо об+о\\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
+            approved.write_text("# empty\n", encoding="utf-8")
+            pool.write_text("обо об+о\n", encoding="utf-8")
             audit.write_text(
-                "word\\tstress\\tsource\\n"
-                "обо\\tоб+о\\taot_wiktionary_silero_consensus\\n",
+                "word\tstress\tsource\n"
+                "обо\tоб+о\taot_wiktionary_silero_consensus\n",
                 encoding="utf-8",
             )
             rules.write_text(
-                "word\\taction\\treason\\tsource\\n"
-                "обо\\tWITHHOLD_UNSTRESSED\\tслужебный предлог\\thttps://gramota.ru\\n",
+                "word\taction\treason\tsource\n"
+                "обо\tWITHHOLD_UNSTRESSED\tслужебный предлог\thttps://gramota.ru\n",
                 encoding="utf-8",
             )
 
