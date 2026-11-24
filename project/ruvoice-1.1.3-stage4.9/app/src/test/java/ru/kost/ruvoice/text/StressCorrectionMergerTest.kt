@@ -67,9 +67,11 @@ class StressCorrectionMergerTest {
             emptySet<Int>(),
             SafeYoDictionaryProtection.findProtectedIndices("самое", "само+ё") { null },
         )
+        // A dictionary candidate is not considered protected unless the current
+        // RuVoice pass actually restored that exact safe-dictionary spelling.
         assertEquals(
             emptySet<Int>(),
-            SafeYoDictionaryProtection.findProtectedIndices("объем лес", "объ+ём лес") {
+            SafeYoDictionaryProtection.findProtectedIndices("объем", "объем") {
                 if (it == "объем") "объём" else null
             },
         )
