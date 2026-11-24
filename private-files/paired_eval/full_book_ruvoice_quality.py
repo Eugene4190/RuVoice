@@ -415,13 +415,14 @@ def main() -> int:
         "word_occurrences_with_some_independent_reference": sum(counts[s] for s in scored),
         "occurrences_in_strict_aot_wikt_single_stress_consensus": (
             counts["BOTH_MATCH_AOT_WIKT"] +
+            counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] +
             counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] +
             counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"] +
             counts["BOTH_DIFFER_FROM_AOT_WIKT"]
         ),
         "ruvoice_matches_two_source_consensus_and_variants": counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"],
         "ruvoice_suspected_mismatches_against_two_sources": counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] + counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] + counts["SHARED_VARIANTS_BUT_BASELINE_OUTSIDE"],
-        "ruaccent_matches_two_source_consensus_and_variants": counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"],
+        "ruaccent_matches_two_source_consensus_and_variants": (counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_ONE_OF_SHARED_VARIANTS"] + counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] + counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"]),
         "ruaccent_suspected_mismatches_against_two_sources": counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"] + counts["BOTH_DIFFER_FROM_AOT_WIKT"],
         "unscored_function_word_occurrences": counts["FUNCTION_WORD_CONTEXT_REQUIRED"],
         "unscored_monosyllable_occurrences": counts["MONOSYLLABLE_NOT_SCORED"],
