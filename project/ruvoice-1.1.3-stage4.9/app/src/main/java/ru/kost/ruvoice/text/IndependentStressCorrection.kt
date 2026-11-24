@@ -25,11 +25,20 @@ enum class YoDecision {
     UNKNOWN,
 }
 
+/** Provenance of a spelling decision; contextual model guesses are less trusted than fixed entries. */
+enum class YoDecisionSource {
+    UNKNOWN,
+    AUTHOR_INPUT,
+    FIXED_DICTIONARY,
+    CONTEXTUAL_HOMOGRAPH,
+}
+
 /** Прогноз модели и решения по ударению/«ё» для каждого слова в том же порядке, что в тексте. */
 data class IndependentStressPrediction(
     val text: String,
     val decisions: List<StressDecision>,
     val yoDecisions: List<YoDecision> = emptyList(),
+    val yoDecisionSources: List<YoDecisionSource> = emptyList(),
 )
 
 fun interface IndependentStressCorrector {
@@ -40,6 +49,7 @@ fun interface IndependentStressCorrector {
 internal data class YoDictionaryResolution(
     val word: String,
     val decision: YoDecision,
+    val source: YoDecisionSource = YoDecisionSource.UNKNOWN,
 )
 
 /**
@@ -85,7 +95,7 @@ internal object RuAccentYoDictionaryPolicy {
     ): YoDictionaryResolution {
         // An author's explicit ё is not a dictionary/model correction target.
         if (sourceWord.any { it == 'ё' || it == 'Ё' }) {
-            return YoDictionaryResolution(sourceWord, YoDecision.UNKNOWN)
+            return YoDictionaryResolution(sourceWord, YoDecision.UNKNOWN, YoDecisionSource.AUTHOR_INPUT)
         }
 
         val safeFixed = fixedWord?.takeIf { isValidEntry(sourceWord, it) }
@@ -102,7 +112,14 @@ internal object RuAccentYoDictionaryPolicy {
             modelConfidence = modelConfidence,
             confidenceThreshold = confidenceThreshold,
         )
-        return YoDictionaryResolution(transferCase(sourceWord, selected), decision)
+        val source = when {
+            confidentYoHomograph -> YoDecisionSource.CONTEXTUAL_HOMOGRAPH
+            safeFixed != null -> YoDecisionSource.FIXED_DICTIONARY
+            modelConfidence >= confidenceThreshold && safeHomograph != null && decision != YoDecision.UNKNOWN ->
+                YoDecisionSource.CONTEXTUAL_HOMOGRAPH
+            else -> YoDecisionSource.UNKNOWN
+        }
+        return YoDictionaryResolution(transferCase(sourceWord, selected), decision, source)
     }
 
     private fun transferCase(source: String, target: String): String {
@@ -329,6 +346,10 @@ internal object StressCorrectionMerger {
             val currentYo = currentParsed.yo
             val yoDecision = prediction.yoDecisions.getOrNull(i)
                 ?.takeIf { prediction.yoDecisions.size == src.size } ?: YoDecision.UNKNOWN
+            val yoSource = prediction.yoDecisionSources.getOrNull(i)
+                ?.takeIf { prediction.yoDecisionSources.size == src.size } ?: YoDecisionSource.UNKNOWN
+            val untrustedContextualYo = yoSource == YoDecisionSource.CONTEXTUAL_HOMOGRAPH
+            val effectiveYoDecision = if (untrustedContextualYo) YoDecision.UNKNOWN else yoDecision
             for (p in mergedBase.indices) {
                 val ch = mergedBase[p]
                 if (ch != 'е' && ch != 'Е' && ch != 'ё' && ch != 'Ё') continue
@@ -337,9 +358,9 @@ internal object StressCorrectionMerger {
                 // RuVoice's current choice. Never turn every е in a word into ё at once.
                 // A curated safe-dictionary restoration outranks RUAccent's later
                 // contextual NO_YO decision. The model may still choose stress independently.
-                val useYo = p in originalYo || if (i in protectedYoIndices) {
+                val useYo = p in originalYo || if (i in protectedYoIndices || untrustedContextualYo) {
                     p in currentYo
-                } else when (yoDecision) {
+                } else when (effectiveYoDecision) {
                     YoDecision.RESTORE_YO -> p in predictedParsed.yo
                     YoDecision.KEEP_E -> false
                     YoDecision.UNKNOWN -> p in currentYo
@@ -368,7 +389,9 @@ internal object StressCorrectionMerger {
             // A native stress mark on ё is protected: moving it to another vowel would
             // contradict the spelling signal carried by ё itself (e.g. пройд+ённый).
             val nativeYoStress = currentParsed.stressed.filterTo(LinkedHashSet()) { it in currentParsed.yo }
-            val selectedStress = when (decision) {
+            // The contextual ё classifier and the stress-usage model share the same possibly
+            // wrong homograph reading. Do not let that reading relocate stress either.
+            val selectedStress = if (untrustedContextualYo) currentParsed.stressed else when (decision) {
                 // If STRESSED comes without a usable acute marker, do not erase a native mark.
                 StressDecision.STRESSED ->
                     nativeYoStress.ifEmpty { predictedParsed.stressed.ifEmpty { currentParsed.stressed } }
