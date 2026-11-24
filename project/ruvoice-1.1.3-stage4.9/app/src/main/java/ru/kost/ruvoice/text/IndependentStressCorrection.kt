@@ -201,6 +201,7 @@ internal object StressCorrectionMerger {
         ruVoice: String,
         independent: String,
         userDictionaryKeys: Set<String> = emptySet(),
+        protectedStressIndices: Set<Int> = emptySet(),
     ): String {
         val sourceWords = wordRegex.findAll(original).map { it.value }.toList()
         val currentWords = wordRegex.findAll(ruVoice).map { it.value }.toList()
@@ -221,7 +222,11 @@ internal object StressCorrectionMerger {
                 }
             }
         } else emptyList()
-        return merge(original, ruVoice, IndependentStressPrediction(independent, decisions, yoDecisions), userDictionaryKeys)
+        return merge(
+            original, ruVoice,
+            IndependentStressPrediction(independent, decisions, yoDecisions),
+            userDictionaryKeys, protectedStressIndices,
+        )
     }
 
     fun merge(
@@ -229,6 +234,7 @@ internal object StressCorrectionMerger {
         ruVoice: String,
         prediction: IndependentStressPrediction,
         userDictionaryKeys: Set<String> = emptySet(),
+        protectedStressIndices: Set<Int> = emptySet(),
     ): String {
         val src = wordRegex.findAll(original).toList()
         val current = wordRegex.findAll(ruVoice).toList()
@@ -268,7 +274,10 @@ internal object StressCorrectionMerger {
             // или нормализации незнакомого слова лучше оставить RuVoice, чем применить чужую позицию.
             val sourceKey = normalizeKey(sourceParsed.base)
             if (sourceKey != normalizeKey(currentParsed.base) || sourceKey != normalizeKey(predictedParsed.base)) continue
-            if (sourceKey in protectedKeys || i in protectedTokenIndices) continue
+            // Надёжное грамматическое решение штатного RuVoice (gramPass) имеет приоритет над
+            // конфликтующим нейросетевым омографом. Иначе RUAccent может перезаписать, например,
+            // вин. мн. «в р+уки» формой род. ед. «руки́».
+            if (sourceKey in protectedKeys || i in protectedTokenIndices || i in protectedStressIndices) continue
             // Явно заданное ударение в исходном тексте — инструкция пользователя, а не прогноз RuVoice.
             if (hasExplicitStressMarker(sourceToken)) continue
 
