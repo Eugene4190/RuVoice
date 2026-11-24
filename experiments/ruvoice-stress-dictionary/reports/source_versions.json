@@ -1,0 +1,6 @@
+{
+  "upstream_repository": "https://github.com/kost-t-human/ruvoice-tts.git",
+  "upstream_commit": "6ae704fc52c029f444a29bd78ee1b59b9e92bbf0",
+  "aot_repository": "https://github.com/sokirko74/morph_dict.git",
+  "wikt_dump": "/home/runner/work/RuVoice/RuVoice/experiments/ruvoice-stress-dictionary/data/raw/raw-wiktextract-data.jsonl.gz"
+}
