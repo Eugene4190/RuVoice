@@ -721,6 +721,7 @@ class UploadedEpubPairedEvaluationTest {
             "двадцать" to "дв+адцать",
             "десять" to "д+есять",
             "издревле" to "издр+евле",
+            "утолщилась" to "утолщ+илась",
         )
         check(bookOverrides == expectedBookOverrides) {
             "Book-specific override set differs from reviewed manifest: $bookOverrides"
@@ -732,7 +733,7 @@ class UploadedEpubPairedEvaluationTest {
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
         // Three independent full-book passes: untouched production baseline; production with
-        // the reviewed phrase hint and six book-only dictionary corrections; RUAccent on top
+        // the reviewed phrase hint and seven book-only dictionary corrections; RUAccent on top
         // of the untouched baseline. This isolates the impact of RuVoice-specific fixes.
         val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
@@ -806,6 +807,13 @@ class UploadedEpubPairedEvaluationTest {
             }
             check(izdrevleReviewed.contains("издре́вле", ignoreCase = true)) {
                 "Book override must use the normative stress in 'издревле': $izdrevleReviewed"
+            }
+            val utolshilasReviewed = readable(
+                "Ветвь системы значений утолщилась? Утолщилась.",
+                reviewedStress, data
+            )
+            check(Regex("(?i)утолщи́лась").findAll(utolshilasReviewed).count() == 2) {
+                "Book override must accent both occurrences of утолщилась on и: $utolshilasReviewed"
             }
 
             // Run the five manually reviewed stress cases before the separate ё suite.
