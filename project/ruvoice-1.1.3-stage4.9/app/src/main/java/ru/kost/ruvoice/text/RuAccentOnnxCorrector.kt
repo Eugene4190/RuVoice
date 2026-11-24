@@ -181,12 +181,14 @@ internal class RuAccentOnnxCorrector(private val root: File) : IndependentStress
         val output = StringBuilder(input)
         val decisions = ArrayList<StressDecision>(wordSpans.size)
         val yoDecisions = ArrayList<YoDecision>(wordSpans.size)
+        val yoDecisionSources = ArrayList<YoDecisionSource>(wordSpans.size)
         for (wordIndex in wordSpans.indices.reversed()) {
             val span = wordSpans[wordIndex]
             val sourceWord = input.substring(span.start, span.end)
             if (wordIndex in unsafeJoinedWords) {
                 decisions.add(0, StressDecision.UNKNOWN)
                 yoDecisions.add(0, YoDecision.UNKNOWN)
+                yoDecisionSources.add(0, YoDecisionSource.UNKNOWN)
                 continue
             }
             val modelWord = modelText.substring(span.start, span.end)
@@ -196,6 +198,7 @@ internal class RuAccentOnnxCorrector(private val root: File) : IndependentStress
             if (!cyrillic) {
                 decisions.add(0, StressDecision.UNKNOWN)
                 yoDecisions.add(0, YoDecision.UNKNOWN)
+                yoDecisionSources.add(0, YoDecisionSource.UNKNOWN)
                 continue
             }
             val pipelineIndex = pipelineSpans.indexOfFirst { span.start >= it.start && span.start < it.end }
@@ -204,6 +207,7 @@ internal class RuAccentOnnxCorrector(private val root: File) : IndependentStress
             if (pipelineIndex < 0 || pipelineSpans[pipelineIndex].text != modelWord) {
                 decisions.add(0, StressDecision.UNKNOWN)
                 yoDecisions.add(0, YoDecision.UNKNOWN)
+                yoDecisionSources.add(0, YoDecisionSource.UNKNOWN)
                 continue
             }
             val usage = stressPredictions.getOrNull(pipelineIndex)
@@ -214,6 +218,7 @@ internal class RuAccentOnnxCorrector(private val root: File) : IndependentStress
             val yoResolution = resolveYoWord(sourceWord, lowerModelWord, yo)
             var rendered = yoResolution.word
             yoDecisions.add(0, yoResolution.decision)
+            yoDecisionSources.add(0, yoResolution.source)
 
             // 2. Контекстный NLI-омограф. Все кандидаты видят один и тот же yoContext snapshot.
             val lowerAfterYo = rendered.lowercase(Locale.ROOT)
@@ -277,7 +282,7 @@ internal class RuAccentOnnxCorrector(private val root: File) : IndependentStress
             decisions.add(0, decision)
             output.replace(span.start, span.end, rendered)
         }
-        return IndependentStressPrediction(output.toString(), decisions, yoDecisions)
+        return IndependentStressPrediction(output.toString(), decisions, yoDecisions, yoDecisionSources)
     }
 
     private fun resolveYoWord(
