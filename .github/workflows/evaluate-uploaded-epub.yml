@@ -6,6 +6,7 @@ on:
     paths:
       - "private-files/8.Iskusstvo..epub"
       - "private-files/paired_eval/**"
+      - "project/ruvoice-1.1.3-stage4.9/app/build.gradle.kts"
       - "private-files/paired_eval/build_book_stress_audit.py"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/IndependentStressCorrection.kt"
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/RuAccentOnnxCorrector.kt"
