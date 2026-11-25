@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,15 @@ def read_stress_entries(path: Path) -> dict[str, str]:
     return result
 
 
+def _jar_contains(path: Path, entry: str) -> bool:
+    """Check a JVM archive without extracting it into the runtime directory."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return entry in archive.namelist()
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 def _require_runtime() -> dict[str, Path]:
     paths = {
         "java": ENGINE / "jre" / "bin" / "java.exe",
@@ -89,6 +99,7 @@ def _require_runtime() -> dict[str, Path]:
         "context_rules": ENGINE / "reference" / "book_context_acceptances.tsv",
         "reference_overrides": ENGINE / "reference" / "book_reviewed_overrides.txt",
         "reference_replacements": ENGINE / "reference" / "book_reviewed_replacements.txt",
+        "audit_scripts": ENGINE / "audit-scripts",
     }
     for key in ("java", "eyo", "torch_exe", "torch_script", "third_model", "system_stress", "system_replace", "hard_e"):
         if not paths[key].is_file():
@@ -96,14 +107,31 @@ def _require_runtime() -> dict[str, Path]:
     for key in ("classes", "libs", "project", "silero", "native", "aot"):
         if not paths[key].is_dir():
             raise FileNotFoundError(f"Не найдена папка локального движка RuVoice: {paths[key].name}")
-    required_classes = [
-        paths["classes"] / "ru" / "kost" / "ruvoice" / "text" / "UploadedEpubPairedEvaluationMain.class",
-        paths["classes"] / "ru" / "kost" / "ruvoice" / "text" / "RuAccentBridgeKt.class",
-    ]
-    if any(not item.is_file() for item in required_classes):
-        raise FileNotFoundError("Не собран полный JVM runtime оригинального RuVoice.")
-    if not any(paths["libs"].glob("*.jar")):
+    main_class = paths["classes"] / "ru" / "kost" / "ruvoice" / "text" / "UploadedEpubPairedEvaluationMain.class"
+    if not main_class.is_file():
+        raise FileNotFoundError("Не собран основной JVM-класс полного аудита оригинального RuVoice.")
+
+    jars = [path for path in paths["libs"].glob("*.jar") if path.is_file()]
+    if not jars:
         raise FileNotFoundError("Не найдены JVM-зависимости локального RuVoice.")
+    required_jar_entries = {
+        "ru/kost/ruvoice/text/RuAccentBridgeKt.class": "Не собран отдельный JVM-мост RUAccent.",
+        "org/junit/runner/JUnitCore.class": "Не включена библиотека JUnit для запуска полного аудита.",
+        "org/json/JSONObject.class": "Не включена библиотека JSON для обмена между JVM-процессами.",
+    }
+    for entry, message in required_jar_entries.items():
+        if not any(_jar_contains(jar, entry) for jar in jars):
+            raise FileNotFoundError(message)
+
+    for key in ("audit_scripts",):
+        if not paths[key].is_dir():
+            raise FileNotFoundError(f"Не найдена папка локального движка RuVoice: {paths[key].name}")
+    for filename in ("full_book_ruvoice_quality.py", "package_ruvoice_import.py"):
+        if not (paths["audit_scripts"] / filename).is_file():
+            raise FileNotFoundError(f"Не найден модуль полного аудита: {filename}")
+    for key in ("reference_overrides", "reference_replacements"):
+        if not paths[key].is_file():
+            raise FileNotFoundError(f"Не найден проверенный книжный ресурс: {paths[key].name}")
     return paths
 
 
