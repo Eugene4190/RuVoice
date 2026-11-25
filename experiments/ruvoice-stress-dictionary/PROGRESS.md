@@ -344,3 +344,15 @@
 **Словарный CI:** run #238 [45616797675](https://github.com/Eugene4190/RuVoice/actions/runs/45616797675), HEAD `bb7c462` — success: 38 Python unit tests, 26 paired-evaluation tests, gold seed validation, построение книжного дополнения, проверки snapshot/overrides и оба EPUB-сканирования прошли. Полный системный scan по-прежнему сообщает 18 конфликтных ключей; все они удерживаются.
 
 **Отдельный paired run:** baseline vs RUAccent evaluation run #162 [45615871250](https://github.com/Eugene4190/RuVoice/actions/runs/45615871250) на HEAD `12c0e81` оставался in progress на момент записи; его результат не учитывается как подтверждение Kotlin regression.
+
+### 2026-11-25 — Дополнительная проверка источников review queue
+
+Все P001–P010 из data/gold/review_queue.tsv повторно сверены с указанными страницами Грамоты. Результаты и прямые ссылки сохранены в reports/gold-review-queue-source-crosscheck.md.
+
+Сверка подтвердила варианты красивее, поняла, приняла, взяла, договор/до́говор, балУется, берег/берёг и два разных слова пахта (па́хта — молочный продукт; пахта́ — хлопок). Особое внимание: P006 — именно форма «балУется», а не инфинитив «баловАться»; P009/P010 — разные лексемы, не варианты одного слова.
+
+Это дополнительная source-check проверка ChatGPT, а не независимая вторая лингвистическая разметка. Все десять строк остаются AWAITING_SECOND_LINGUIST_REVIEW и не входят в gold seed / evaluator.
+
+CI контрольной точки: focused Kotlin Full/Lite workflow run #5 — success, оба Gradle JVM test task завершились BUILD SUCCESSFUL; APK не собирался. Dictionary workflow run #239 — success: 38 словарных тестов, 26 paired-evaluation тестов, gold validation, reference book build и полные сканы прошли. Полный системный scan по-прежнему сообщает 18 конфликтных ключей.
+
+Branch HEAD при проверке: f49541cd9d1c9bdb60fd9dd78622881d74bd7725. PR #1 остаётся открытым Draft; main не менялся.
