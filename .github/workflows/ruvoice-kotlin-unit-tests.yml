@@ -1,6 +1,9 @@
 name: RuVoice Kotlin stress-merge unit tests
 
 on:
+  push:
+    branches:
+      - stress-dictionary-pipeline
   pull_request:
     paths:
       - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/**"
