@@ -29,12 +29,13 @@ SOURCE_URL = "https://kaikki.org/ruwiktionary/rawdata.html"
 ACCENT = "\u0301"
 VOWELS = set("аеёиоуыэюя")
 CYRILLIC_FORM_RE = re.compile(r"^[а-яё\u0301-]+$", re.IGNORECASE)
+# "canonical" is intentionally retained: Wiktextract uses it for a stressed
+# headword-line form that can differ from the page title (see its extractor guide).
 SKIP_TAGS = {
     "romanization",
     "table-tags",
     "inflection-template",
     "class",
-    "canonical",
 }
 
 
