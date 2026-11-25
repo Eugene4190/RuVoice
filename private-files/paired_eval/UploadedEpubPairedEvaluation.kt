@@ -770,6 +770,7 @@ class UploadedEpubPairedEvaluationTest {
             }
         }
         val expectedBookOverrides = mapOf(
+            "снято" to "сн+ято",
             "несчастлив" to "несчастл+ив",
             "отнята" to "отнят+а",
             "шумы" to "ш+умы",
