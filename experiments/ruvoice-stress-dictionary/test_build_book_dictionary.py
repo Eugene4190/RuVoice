@@ -147,5 +147,141 @@ class BookDictionaryTests(unittest.TestCase):
             self.assertIn("WITHHOLD_UNSTRESSED", review_text)
 
 
+    def test_provenance_keeps_e_and_yo_spellings_as_distinct_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            audit = Path(tmp) / "audit.tsv"
+            audit.write_text(
+                "word\\tstress\\tsource\\n"
+                "берёг\\tбер+ёг\\taot_wiktionary_silero_consensus\\n"
+                "берег\\tб+ерег\\tstage49_existing\\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                tool.load_provenance(audit),
+                {"берёг": "aot_wiktionary_silero_consensus"},
+            )
+
+    def test_e_yo_alias_without_exact_spelling_is_held_for_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("берег", encoding="utf-8")
+            system.write_text("# empty\\n", encoding="utf-8")
+            approved.write_text("# empty\\n", encoding="utf-8")
+            pool.write_text("берёг бер+ёг\\n", encoding="utf-8")
+            audit.write_text(
+                "word\\tstress\\tsource\\n"
+                "берёг\\tбер+ёг\\taot_wiktionary_silero_consensus\\n"
+                "берег\\tб+ерег\\tstage49_existing\\n",
+                encoding="utf-8",
+            )
+
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            self.assertEqual(tool.build(args), 0)
+
+            candidate_text = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
+            self.assertNotIn("берег ", candidate_text)
+            review_text = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
+            self.assertIn("ORTHOGRAPHY_ALIAS_REVIEW", review_text)
+            self.assertIn("берёг", review_text)
+            report = __import__("json").loads((out / "Book_Report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["new_candidate_forms"], 0)
+            self.assertEqual(report["conflict_forms"], 1)
+
+    def test_e_yo_alias_with_different_stress_is_held_even_with_exact_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("берег", encoding="utf-8")
+            system.write_text("# empty\\n", encoding="utf-8")
+            approved.write_text("# empty\\n", encoding="utf-8")
+            pool.write_text(
+                "берег б+ерег\\n"
+                "берёг бер+ёг\\n",
+                encoding="utf-8",
+            )
+            audit.write_text(
+                "word\\tstress\\tsource\\n"
+                "берег\\tб+ерег\\taot_wiktionary_silero_consensus\\n"
+                "берёг\\tбер+ёг\\tstage49_existing\\n",
+                encoding="utf-8",
+            )
+
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            self.assertEqual(tool.build(args), 0)
+
+            candidate_text = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
+            self.assertNotIn("берег ", candidate_text)
+            review_text = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
+            self.assertIn("ORTHOGRAPHY_ALIAS_REVIEW", review_text)
+            self.assertIn("другое положение ударения", review_text)
+
+    def test_e_yo_alias_with_same_stress_position_keeps_exact_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("холеной", encoding="utf-8")
+            system.write_text("# empty\\n", encoding="utf-8")
+            approved.write_text("# empty\\n", encoding="utf-8")
+            pool.write_text(
+                "холеной хол+ёной\\n"
+                "холёной хол+ёной\\n",
+                encoding="utf-8",
+            )
+            audit.write_text(
+                "word\\tstress\\tsource\\n"
+                "холеной\\tхол+ёной\\taot_wiktionary_silero_consensus\\n"
+                "холёной\\tхол+ёной\\tstage49_existing\\n",
+                encoding="utf-8",
+            )
+
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            self.assertEqual(tool.build(args), 0)
+
+            candidate_text = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
+            self.assertIn("холеной хол+еной", candidate_text)
+            review_text = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
+            self.assertNotIn("ORTHOGRAPHY_ALIAS_REVIEW", review_text)
+
+
 if __name__ == "__main__":
     unittest.main()
