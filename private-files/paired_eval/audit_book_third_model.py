@@ -413,7 +413,7 @@ def main() -> int:
         "# Подтверждённые книжные исправления: RUAccent и независимая модель согласны, "
         "и ударение поддержано хотя бы одним словарём.\n"
         "# Только отдельный словарь для этой книги; не добавлять в глобальный Системный.txt.\n"
-        + ("\\n".join(confirmed_lines) + "\\n" if confirmed_lines else ""),
+        + ("\n".join(confirmed_lines) + "\n" if confirmed_lines else ""),
         encoding="utf-8",
     )
     oov_path = args.output_dir / "Book_Three_Model_OOV_Review.txt"
@@ -421,12 +421,12 @@ def main() -> int:
         "# Повторяющиеся авторские/редкие формы: две модели согласны минимум в трёх вхождениях, "
         "но независимой словарной статьи нет.\n"
         "# ЭТО НЕ ГОТОВЫЙ ИМПОРТ: отдельная очередь проверки.\n"
-        + ("\\n".join(oov_lines) + "\\n" if oov_lines else ""),
+        + ("\n".join(oov_lines) + "\n" if oov_lines else ""),
         encoding="utf-8",
     )
     evidence_path = args.output_dir / "Book_Three_Model_Override_Evidence.tsv"
     with evidence_path.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.writer(stream, delimiter="\\t")
+        writer = csv.writer(stream, delimiter="\t")
         writer.writerow([
             "tier", "word", "book_frequency", "ruvoice_position", "consensus_position",
             "aot_positions", "wiktionary_positions", "chapters", "sample_contexts",
@@ -435,7 +435,7 @@ def main() -> int:
         writer.writerows(evidence_rows)
     auto_summary_path = args.output_dir / "Book_Three_Model_Override_Summary.json"
     auto_summary_path.write_text(
-        json.dumps(auto_summary, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8"
+        json.dumps(auto_summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 
     summary = {
