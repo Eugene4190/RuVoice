@@ -9,6 +9,7 @@ on:
       - "project/ruvoice-1.1.3-stage4.9/build.gradle.kts"
       - "project/ruvoice-1.1.3-stage4.9/settings.gradle.kts"
       - "project/ruvoice-1.1.3-stage4.9/buildSrc/**"
+      - "private-files/paired_eval/UploadedEpubPairedEvaluation.kt"
       - ".github/workflows/ruvoice-kotlin-unit-tests.yml"
   workflow_dispatch:
 
@@ -67,6 +68,16 @@ jobs:
             --output app/libs/executorch-1.5.0-xnnpack.aar
           unzip -tq app/libs/executorch-1.5.0-xnnpack.aar
           unzip -l app/libs/executorch-1.5.0-xnnpack.aar | grep -q 'classes.jar'
+
+      - name: Compile the complete whole-book paired evaluator
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text"
+          mkdir -p "$TARGET"
+          cp private-files/paired_eval/UploadedEpubPairedEvaluation.kt "$TARGET/UploadedEpubPairedEvaluation.kt"
+          gradle --no-daemon --stacktrace \
+            :app:compileFullDebugUnitTestKotlin
 
       - name: Run focused Full and Lite JVM tests (no APK build)
         working-directory: project/ruvoice-1.1.3-stage4.9
