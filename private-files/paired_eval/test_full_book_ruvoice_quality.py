@@ -105,7 +105,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "издревле": "издр+евле",
             "утолщилась": "утолщ+илась",
             "арбайт": "+арбайт",
-            "средами": "с+редами",
+            "средами": "ср+едами",
             "сапинс": "с+апинс",
             "взаимовымогательства": "взаимовымог+ательства",
             "взаимовымогающим": "взаимовымог+ающим",
@@ -116,6 +116,13 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "самосуществования": "самосуществов+ания",
         }
         self.assertEqual(entries, expected)
+        # The '+' marker must be immediately before the stressed vowel, not a consonant.
+        vowels = "аеёиоуыэюя"
+        for word, variant in entries.items():
+            self.assertEqual(variant.count("+"), 1, word)
+            marker = variant.index("+")
+            self.assertLess(marker + 1, len(variant), word)
+            self.assertIn(variant[marker + 1].lower(), vowels, word)
         expected_positions = {
             "несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0,
             "десять": 0, "издревле": 1, "утолщилась": 2,
