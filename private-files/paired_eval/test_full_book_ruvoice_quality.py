@@ -114,6 +114,10 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "нетелесного": "нетел+есного",
             "религиообразовании": "религиообразов+ании",
             "самосуществования": "самосуществов+ания",
+            "биополя": "биопол+я",
+            "призывного": "приз+ывного",
+            "челюстей": "ч+елюстей",
+            "рефлекторное": "рефл+екторное",
         }
         self.assertEqual(entries, expected)
         # The '+' marker must be immediately before the stressed vowel, not a consonant.
@@ -131,6 +135,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "внутриличностных": 2, "неприспособление": 4,
             "нетелесного": 2, "религиообразовании": 7,
             "самосуществования": 5,
+            "биополя": 3, "призывного": 1, "челюстей": 0, "рефлекторное": 1,
         }
         vowels = set("аеёиоуыэюя")
         for word, variant in entries.items():
