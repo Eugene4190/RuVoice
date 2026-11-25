@@ -299,7 +299,7 @@ internal object StressCorrectionMerger {
         val predicted = wordRegex.findAll(prediction.text).toList()
         if (src.isEmpty() || src.size != current.size || src.size != predicted.size) return ruVoice
 
-        val protectedKeys = userDictionaryKeys.mapTo(HashSet()) { normalizeKey(it) }
+        val protectedKeys = userDictionaryKeys.mapTo(HashSet()) { normalizeExactKey(it) }
         val protectedTokenIndices = protectedCompoundComponents(original, src, protectedKeys)
         // Explicit stress on one component is an explicit instruction for the complete hyphenated
         // form (e.g. an author's "по-мо+ему" must not be partly rewritten).
@@ -331,11 +331,12 @@ internal object StressCorrectionMerger {
             // Строгое сопоставление по буквам (ё/е считаются одной графемой). При сдвиге токенов
             // или нормализации незнакомого слова лучше оставить RuVoice, чем применить чужую позицию.
             val sourceKey = normalizeKey(sourceParsed.base)
+            val exactSourceKey = normalizeExactKey(sourceParsed.base)
             if (sourceKey != normalizeKey(currentParsed.base) || sourceKey != normalizeKey(predictedParsed.base)) continue
             // Надёжное грамматическое решение штатного RuVoice (gramPass) имеет приоритет над
             // конфликтующим нейросетевым омографом. Иначе RUAccent может перезаписать, например,
             // вин. мн. «в р+уки» формой род. ед. «руки́».
-            if (sourceKey in protectedKeys || i in protectedTokenIndices || i in protectedStressIndices) continue
+            if (exactSourceKey in protectedKeys || i in protectedTokenIndices || i in protectedStressIndices) continue
             // Явно заданное ударение в исходном тексте — инструкция пользователя, а не прогноз RuVoice.
             if (hasExplicitStressMarker(sourceToken)) continue
 
@@ -444,7 +445,7 @@ internal object StressCorrectionMerger {
                     if (gap.none { it == '-' }) break
                 }
                 val phrase = original.substring(words[start].range.first, words[end].range.last + 1)
-                if (normalizeKey(phrase) in protectedKeys) {
+                if (normalizeExactKey(phrase) in protectedKeys) {
                     for (index in start..end) protected += index
                 }
                 end++
@@ -490,10 +491,13 @@ internal object StressCorrectionMerger {
         return ParsedWord(base.toString(), stressed, yo)
     }
 
-    private fun normalizeKey(word: String): String = word
+    /** Model alignment treats е/ё as the same grapheme; user-dictionary protection does not. */
+    private fun normalizeKey(word: String): String = normalizeExactKey(word).replace('ё', 'е')
+
+    /** Exact case-insensitive key used for user-dictionary protection and compound matching. */
+    private fun normalizeExactKey(word: String): String = word
         .filter { it.isLetter() || it == '-' }
         .lowercase(Locale.ROOT)
-        .replace('ё', 'е')
 
     private const val MAX_COMPOUND_PARTS = 8
 }
