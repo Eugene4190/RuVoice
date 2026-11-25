@@ -12,6 +12,36 @@ from personal_book_workflow import DEFAULT_PRIVATE_HOME, process_book
 MAX_BYTES = 256 * 1024 * 1024
 ALLOWED = {".epub", ".txt", ".html", ".htm"}
 
+
+def validate_setup(private_home: Path, required_paths=None) -> Path:
+    required = required_paths or (
+        build_book_dictionary.DEFAULT_SYSTEM,
+        build_book_dictionary.DEFAULT_POOL,
+        build_book_dictionary.DEFAULT_AUDIT,
+        build_book_dictionary.DEFAULT_RULES,
+    )
+    missing = [str(path) for path in required if not Path(path).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Не найдены файлы словарного pipeline. Запустите инструмент из полного checkout "
+            "репозитория RuVoice. Отсутствуют: " + ", ".join(missing)
+        )
+    private_home = private_home.expanduser().resolve()
+    private_home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        os.chmod(private_home, 0o700)
+    except OSError:
+        pass
+    try:
+        fd, probe = tempfile.mkstemp(prefix=".ruvoice-write-check-", dir=private_home)
+        os.close(fd)
+        Path(probe).unlink(missing_ok=True)
+    except OSError as exc:
+        raise PermissionError(
+            f"Нет прав на запись в приватную папку {private_home}: {exc}"
+        ) from exc
+    return private_home
+
 def parse_multipart(content_type: str, body: bytes):
     envelope = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode() + body
     msg = BytesParser(policy=policy.default).parsebytes(envelope)
@@ -156,10 +186,15 @@ def main():
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("порт должен быть от 1024 до 65535")
-    home = args.private_home.expanduser().resolve()
+    try:
+        home = validate_setup(args.private_home)
+    except (OSError, FileNotFoundError, PermissionError) as exc:
+        print(f"Не удалось запустить инструмент: {exc}", file=sys.stderr)
+        return 1
     server = Server(("127.0.0.1", args.port), home)
     url = f"http://127.0.0.1:{args.port}/"
     print(f"Откройте {url}. Сервер доступен только на этом компьютере; Ctrl+C — остановить.")
+    print(f"Приватная папка словаря и ZIP: {home}")
     if not args.no_browser:
         import webbrowser
         webbrowser.open(url)
