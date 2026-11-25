@@ -985,16 +985,21 @@ class UploadedEpubPairedEvaluationTest {
                 val targetWord = item.getString("word")
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
-                val sourceTokens = wordRegex.findAll(sourceText).toList()
+                val checkedWithBookOverlay = caseId == "silks-plural-01"
+                val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
+                val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
                 check(targetIndex >= 0) { "Stress regression $caseId: target '$targetWord' is missing" }
 
                 val baselineText = readable(sourceText, baselineStress)
-                val mergedText = readable(sourceText, combinedStress)
+                val mergedText = if (checkedWithBookOverlay)
+                    readable(sourceText, reviewedStress, data, bookReplacements)
+                else readable(sourceText, combinedStress)
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
                 val mergedTokens = wordRegex.findAll(mergedText).toList()
                 check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
-                    "Stress regression $caseId: token alignment changed"
+                    "Stress regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
+                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
                 }
                 val baselineWord = baselineTokens[targetIndex].value
                 val mergedWord = mergedTokens[targetIndex].value
@@ -1065,9 +1070,9 @@ class UploadedEpubPairedEvaluationTest {
                 val newWords = wordRegex.findAll(combined).toList()
                 val sourceWords = wordRegex.findAll(baselineSource.replace("+", "")).toList()
 
-                // The book overlay is deliberately narrow: only its seven exact wordforms
-                // and the one contextual phrase may change. This catches accidental loading
-                // of the entire experimental phrases_extra.txt collection.
+                // The book overlay is deliberately narrow: only its reviewed wordforms and
+                // two explicit contextual phrases may change. This catches accidental loading
+                // of the experimental phrases_extra.txt collection.
                 check(oldWords.size == reviewedWords.size) {
                     "Reviewed pipeline changed token alignment in segment " + segmentIndex
                 }
