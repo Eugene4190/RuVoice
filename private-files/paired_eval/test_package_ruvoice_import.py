@@ -89,7 +89,7 @@ class PackageRuVoiceImportTests(unittest.TestCase):
             root = Path(temp)
             book, quality, replacements = self.make_fixture(root)
             (quality / "Book_Importable_Stress_Overrides.txt").write_text(
-                "замок зам+ок\nзамок за+мок\n", encoding="utf-8"
+                "замок зам+ок\nзамок з+амок\n", encoding="utf-8"
             )
             with self.assertRaisesRegex(ValueError, "конфликтующая"):
                 package.package(
