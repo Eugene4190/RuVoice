@@ -28,6 +28,8 @@ jobs:
           python -m py_compile \
             experiments/ruvoice-stress-dictionary/book_tool_paths.py \
             experiments/ruvoice-stress-dictionary/private_book_server.py \
+            experiments/ruvoice-stress-dictionary/local_full_book_workflow.py \
+            experiments/ruvoice-stress-dictionary/test_local_full_book_workflow.py \
             experiments/ruvoice-stress-dictionary/personal_book_workflow.py \
             experiments/ruvoice-stress-dictionary/test_book_tool_paths.py \
             experiments/ruvoice-stress-dictionary/test_private_book_server.py \
