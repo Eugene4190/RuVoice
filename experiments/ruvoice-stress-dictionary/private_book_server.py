@@ -168,7 +168,8 @@ class Handler(BaseHTTPRequestHandler):
             self.server.downloads[key] = Path(result["archive"])
             note = (
                 f"ZIP готов. Проверено словоупотреблений: {result['ledger_coverage_percent']}% покрытия; "
-                f"словарь: {result['new_entry_count']} ударений и {result['replacement_rule_count']} контекстных правил."
+                f"слов для ударения: {result['new_entry_count']}; "
+                f"контекстных правил: {result['replacement_rule_count']}."
             )
             if result["already_processed"]:
                 note += " (эта книга уже обрабатывалась ранее; история сохранена)"

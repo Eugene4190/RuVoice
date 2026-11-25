@@ -140,6 +140,8 @@ class PrivateUploadFormTests(unittest.TestCase):
                         "archive": str(archive_path),
                         "new_entry_count": 2,
                         "cumulative_entry_count": 7,
+                        "ledger_coverage_percent": 100.0,
+                        "replacement_rule_count": 3,
                         "already_processed": False,
                     }
 
@@ -168,7 +170,8 @@ class PrivateUploadFormTests(unittest.TestCase):
                     result_page = response.read().decode("utf-8")
                 self.assertEqual(response.status, 200)
                 self.assertIn("ZIP готов", result_page)
-                self.assertIn("Новых записей: 2", result_page)
+                self.assertIn("слов для ударения: 2", result_page)
+                self.assertIn("контекстных правил: 3", result_page)
                 self.assertEqual(seen["book_name"], "A.epub")
                 self.assertFalse(seen["upload"].exists())
                 self.assertFalse(seen["replacement"].exists())

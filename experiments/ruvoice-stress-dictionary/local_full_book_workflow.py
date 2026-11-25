@@ -299,21 +299,16 @@ def process_book(book: Path, *, private_home: Path, book_name: str | None = None
         if not auto_overrides.is_file():
             raise RuntimeError("Независимая модель не создала список подтверждённых кандидатов.")
 
-        has_manual_stress = bool(read_stress_entries(manual_overrides))
         has_auto_stress = bool(read_stress_entries(auto_overrides))
-        has_book_replacements = any(
-            line.strip() and not line.lstrip().startswith("#")
-            for line in book_replacements.read_text(encoding="utf-8-sig").splitlines()
-        )
-        needs_final_production_pass = has_manual_stress or has_auto_stress or has_book_replacements
-
-        if needs_final_production_pass:
+        if has_auto_stress:
+            # The first paired run already validates manual word/phrase overlays.
+            # Only newly generated automatic rules require another full production pass.
             _run_java(paths, book, paired, work, private_home, digest, book_replacements, manual_overrides, auto_overrides)
             final_quality = work / "final-quality"
             _run_quality_module(paths, work, paired, final_quality, paths["context_rules"] if is_reference else None)
         else:
-            # No pronunciation rule was created. The first full-book RuVoice report
-            # is already the final state; do not repeat an identical inference run.
+            # No new automatic correction was created. The reviewed stream in the first
+            # paired run is already the final state; do not repeat identical neural inference.
             final_quality = first_quality
         final_replacements = final_quality / "Book_Importable_Replacements.txt"
         shutil.copyfile(book_replacements, final_replacements)
