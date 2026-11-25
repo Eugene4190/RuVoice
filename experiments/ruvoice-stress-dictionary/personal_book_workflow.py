@@ -38,6 +38,16 @@ MASTER_NAME = "RuVoice_Accumulated_Approved.txt"
 STATE_NAME = "book_history.json"
 PENDING_NAME = "pending_approval.json"
 
+# This reviewed overlay belongs only to the exact EPUB that was listened to
+# and reviewed. It must never leak into the global append-only master.
+REFERENCE_BOOK_SHA256 = "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
+BOOK_REVIEWED_OVERRIDES_PATH = REPO_ROOT / "private-files/paired_eval/book_reviewed_overrides.txt"
+BOOK_REFERENCE_AUDIT_FILES = (
+    (REPO_ROOT / "private-files/paired_eval/book_context_acceptances.tsv", "Book_Context_Acceptances.tsv"),
+    (REPO_ROOT / "private-files/paired_eval/BOOK_REVIEWED_OVERRIDES.md", "Book_Reviewed_Overrides_Notes.md"),
+    (REPO_ROOT / "experiments/ruvoice-stress-dictionary/reports/8-Iskusstvo-stress-movements-review.tsv", "Book_Stress_Movement_Review.tsv"),
+)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -333,6 +343,66 @@ def _build_book_replacements(
     return content, review, auto_count
 
 
+def _build_reviewed_stress_overrides(
+    book: Path,
+    book_sha256: str,
+    *,
+    source_path: Path | None = None,
+) -> tuple[str, int]:
+    """Return the human-reviewed overlay for its exact reference EPUB only."""
+    header = (
+        "# Проверенные вручную исправления только для книги «Искусство».
+"
+        "# Импортировать отдельным списком RuVoice; НЕ добавлять в глобальный Системный.txt
+"
+        "# или личный накопительный мастер: некоторые формы зависят от контекста книги.
+"
+    )
+    if book_sha256 != REFERENCE_BOOK_SHA256:
+        return header + "# Для этой книги проверенный книжный overlay не найден.
+", 0
+
+    path = Path(source_path) if source_path is not None else BOOK_REVIEWED_OVERRIDES_PATH
+    if not path.is_file():
+        return header + "# Файл проверенных книжных исправлений отсутствует в поставке инструмента.
+", 0
+
+    book_text = extract_text(book)
+    selected: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        word, marked = parts[0], parts[1]
+        if not re.search(r"(?<![\w])" + re.escape(word) + r"(?![\w])", book_text, re.IGNORECASE | re.UNICODE):
+            continue
+        key = word.lower()
+        previous = selected.get(key)
+        if previous is not None and previous != marked:
+            raise ValueError(f"Конфликт проверенных книжных ударений для {word}: {previous} / {marked}")
+        selected[key] = marked
+
+    content = header + "".join(f"{word} {marked}\n" for word, marked in sorted(selected.items()))
+    return content, len(selected)
+
+
+def _copy_reference_audit_files(book_sha256: str, output_dir: Path) -> list[Path]:
+    """Copy human review evidence only for the exact book hash it describes."""
+    if book_sha256 != REFERENCE_BOOK_SHA256:
+        return []
+    copied: list[Path] = []
+    for source, output_name in BOOK_REFERENCE_AUDIT_FILES:
+        source = Path(source)
+        if source.is_file():
+            destination = output_dir / output_name
+            shutil.copyfile(source, destination)
+            copied.append(destination)
+    return copied
+
+
 def _write_replacement_review(path: Path, rows: list[list[str]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream, delimiter="\t")
@@ -524,6 +594,14 @@ def process_book(
         snapshot_path = builder_output / "MyBooks_Cumulative.txt"
         shutil.copyfile(master, snapshot_path)
 
+        reviewed_override_filename = f"{book_stem}_Reviewed_Stress_Overrides.txt"
+        reviewed_override_path = builder_output / reviewed_override_filename
+        reviewed_override_content, reviewed_override_count = _build_reviewed_stress_overrides(
+            book, digest
+        )
+        _atomic_text(reviewed_override_path, reviewed_override_content)
+        reference_audit_files = _copy_reference_audit_files(digest, builder_output)
+
         replacement_filename = f"{book_stem}_Replacements.txt"
         replacement_path = builder_output / replacement_filename
         replacements_dir = private_root / "replacements"
@@ -582,6 +660,9 @@ def process_book(
             "private_storage": True,
             "per_book_replacements_persisted": True,
             "auto_selected_reviewed_phrase_rules": auto_phrase_count,
+            "book_reviewed_override_count": reviewed_override_count,
+            "book_reviewed_override_is_separate_from_cumulative_master": True,
+            "book_reference_audit_files": [path.name for path in reference_audit_files],
             "book_text_included_in_package": False,
         }
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -591,12 +672,27 @@ def process_book(
             guide_path, display_name, delta_filename, replacement_filename, has_replacements,
             already_processed=was_processed,
         )
+        if reviewed_override_count:
+            with guide_path.open("a", encoding="utf-8", newline="\n") as stream:
+                stream.write(
+                    f"\nПРОВЕРЕННЫЙ КНИЖНЫЙ СЛОЙ: импортируйте {reviewed_override_filename} "
+                    "отдельным списком во вкладку «Ударения». Он подготовлен только для этой книги "
+                    "и намеренно не включён в MyBooks_Cumulative.txt. Не переносите его в глобальный Системный.txt.\n"
+                )
+        if reference_audit_files:
+            with guide_path.open("a", encoding="utf-8", newline="\n") as stream:
+                stream.write(
+                    "\nДИАГНОСТИКА КНИГИ: приложены проверенные контекстные исключения, обоснования "
+                    "и список разногласий RuVoice/RUAccent. Файлы с пометкой UNREVIEWED_NOT_GOLD "
+                    "являются очередью проверки, а не готовыми правилами импорта. Не импортируйте их.\n"
+                )
         history_snapshot = builder_output / "MyBooks_History.json"
         shutil.copyfile(history_path, history_snapshot)
 
         archive_path = package_dir / f"{_safe_stem(Path(display_name).stem)}-{digest[:10]}.zip"
         include = [
             delta_path, snapshot_path, history_snapshot, replacement_path, replacement_review_path,
+            reviewed_override_path, *reference_audit_files,
             guide_path, report_path, builder_output / "Book_AutoStress_Review.tsv",
             builder_output / "Book_Unresolved_Words.tsv",
         ]
