@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
@@ -119,7 +120,7 @@ tasks.register<Sync>("assembleDesktopAuditRuntime") {
         val jars = lib.listFiles()?.filter { it.extension == "jar" }.orEmpty()
         check(jars.isNotEmpty()) { "Desktop whole-book audit dependencies were not packaged" }
         fun contains(entry: String) = jars.any { jar ->
-            runCatching { java.util.zip.ZipFile(jar).use { it.getEntry(entry) != null } }.getOrDefault(false)
+            runCatching { ZipFile(jar).use { archive -> archive.getEntry(entry) != null } }.getOrDefault(false)
         }
         check(contains("org/junit/runner/JUnitCore.class")) { "JUnit runtime was not packaged" }
         check(contains("org/json/JSONObject.class")) { "JSON runtime was not packaged" }
