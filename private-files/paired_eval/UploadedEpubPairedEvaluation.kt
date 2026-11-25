@@ -1260,7 +1260,7 @@ class UploadedEpubPairedEvaluationTest {
                 .put("segment_contexts", segmentContexts)
 
             reportFile.parentFile?.mkdirs()
-            reportFile.bufferedWriter(Charsets.UTF_8).use { writer -> summary.write(writer) }
+            reportFile.writeText(summary.toString(2), Charsets.UTF_8)
             println("PAIRED_BOOK_SUMMARY segments=" + segments.size +
                 " words=" + wordCount + " changed_segments=" + changedSegments + " changed_tokens=" + changedTokens +
                 " stress_changes=" + stressChanges + " added=" + stressAdded + " removed=" + stressRemoved +

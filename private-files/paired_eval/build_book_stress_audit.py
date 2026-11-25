@@ -74,6 +74,70 @@ def read_provenance(path: Path) -> dict[str, set[str]]:
     return result
 
 
+
+def parse_positions(raw: str | None) -> set[int]:
+    """Parse comma-separated stress-vowel positions from the complete quality TSV."""
+    if not raw:
+        return set()
+    return {int(value.strip()) for value in re.split(r"[,;]", str(raw)) if value.strip()}
+
+
+def read_quality_occurrences(path: Path) -> dict[tuple[int, int], dict[str, str]]:
+    """Index full AOT/Wiktionary occurrence evidence by segment and word coordinates."""
+    required = {
+        "segment_index", "word_index", "aot_stress_positions",
+        "wiktionary_stress_positions", "aot_source_details",
+        "wiktionary_source_details", "baseline_status", "reviewed_status",
+    }
+    result: dict[tuple[int, int], dict[str, str]] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        missing = required.difference(reader.fieldnames or [])
+        if missing:
+            raise ValueError("Whole-book quality TSV is missing columns: " + ", ".join(sorted(missing)))
+        for row in reader:
+            key = (int(row["segment_index"]), int(row["word_index"]))
+            if key in result:
+                raise ValueError(f"Duplicate quality TSV occurrence coordinates: {key}")
+            result[key] = row
+    return result
+
+
+def quality_source_assessment(
+    row: dict[str, str] | None,
+    before_pos: int | None,
+    after_pos: int | None,
+) -> tuple[set[int], set[int], set[int], str]:
+    """Return AOT, Wiktionary, common positions and a variant-aware source verdict."""
+    if row is None:
+        return set(), set(), set(), "QUALITY_ROW_MISSING"
+
+    aot_positions = parse_positions(row.get("aot_stress_positions"))
+    wiktionary_positions = parse_positions(row.get("wiktionary_stress_positions"))
+    shared_positions = aot_positions & wiktionary_positions
+
+    if not aot_positions and not wiktionary_positions:
+        verdict = "NO_INDEPENDENT_REFERENCE"
+    elif aot_positions and wiktionary_positions and not shared_positions:
+        verdict = "AOT_WIKTIONARY_DISAGREE_NO_SHARED_VARIANT"
+    elif before_pos in shared_positions and after_pos in shared_positions:
+        verdict = "CONSENSUS_SUPPORTS_BOTH_VARIANTS"
+    elif before_pos in shared_positions:
+        verdict = "CONSENSUS_SUPPORTS_RUVOICE"
+    elif after_pos in shared_positions:
+        verdict = "CONSENSUS_SUPPORTS_RUACCENT"
+    elif shared_positions:
+        verdict = "CONSENSUS_SUPPORTS_OTHER_VARIANT"
+    else:
+        available = aot_positions | wiktionary_positions
+        if before_pos in available and after_pos not in available:
+            verdict = "SINGLE_SOURCE_SUPPORTS_RUVOICE"
+        elif after_pos in available and before_pos not in available:
+            verdict = "SINGLE_SOURCE_SUPPORTS_RUACCENT"
+        else:
+            verdict = "SINGLE_SOURCE_OR_VARIANT_REVIEW"
+    return aot_positions, wiktionary_positions, shared_positions, verdict
+
 def describe_support(
     expected: int | None,
     positions: set[int],
@@ -109,6 +173,7 @@ def main() -> int:
     parser.add_argument("--system-dictionary", type=Path, required=True)
     parser.add_argument("--auto-dictionary", type=Path, required=True)
     parser.add_argument("--provenance", type=Path, required=True)
+    parser.add_argument("--quality-occurrences", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -116,12 +181,15 @@ def main() -> int:
     system = read_marked_dictionary(args.system_dictionary)
     auto = read_marked_dictionary(args.auto_dictionary)
     provenance = read_provenance(args.provenance)
+    quality_occurrences = read_quality_occurrences(args.quality_occurrences)
 
     raw_rows = paired.get("review_candidates", [])
     if not raw_rows:
         raise SystemExit("The paired evaluator has no review_candidates; rerun the full-book evaluator.")
 
     detail_rows: list[list[Any]] = []
+    quality_rows_joined = 0
+    quality_rows_missing = 0
     grouped: dict[tuple[str, int | None, int | None, str], list[dict[str, Any]]] = defaultdict(list)
 
     for row in raw_rows:
@@ -147,18 +215,19 @@ def main() -> int:
         sys_positions = system.get(key, set())
         auto_positions = auto.get(key, set())
         auto_sources = provenance.get(key, set())
-        consensus_positions = auto_positions if "aot_wiktionary_silero_consensus" in auto_sources else set()
+        curated_consensus_positions = (
+            auto_positions if "aot_wiktionary_silero_consensus" in auto_sources else set()
+        )
+        quality_key = (int(row["segment_index"]), int(row["word_index"]))
+        quality_row = quality_occurrences.get(quality_key)
+        aot_positions, wiktionary_positions, consensus_positions, consensus_verdict = (
+            quality_source_assessment(quality_row, before_pos, after_pos)
+        )
+        quality_rows_joined += quality_row is not None
+        quality_rows_missing += quality_row is None
 
         if is_clitic:
             consensus_verdict = "NOT_A_DICTIONARY_WORD: clitic/particle"
-        elif not consensus_positions:
-            consensus_verdict = "NO_AOT_WIKTIONARY_CONSENSUS_ENTRY"
-        elif after_pos in consensus_positions:
-            consensus_verdict = "CONSENSUS_SUPPORTS_RUACCENT"
-        elif before_pos in consensus_positions:
-            consensus_verdict = "CONSENSUS_SUPPORTS_RUVOICE"
-        else:
-            consensus_verdict = "CONSENSUS_HAS_DIFFERENT_OR_MULTIPLE_STRESS"
 
         if is_clitic:
             system_verdict = "CLITIC_NOT_FOR_STRESS_DICTIONARY"
@@ -177,9 +246,17 @@ def main() -> int:
         if is_clitic:
             priority = "EXCLUDE_FROM_WORD_DICTIONARY"
         elif consensus_verdict == "CONSENSUS_SUPPORTS_RUACCENT" and system_verdict != "BUILTIN_SUPPORTS_RUVOICE":
-            priority = "HIGHER_PRIORITY_REVIEW_RUACCENT_AND_CONSENSUS_AGREE"
+            priority = "HIGHER_PRIORITY_REVIEW_RUACCENT_AND_BOTH_SOURCES_AGREE"
         elif consensus_verdict == "CONSENSUS_SUPPORTS_RUVOICE":
-            priority = "HIGHER_PRIORITY_REVIEW_BASELINE_AND_CONSENSUS_AGREE"
+            priority = "HIGHER_PRIORITY_REVIEW_RUVOICE_AND_BOTH_SOURCES_AGREE"
+        elif consensus_verdict == "CONSENSUS_SUPPORTS_BOTH_VARIANTS":
+            priority = "BOTH_STRESS_VARIANTS_SUPPORTED_BY_BOTH_SOURCES"
+        elif consensus_verdict == "SINGLE_SOURCE_SUPPORTS_RUACCENT":
+            priority = "MANUAL_REVIEW_SINGLE_SOURCE_SUPPORTS_RUACCENT"
+        elif consensus_verdict == "SINGLE_SOURCE_SUPPORTS_RUVOICE":
+            priority = "MANUAL_REVIEW_SINGLE_SOURCE_SUPPORTS_RUVOICE"
+        elif consensus_verdict == "AOT_WIKTIONARY_DISAGREE_NO_SHARED_VARIANT":
+            priority = "MANUAL_REVIEW_AOT_WIKTIONARY_DISAGREE"
         elif system_verdict == "BUILTIN_ALLOWS_BOTH":
             priority = "NORMATIVE_VARIANT_OR_SYSTEM_ALLOWS_BOTH"
         elif system_verdict == "BUILTIN_SUPPORTS_RUVOICE":
@@ -193,6 +270,12 @@ def main() -> int:
             render_positions(consensus_positions), ";".join(sorted(auto_sources)),
             consensus_verdict, row.get("chapter", ""), row.get("paragraph", ""),
             row.get("part", ""), row.get("word_index", ""), row.get("context", ""),
+            render_positions(aot_positions), render_positions(wiktionary_positions),
+            render_positions(curated_consensus_positions),
+            quality_row.get("aot_source_details", "") if quality_row else "",
+            quality_row.get("wiktionary_source_details", "") if quality_row else "",
+            quality_row.get("baseline_status", "") if quality_row else "",
+            quality_row.get("reviewed_status", "") if quality_row else "",
         ])
         grouped[(key, before_pos, after_pos, change_kind)].append(row)
 
@@ -225,8 +308,15 @@ def main() -> int:
         "review_candidate_occurrences": len(raw_rows),
         "review_unique_keys": len({normalize(str(r.get("word", ""))) for r in raw_rows}),
         "review_unique_change_pairs": len(grouped),
+        "quality_candidate_rows_joined": quality_rows_joined,
+        "quality_candidate_rows_missing": quality_rows_missing,
         "consensus_supports_ruaccent": sum(1 for r in detail_rows if r[11] == "CONSENSUS_SUPPORTS_RUACCENT"),
         "consensus_supports_ruvoice": sum(1 for r in detail_rows if r[11] == "CONSENSUS_SUPPORTS_RUVOICE"),
+        "consensus_supports_both_variants": sum(1 for r in detail_rows if r[11] == "CONSENSUS_SUPPORTS_BOTH_VARIANTS"),
+        "single_source_supports_ruaccent": sum(1 for r in detail_rows if r[11] == "SINGLE_SOURCE_SUPPORTS_RUACCENT"),
+        "single_source_supports_ruvoice": sum(1 for r in detail_rows if r[11] == "SINGLE_SOURCE_SUPPORTS_RUVOICE"),
+        "aot_wiktionary_disagree": sum(1 for r in detail_rows if r[11] == "AOT_WIKTIONARY_DISAGREE_NO_SHARED_VARIANT"),
+        "no_independent_reference": sum(1 for r in detail_rows if r[11] == "NO_INDEPENDENT_REFERENCE"),
         "builtin_supports_ruaccent": sum(1 for r in detail_rows if r[8] == "BUILTIN_SUPPORTS_RUACCENT"),
         "builtin_supports_ruvoice": sum(1 for r in detail_rows if r[8] == "BUILTIN_SUPPORTS_RUVOICE"),
         "clitic_occurrences_excluded": sum(1 for r in detail_rows if r[0] == "EXCLUDE_FROM_WORD_DICTIONARY"),
@@ -240,8 +330,11 @@ def main() -> int:
         ["priority", "change_type", "word_key", "ruvoice_output", "ruaccent_merged_output",
          "ruvoice_stress_vowel_index", "ruaccent_stress_vowel_index",
          "built_in_stress_positions", "built_in_verdict",
-         "aot_wiktionary_stress_positions", "aot_wiktionary_provenance",
-         "aot_wiktionary_verdict", "chapter", "paragraph", "segment_part", "word_index", "context"],
+         "shared_aot_wiktionary_stress_positions", "curated_auto_provenance",
+         "aot_wiktionary_verdict", "chapter", "paragraph", "segment_part", "word_index", "context",
+         "aot_stress_positions", "wiktionary_stress_positions",
+         "curated_auto_consensus_positions", "aot_source_details", "wiktionary_source_details",
+         "full_quality_baseline_status", "full_quality_reviewed_status"],
         detail_rows,
     )
     write_tsv(

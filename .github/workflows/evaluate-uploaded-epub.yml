@@ -231,7 +231,7 @@ jobs:
           retention-days: 14
 
       - name: Build full-book contextual stress review against built-in and independent dictionary sources
-        if: always() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        if: always() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != '' && hashFiles('private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv') != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -241,6 +241,7 @@ jobs:
             --system-dictionary "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt" \
             --auto-dictionary experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt \
             --provenance experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_accepted.tsv \
+            --quality-occurrences private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv \
             --output-dir private-files/ruvoice-full-book-stress-audit
 
       - name: Upload the whole-book stress review with short text contexts
