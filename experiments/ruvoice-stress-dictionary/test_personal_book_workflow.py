@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 from analyze_book import parse_dictionary
+import personal_book_workflow as workflow
 from personal_book_workflow import process_book
 
 
@@ -125,6 +126,52 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             self.assertIn("B_New_Stress_Delta.txt", guide)
             self.assertIn("B_Replacements.txt", guide)
             self.assertIn("не импортируйте его второй раз", guide.lower())
+
+    def test_incomplete_pending_transaction_recovers_append_only_master_once(self):
+        private = self.root / "recovery-private"
+        master, state_dir, _ = workflow._ensure_private_store(private)
+        system = self.root / "system-recovery.txt"
+        system.write_text("# empty system dictionary\\n", encoding="utf-8")
+        work = private / "work" / ("a" * 64)
+        work.mkdir(parents=True)
+        candidate_file = work / "Book_AutoStress_Candidates.txt"
+        candidate_file.write_text("молоко мол+око\\n", encoding="utf-8")
+        selected_file = work / "approve_words.txt"
+        selected_file.write_text("молоко\\n", encoding="utf-8")
+        pending_path = state_dir / workflow.PENDING_NAME
+        workflow._atomic_json(pending_path, {
+            "book_sha256": "a" * 64,
+            "book_name": "Interrupted.epub",
+            "created_utc": "2026-11-25T00:00:00+00:00",
+            "new_entries": [{
+                "word": "молоко",
+                "stress": "мол+око",
+                "source": "aot_wiktionary_silero_consensus",
+                "frequency_in_book": 3,
+            }],
+            "work_dir": str(work),
+            "candidate_file": str(candidate_file),
+            "selected_file": str(selected_file),
+        })
+
+        workflow._recover_pending(private, master, system)
+        entries, conflicts = parse_dictionary(master)
+        self.assertFalse(conflicts)
+        self.assertEqual(entries, {"молоко": "мол+око"})
+        self.assertFalse(pending_path.exists())
+        history = json.loads((state_dir / workflow.STATE_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(
+            history["books"]["a" * 64]["new_entries"][0]["source"],
+            "aot_wiktionary_silero_consensus",
+        )
+
+        # Calling recovery again is a no-op: no second copy of the entry.
+        workflow._recover_pending(private, master, system)
+        rows = [
+            line for line in master.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(rows, ["молоко мол+око"])
 
     def test_reviewed_phrase_rule_is_selected_only_when_exact_phrase_occurs(self):
         contains_phrase = self.root / "contains-phrase.epub"
