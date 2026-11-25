@@ -133,5 +133,58 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         self.assertEqual(quality.acute_position("два́дцать"), 0)
 
 
+    def test_za_den_preposition_stress_is_contextual_not_verb_zaden(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        status, _ = quality.verdict(
+            "задень", 0, 0, {1: {"задеть:imperative"}}, {1: {"задеть:imperative"}}, set(),
+            "В наше восприятие за день вторгаются тысячи вещей.", rules
+        )
+        self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+        negative, _ = quality.verdict(
+            "задень", 0, 0, {1: {"задеть:imperative"}}, {1: {"задеть:imperative"}}, set(),
+            "Задень его плечом, чтобы он обернулся.", rules
+        )
+        self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+    def test_vodit_za_nos_phrase_stresses_preposition(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        status, _ = quality.verdict(
+            "занос", 0, 0, {1: {"занос:noun"}}, {1: {"занос:noun"}}, set(),
+            "Она попробовала водить его за нос.", rules
+        )
+        self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+        negative, _ = quality.verdict(
+            "занос", 0, 0, {1: {"занос:noun"}}, {1: {"занос:noun"}}, set(),
+            "Сильный ветер образовал занос у дороги.", rules
+        )
+        self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+    def test_prityanut_za_ushi_phrase_is_not_verb_zaushit(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        for context in (
+            "Притягивай за уши любое понятие к своей версии.",
+            "Это притянутой за уши интерпретацией не объяснить.",
+        ):
+            with self.subTest(context=context):
+                status, _ = quality.verdict(
+                    "зауши", 0, 0, {2: {"заушить:imperative"}}, {2: {"заушить:imperative"}},
+                    set(), context, rules
+                )
+                self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+    def test_po_svoemu_adverb_is_not_free_dative_phrase(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        status, _ = quality.verdict(
+            "своему", 0, 0, {2: {"свой:dative"}}, {2: {"свой:dative"}}, set(),
+            "Каждый поймет всё по-своему.", rules
+        )
+        self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+        negative, _ = quality.verdict(
+            "своему", 0, 0, {2: {"свой:dative"}}, {2: {"свой:dative"}}, set(),
+            "Он следовал по своему желанию.", rules
+        )
+        self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+
 if __name__ == "__main__":
     unittest.main()
