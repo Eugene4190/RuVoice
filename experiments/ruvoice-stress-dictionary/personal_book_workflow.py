@@ -47,6 +47,12 @@ def _safe_stem(value: str) -> str:
     return (cleaned[:64] or "book")
 
 
+def _book_list_stem(value: str) -> str:
+    # RuVoice importFrom() takes at most 60 characters from the TXT filename.
+    # Keep enough room for the longest suffix "_New_Stress_Delta" (17 chars).
+    return _safe_stem(value)[:43]
+
+
 def _atomic_text(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
@@ -508,7 +514,7 @@ def process_book(
             ],
         )
         _atomic_json(history_path, current_history)
-        book_stem = _safe_stem(Path(display_name).stem)
+        book_stem = _book_list_stem(Path(display_name).stem)
         delta_filename = f"{book_stem}_New_Stress_Delta.txt"
         delta_path = builder_output / delta_filename
         _atomic_text(delta_path, delta_text)
