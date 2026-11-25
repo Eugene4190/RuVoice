@@ -83,6 +83,13 @@ jobs:
           gradle --no-daemon --stacktrace \
             :app:compileFullDebugUnitTestKotlin
 
+      - name: Assemble and validate the desktop JVM runtime bundle
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:assembleDesktopAuditRuntime
+          test -s app/build/desktop-audit/classes/ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class
       - name: Run focused Full and Lite JVM tests (no APK build)
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
