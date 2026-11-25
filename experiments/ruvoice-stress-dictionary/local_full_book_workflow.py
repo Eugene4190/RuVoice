@@ -25,8 +25,9 @@ APP_ROOT = (
     if getattr(sys, "frozen", False) else REPO_ROOT
 )
 ENGINE = APP_ROOT / "engine"
-# Kotlin's default file facade for UploadedEpubPairedEvaluation.kt.
-JVM_ENTRYPOINT = "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationKt"
+# Run the JUnit test that exercises the original production RuVoice pipeline.
+JVM_JUNIT_LAUNCHER = "org.junit.runner.JUnitCore"
+JVM_PAIRED_TEST_CLASS = "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
 REFERENCE_SHA256 = "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
 LOCK = threading.RLock()
 CYR_WORD = re.compile(r"^[а-яё]+$", re.IGNORECASE)
@@ -110,9 +111,9 @@ def _require_runtime() -> dict[str, Path]:
     for key in ("classes", "libs", "project", "silero", "native", "aot"):
         if not paths[key].is_dir():
             raise FileNotFoundError(f"Не найдена папка локального движка RuVoice: {paths[key].name}")
-    main_class = paths["classes"].joinpath(*JVM_ENTRYPOINT.split(".")).with_suffix(".class")
-    if not main_class.is_file():
-        raise FileNotFoundError("Не собран основной JVM-класс полного аудита оригинального RuVoice.")
+    paired_test_class = paths["classes"].joinpath(*JVM_PAIRED_TEST_CLASS.split(".")).with_suffix(".class")
+    if not paired_test_class.is_file():
+        raise FileNotFoundError("Не собран JUnit-класс полного прохода оригинального RuVoice.")
 
     jars = [path for path in paths["libs"].glob("*.jar") if path.is_file()]
     if not jars:
@@ -164,7 +165,7 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
     java = paths["java"]
     command = [
         str(java), "-Xmx4g", "-Dfile.encoding=UTF-8", "-Djava.library.path=" + str(paths["native"]),
-        "-cp", classpath, JVM_ENTRYPOINT,
+        "-cp", classpath, JVM_JUNIT_LAUNCHER, JVM_PAIRED_TEST_CLASS,
     ]
     log = work / ("second-pass.log" if auto_overrides is not None else "first-pass.log")
     with log.open("w", encoding="utf-8", errors="replace") as stream:
