@@ -91,6 +91,48 @@ class BookAnalyzerTests(unittest.TestCase):
             self.assertNotIn("hidden", text)
             self.assertNotIn("вредныйтекст", text)
 
+    def test_extract_epub_uses_opf_spine_reading_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ordered.epub"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("mimetype", "application/epub+zip")
+                archive.writestr(
+                    "META-INF/container.xml",
+                    '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                    '<rootfiles><rootfile full-path="OPS/book.opf" '
+                    'media-type="application/oebps-package+xml"/></rootfiles></container>',
+                )
+                archive.writestr(
+                    "OPS/book.opf",
+                    '<package xmlns="http://www.idpf.org/2007/opf" version="3.0">'
+                    '<manifest>'
+                    '<item id="chapter2" href="Text/chapter2.xhtml" media-type="application/xhtml+xml"/>'
+                    '<item id="chapter10" href="Text/chapter10.xhtml" media-type="application/xhtml+xml"/>'
+                    '<item id="nav" href="Text/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'
+                    '</manifest><spine>'
+                    '<itemref idref="chapter2"/><itemref idref="chapter10"/>'
+                    '</spine></package>',
+                )
+                archive.writestr(
+                    "OPS/Text/chapter10.xhtml",
+                    "<html><body><p>ВТОРАЯ ГЛАВА ПО ПОРЯДКУ ЧТЕНИЯ</p></body></html>",
+                )
+                archive.writestr(
+                    "OPS/Text/chapter2.xhtml",
+                    "<html><body><p>ПЕРВАЯ ГЛАВА ПО ПОРЯДКУ ЧТЕНИЯ</p></body></html>",
+                )
+                archive.writestr(
+                    "OPS/Text/nav.xhtml",
+                    "<html><body><p>ОГЛАВЛЕНИЕ НЕ ВКЛЮЧАТЬ</p></body></html>",
+                )
+
+            text = tool.extract_text(path)
+            self.assertLess(
+                text.index("ПЕРВАЯ ГЛАВА ПО ПОРЯДКУ ЧТЕНИЯ"),
+                text.index("ВТОРАЯ ГЛАВА ПО ПОРЯДКУ ЧТЕНИЯ"),
+            )
+            self.assertNotIn("ОГЛАВЛЕНИЕ НЕ ВКЛЮЧАТЬ", text)
+
     def test_coverage_counts_tokens_and_missing_contexts(self):
         summary, counts, contexts, missing, hit_contexts = tool.analyze(
             "Творог и молоко. Творог стоял рядом.",
