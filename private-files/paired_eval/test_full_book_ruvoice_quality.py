@@ -116,8 +116,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "самосуществования": "самосуществов+ания",
             "биополя": "биопол+я",
             "призывного": "приз+ывного",
-            "челюстей": "ч+елюстей",
-            "рефлекторное": "рефл+екторное",
+                "рефлекторное": "рефл+екторное",
         }
         self.assertEqual(entries, expected)
         # The '+' marker must be immediately before the stressed vowel, not a consonant.
