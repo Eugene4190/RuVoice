@@ -215,7 +215,7 @@ def extract_jsonl(lines: Iterable[str], context_writer: TextIO | None = None) ->
                 separators=(",", ":"),
             )
             if context_writer is not None:
-                context_writer.write(context_json + "\\n")
+                context_writer.write(context_json + "\n")
             context_record_count += 1
 
     return Extraction(
@@ -315,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
         args.context_output.parent.mkdir(parents=True, exist_ok=True)
         with (
             open_jsonl(args.input) as source,
-            args.context_output.open("w", encoding="utf-8", newline="\\n") as context_stream,
+            args.context_output.open("w", encoding="utf-8", newline="\n") as context_stream,
         ):
             extraction = extract_jsonl(source, context_stream)
         write_tsv(args.output, extraction)
