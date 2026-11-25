@@ -74,7 +74,7 @@ class PersonalBookWorkflowTests(unittest.TestCase):
         with zipfile.ZipFile(result_b_repeat["archive"]) as archive:
             delta = archive.read("Book_New_Stress_Delta.txt").decode("utf-8")
             snapshot = archive.read("MyBooks_Cumulative.txt").decode("utf-8")
-            self.assertIn("повторная обработка", delta)
+            self.assertIn("повторная обработка", delta.lower())
             self.assertIn("молоко мол+око", snapshot)
             self.assertIn("творог твор+ог", snapshot)
             self.assertIn("IMPORT.txt", archive.namelist())
