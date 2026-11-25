@@ -209,5 +209,48 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
 
 
+    def test_final_review_contextual_variants_are_not_misclassified(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        cases = [
+            (
+                "блохами", 1, 0, {0: {"блоха:noun"}},
+                {0: {"блоха:plural"}, 1: {"блоха:variant"}},
+                "Чтобы я половил тебе блох, ходят с выловленными блохами.",
+                "Чтобы я половил тебе блох, ходят с блохами.", 1,
+            ),
+            (
+                "маркирована", 2, 1, {1: {"маркировать:linguistic"}},
+                {1: {"маркировать:linguistic"}, 2: {"маркировать:ordinary"}},
+                "Но была маркирована не как несуществующая, а как неправильная.",
+                "В лингвистике маркирована как терминологически значимая.", 2,
+            ),
+            (
+                "маркированных", 2, 1, {1: {"маркировать:linguistic"}},
+                {1: {"маркировать:linguistic"}, 2: {"маркировать:ordinary"}},
+                "Событий, маркированных нами как неприятные.",
+                "Стилистически маркированных языковых единиц.", 2,
+            ),
+            (
+                "раздроблен", 1, 2, {2: {"раздробить:participle"}},
+                {1: {"раздробленный:adjective"}, 2: {"раздроблённый:participle"}},
+                "Если человек раздроблен, ветвей может быть и несколько.",
+                "Если объект раздроблён механически.", 1,
+            ),
+            (
+                "создана", 2, 0, {0: {"создать:participle"}},
+                {0: {"созданный:colloquial"}, 2: {"созданный:normative"}},
+                "Эта система создана только для одной цели.",
+                "Эта система создана только для одной цели.", 0,
+            ),
+        ]
+        for word, before, after, aot, wikt, context, negative, negative_position in cases:
+            with self.subTest(word=word, context=context):
+                status, _ = quality.verdict(word, before, after, aot, wikt, set(), context, rules)
+                self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+            with self.subTest(word=word, context=negative):
+                status, _ = quality.verdict(word, negative_position, after, aot, wikt, set(), negative, rules)
+                self.assertNotEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+
 if __name__ == "__main__":
     unittest.main()
