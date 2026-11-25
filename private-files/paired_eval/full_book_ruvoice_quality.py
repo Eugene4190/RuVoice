@@ -385,6 +385,7 @@ def main() -> int:
             f"Неполное выравнивание книжного оверлея: reviewed={len(reviewed_by_occurrence)}, "
             f"baseline={len(tokens)}"
         )
+    is_reference_book = str(paired.get("book_sha256", "")) == "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
     override_entries = paired.get("book_reviewed_override_entries", [])
     expected_overrides = {
         "снято": "сн+ято",
@@ -413,8 +414,17 @@ def main() -> int:
         str(row.get("word", "")): str(row.get("variant", ""))
         for row in override_entries
     }
-    if actual_overrides != expected_overrides:
-        raise SystemExit(f"Набор вручную проверенных книжных исправлений отличается от манифеста: {actual_overrides}")
+    if is_reference_book and actual_overrides != expected_overrides:
+        raise SystemExit(f"Набор вручную проверенных исправлений эталонной книги отличается от манифеста: {actual_overrides}")
+    if not is_reference_book and any(
+        not CYR.fullmatch(norm(word)) or not re.fullmatch(r"[а-яё+]+", variant, re.IGNORECASE)
+        or "+" not in variant or variant.count("+") != 1
+        or variant.replace("+", "").casefold() != norm(word)
+        or variant.index("+") >= len(variant) - 1
+        or variant[variant.index("+") + 1].casefold() not in VOWELS
+        for word, variant in actual_overrides.items()
+    ):
+        raise SystemExit("Пользовательский книжный оверлей содержит некорректную запись ударения")
 
     auto_entries = paired.get("book_auto_override_entries", [])
     auto_overrides = {
@@ -598,6 +608,8 @@ def main() -> int:
     }
     summary = {
         "book": paired.get("book_file"),
+        "book_sha256": paired.get("book_sha256"),
+        "is_reference_book": is_reference_book,
         "tokens_from_ruvoice": len(tokens),
         "occurrences_in_quality_ledger": len(occurrence_rows),
         "ledger_coverage_percent": round(100 * len(occurrence_rows) / len(tokens), 4) if tokens else 100.0,

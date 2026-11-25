@@ -19,6 +19,7 @@ import ru.kost.ruvoice.DictLines
 import ru.kost.ruvoice.SileroData
 import ru.kost.ruvoice.bin.StressBin
 
+private const val REFERENCE_BOOK_SHA256 = "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
 private const val ACUTE = '\u0301'
 private const val VOWELS = "аеёиоуыэюя"
 private val wordRegex = Regex("[\\p{L}\\u0301]+")
@@ -37,6 +38,38 @@ private val reviewHomographs = setOf(
 
 private data class Paragraph(val chapter: String, val number: Int, val text: String)
 private data class BookSegment(val chapter: String, val paragraph: Int, val part: Int, val text: String, val sourceContext: String = text)
+private data class BookPhraseTarget(
+    val phrase: String,
+    val sourceWord: String,
+    val targetWord: String,
+)
+
+private fun parseBookPhraseTargets(lines: List<String>): List<BookPhraseTarget> {
+    val result = ArrayList<BookPhraseTarget>()
+    for (line in lines) {
+        val (rawKey, rawValue) = Replacements.split(line) ?: continue
+        val key = rawKey.trim()
+        val value = rawValue.trim()
+        val sourceWords = Regex("[а-яё+]+", RegexOption.IGNORE_CASE).findAll(key)
+            .map { it.value.replace("+", "").lowercase(Locale.ROOT) }.toList()
+        val targetWords = Regex("[а-яё+]+", RegexOption.IGNORE_CASE).findAll(value)
+            .map { it.value.lowercase(Locale.ROOT) }.toList()
+        if (sourceWords.size < 2 || sourceWords.size != targetWords.size) continue
+        for (index in sourceWords.indices) {
+            val target = targetWords[index]
+            if ('+' in target && target.replace("+", "") == sourceWords[index]) {
+                result += BookPhraseTarget(key, sourceWords[index], target)
+            }
+        }
+    }
+    return result.distinct()
+}
+
+private fun phraseOccurs(phrase: String, text: String): Boolean {
+    val whitespaceFlexible = Regex.escape(phrase).replace(" ", "\\s+")
+    return Regex("(?i)(?<![а-яё])$whitespaceFlexible(?![а-яё])").containsMatchIn(text)
+}
+
 
 private fun localName(node: Node): String =
     (node.localName ?: node.nodeName.substringAfter(':')).lowercase(Locale.ROOT)
@@ -413,6 +446,8 @@ fun main(args: Array<String>) {
 
             val summary = JSONObject()
                 .put("book_file", epub.name)
+                .put("book_sha256", bookSha256)
+                .put("is_reference_book", isReferenceBook)
                 .put("model_revision", RuAccentInt8ModelManifest.revision)
                 .put("model_files", RuAccentInt8ModelManifest.files.size)
                 .put("model_bytes", downloaded)
@@ -679,6 +714,9 @@ class UploadedEpubPairedEvaluationTest {
         val nativeDir = checkNotNull(System.getenv("RUACCENT_NATIVE_DIR"))
 
         require(epub.isFile && epub.length() > 0L) { "Uploaded EPUB is missing" }
+        val bookSha256 = pairedSha256(epub)
+        val isReferenceBook = bookSha256 == REFERENCE_BOOK_SHA256
+        println("RUVOICE_BOOK_SHA256=$bookSha256 reference_book=$isReferenceBook")
         require(File(projectDir, "app/src/main/assets/morph.bin").isFile) { "morph.bin is missing" }
         require(File(sileroDir, "accentor.ptl").isFile && File(sileroDir, "homo.ptl").isFile) {
             "Official Silero stress models are missing"
@@ -762,7 +800,7 @@ class UploadedEpubPairedEvaluationTest {
         }
         // Book-specific replacement overrides are applied only in the reviewed stream.
         val bookReplacementFile = File(checkNotNull(System.getenv("RUVOICE_BOOK_REPLACEMENTS"))).canonicalFile
-        check(bookReplacementFile.isFile && bookReplacementFile.length() > 0L) {
+        check(bookReplacementFile.isFile) {
             "Missing book-only replacement overlay: $bookReplacementFile"
         }
         val bookReplacementLines = bookReplacementFile.readLines(Charsets.UTF_8)
@@ -770,23 +808,30 @@ class UploadedEpubPairedEvaluationTest {
             "шелка и = шелк+а и",
             "сети значений = с+ети значений",
         )
-        check(bookReplacementLines.map { it.trim() }.toSet().containsAll(requiredBookReplacements)) {
-            "Book-only replacement overlay must contain the reviewed plural/phrase stress rules"
+        if (isReferenceBook) {
+            check(bookReplacementLines.map { it.trim() }.toSet().containsAll(requiredBookReplacements)) {
+                "The reviewed reference EPUB must retain its two native phrase replacement rules"
+            }
         }
         val bookReplacements = Replacements.parse(systemReplacementFile.readLines(Charsets.UTF_8) + bookReplacementLines)
-        check(bookReplacements.apply("шелка и") == "шелк+а и") {
-            "The supported RuVoice replacement parser did not apply the book-only шелка rule"
+        if ("шелка и = шелк+а и" in bookReplacementLines.map { it.trim() }) {
+            check(bookReplacements.apply("шелка и") == "шелк+а и") {
+                "The supported RuVoice replacement parser did not apply the book-only шелка rule"
+            }
         }
-        check(bookReplacements.apply("сети значений") == "с+ети значений") {
-            "The supported RuVoice replacement parser did not apply the book-only сети значений rule"
+        if ("сети значений = с+ети значений" in bookReplacementLines.map { it.trim() }) {
+            check(bookReplacements.apply("сети значений") == "с+ети значений") {
+                "The supported RuVoice replacement parser did not apply the book-only сети значений rule"
+            }
         }
+        val bookPhraseTargets = parseBookPhraseTargets(bookReplacementLines)
+        val phraseTargetHits = LinkedHashMap<String, Int>()
 
-        // Book-reviewed overlay is kept separate from the installed system dictionary.
-        // Conflicting or duplicate entries fail closed; the overlay is used only by this
-        // whole-book evaluation and never changes the APK asset.
+        // Book-specific dictionaries are optional. The known reference book has a curated
+        // manual set; any other EPUB may supply its own corrections without inheriting those.
         val bookOverrideFile = File(checkNotNull(System.getenv("RUVOICE_BOOK_OVERRIDES"))).canonicalFile
-        check(bookOverrideFile.isFile && bookOverrideFile.length() > 0L) {
-            "Missing reviewed book-specific stress overlay: $bookOverrideFile"
+        check(bookOverrideFile.isFile) {
+            "Missing book-specific stress overlay file: $bookOverrideFile"
         }
         val bookOverrides = LinkedHashMap<String, String>()
         for (line in bookOverrideFile.readLines(Charsets.UTF_8)) {
@@ -825,8 +870,10 @@ class UploadedEpubPairedEvaluationTest {
             "призывного" to "приз+ывного",
             "рефлекторное" to "рефл+екторное",
         )
-        check(bookOverrides == expectedBookOverrides) {
-            "Book-specific override set differs from reviewed manifest: $bookOverrides"
+        if (isReferenceBook) {
+            check(bookOverrides == expectedBookOverrides) {
+                "Reference book override set differs from reviewed manifest: $bookOverrides"
+            }
         }
         val autoBookOverrides = LinkedHashMap<String, String>()
         val autoOverridePath = System.getenv("RUVOICE_AUTO_BOOK_OVERRIDES")
@@ -912,37 +959,38 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("дать разуму в руки инструмент_expected", "ру́ки")
             sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
             sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
-            val networkReviewed = readable("Сети значений в потоке энергии сознания", reviewedStress, data)
-            sanity.put("Сети значений_baseline", networkBaseline)
-            sanity.put("Сети значений_reviewed", networkReviewed)
-            sanity.put("Сети значений_combined", networkCombined)
-            sanity.put("Сети значений_expected", "Се́ти значений")
-            sanity.put("Сети значений_baseline_matches_expected", networkBaseline.contains("сети́", ignoreCase = true))
-            sanity.put("Сети значений_reviewed_matches_expected", networkReviewed.contains("се́ти", ignoreCase = true))
-            sanity.put("по утра́м_baseline", utramBaseline)
-            sanity.put("по утра́м_reviewed", utramReviewed)
-            sanity.put("по утра́м_variant_preserved", utramReviewed.contains("утра́м", ignoreCase = true))
-            sanity.put("два́дцать_reviewed", twentyReviewed)
-            sanity.put("два́дцать_reviewed_matches_expected", twentyReviewed.contains("два́дцать", ignoreCase = true))
-            sanity.put("издре́вле_reviewed", izdrevleReviewed)
-            sanity.put("издре́вле_reviewed_matches_expected", izdrevleReviewed.contains("издре́вле", ignoreCase = true))
-            sanity.put("Сети значений_combined_matches_expected", networkCombined.contains("сети́", ignoreCase = true))
-            check(networkBaseline.contains("сети́", ignoreCase = true)) {
-                "Untouched production baseline did not reproduce the original 'сети' stress: $networkBaseline"
+            if (isReferenceBook) {
+                val networkReviewed = readable(
+                    "Сети значений в потоке энергии сознания", reviewedStress, data, bookReplacements
+                )
+                check(networkBaseline.contains("сети́", ignoreCase = true)) {
+                    "Untouched production baseline did not reproduce the reference 'сети' stress: $networkBaseline"
+                }
+                check(networkReviewed.contains("се́ти", ignoreCase = true)) {
+                    "Native phrase replacement failed for 'сети значений': $networkReviewed"
+                }
+                val utramReviewedWithBookRules = readable(
+                    "Фигура появляется по утрам", reviewedStress, data, bookReplacements
+                )
+                check(utramBaseline.contains("утра́м", ignoreCase = true) &&
+                    utramReviewedWithBookRules.contains("утра́м", ignoreCase = true)) {
+                    "The normative adverbial variant 'по утра́м' must remain unchanged"
+                }
+                check(twentyReviewed.contains("два́дцать", ignoreCase = true)) {
+                    "Reference override must stress 'двадцать' on а: $twentyReviewed"
+                }
+                check(izdrevleReviewed.contains("издре́вле", ignoreCase = true)) {
+                    "Reference override must stress 'издревле' on е: $izdrevleReviewed"
+                }
+                val utolshilasReviewed = readable(
+                    "Ветвь системы значений утолщилась? Утолщилась.",
+                    reviewedStress, data, bookReplacements
+                )
+                check(Regex("(?i)утолщи́лась").findAll(utolshilasReviewed).count() == 2) {
+                    "Reference override must accent both occurrences of утолщилась: $utolshilasReviewed"
+                }
             }
-            check(networkReviewed.contains("се́ти", ignoreCase = true)) {
-                "Phrase-specific stress correction failed for the word 'сети': $networkReviewed"
-            }
-            check(utramBaseline.contains("утра́м", ignoreCase = true) &&
-                utramReviewed.contains("утра́м", ignoreCase = true)) {
-                "The normative adverbial variant 'по утра́м' must remain unchanged: baseline=$utramBaseline reviewed=$utramReviewed"
-            }
-            check(twentyReviewed.contains("два́дцать", ignoreCase = true)) {
-                "Book override must place the acute on the vowel а in 'двадцать': $twentyReviewed"
-            }
-            check(izdrevleReviewed.contains("издре́вле", ignoreCase = true)) {
-                "Book override must use the normative stress in 'издревле': $izdrevleReviewed"
-            }
+
             val utolshilasReviewed = readable(
                 "Ветвь системы значений утолщилась? Утолщилась.",
                 reviewedStress, data
@@ -964,7 +1012,7 @@ class UploadedEpubPairedEvaluationTest {
                 val targetWord = item.getString("word")
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
-                val checkedWithBookOverlay = caseId == "silks-plural-01"
+                val checkedWithBookOverlay = caseId == "silks-plural-01" && bookReplacementLines.any { it.trim() == "шелка и = шелк+а и" }
                 val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
                 val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
@@ -1187,10 +1235,9 @@ class UploadedEpubPairedEvaluationTest {
                     val beforePosition = stressPosition(beforeWord)
                     val reviewedPosition = stressPosition(reviewedWord)
                     val expectedVariant = allBookOverrides[beforeKey]
-                    val phraseTarget = (beforeKey == "сети" &&
-                        reviewedPhrasePattern.containsMatchIn(segment.text.lowercase(Locale.ROOT))) ||
-                        (beforeKey == "шелка" &&
-                            Regex("(?<![а-яё])шелка\\s+и(?![а-яё])").containsMatchIn(segment.text.lowercase(Locale.ROOT)))
+                    val phraseTarget = bookPhraseTargets.firstOrNull { target ->
+                        target.sourceWord == beforeKey && phraseOccurs(target.phrase, segment.text)
+                    }
                     if (expectedVariant != null) {
                         val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
                             "Invalid reviewed dictionary marker for " + beforeKey + ": " + expectedVariant
@@ -1201,14 +1248,17 @@ class UploadedEpubPairedEvaluationTest {
                                 " context='" + segment.text + "'"
                         }
                         reviewedOverrideSeen[beforeKey] = (reviewedOverrideSeen[beforeKey] ?: 0) + 1
-                    } else if (phraseTarget) {
-                        val expectedPhrasePosition = if (beforeKey == "сети") 0 else 1
+                    } else if (phraseTarget != null) {
+                        val expectedPhrasePosition = checkNotNull(reviewedVariantPosition(phraseTarget.targetWord)) {
+                            "Invalid phrase stress marker: ${phraseTarget.targetWord}"
+                        }
                         check(reviewedPosition == expectedPhrasePosition) {
-                            "Book-only phrase override failed for " + beforeKey + " in segment " + segmentIndex +
-                                ": expected=" + expectedPhrasePosition + " actual=" + reviewedPosition +
-                                " context='" + segment.text + "'"
+                            "Book-only phrase override failed for " + beforeKey + " in phrase '" + phraseTarget.phrase +
+                                "' segment " + segmentIndex + ": expected=" + expectedPhrasePosition +
+                                " actual=" + reviewedPosition + " context='" + segment.text + "'"
                         }
                         reviewedPhraseOverrideHits++
+                        phraseTargetHits[phraseTarget.phrase] = (phraseTargetHits[phraseTarget.phrase] ?: 0) + 1
                     } else {
                         check(beforePosition == reviewedPosition) {
                             "Unapproved stress change in reviewed output, segment=" + segmentIndex +
@@ -1400,8 +1450,10 @@ class UploadedEpubPairedEvaluationTest {
             check(reviewedOverrideSeen.keys.containsAll(allBookOverrides.keys)) {
                 "Not every reviewed book override was exercised: expected=" + allBookOverrides.keys + " seen=" + reviewedOverrideSeen
             }
-            check(reviewedPhraseOverrideHits > 0) {
-                "The single reviewed phrase hint 'сети значений' was not exercised"
+            if (isReferenceBook) {
+                check(reviewedPhraseOverrideHits > 0) {
+                    "The reviewed phrase rules for the reference EPUB were not exercised"
+                }
             }
             println("BOOK_REVIEWED_OVERLAY_GUARD=PASS wordforms=" + reviewedOverrideSeen +
                 " manual=" + bookOverrides.size + " automatic=" + autoBookOverrides.size +
@@ -1452,7 +1504,15 @@ class UploadedEpubPairedEvaluationTest {
                         put(JSONObject().put("word", word).put("variant", variant))
                     }
                 })
-                .put("book_reviewed_phrase_overrides", JSONArray())
+                .put("book_reviewed_phrase_overrides", JSONArray().apply {
+                    bookPhraseTargets.forEach { target ->
+                        put(JSONObject().put("phrase", target.phrase)
+                            .put("word", target.sourceWord).put("variant", target.targetWord))
+                    }
+                })
+                .put("book_phrase_target_hits", JSONObject().apply {
+                    phraseTargetHits.forEach { (phrase, hits) -> put(phrase, hits) }
+                })
                 .put("book_replacement_overlay_entries", bookReplacementLines.count {
                     it.isNotBlank() && !it.trimStart().startsWith("#")
                 })
