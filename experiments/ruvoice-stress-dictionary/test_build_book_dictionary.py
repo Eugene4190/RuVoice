@@ -294,12 +294,12 @@ class BookDictionaryTests(unittest.TestCase):
             out = root / "out"
 
             book.write_text("берег", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
-            approved.write_text("# empty\\n", encoding="utf-8")
-            pool.write_text("берег б+ерег\\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
+            approved.write_text("# empty\n", encoding="utf-8")
+            pool.write_text("берег б+ерег\n", encoding="utf-8")
             audit.write_text(
-                "word\\tstress\\tsource\\n"
-                "берег бер+ег aot_wiktionary_silero_consensus\\n",
+                "word\tstress\tsource\n"
+                "берег бер+ег aot_wiktionary_silero_consensus\n",
                 encoding="utf-8",
             )
             args = Namespace(
