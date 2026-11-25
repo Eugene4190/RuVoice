@@ -147,7 +147,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         # context data must keep both source senses without retaining them in memory.
         self.assertEqual(
             result.forms["замок"]["з+амок"],
-            {"замок:noun:nominative,singular"},
+            {"замок:noun:lemma,nominative,singular"},
         )
         self.assertEqual(result.context_record_count, 2)
         self.assertEqual(len(records), 2)
@@ -221,7 +221,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
 
             with (
                 tool.open_jsonl(source) as stream,
-                context_output.open("w", encoding="utf-8", newline="\\n") as context_stream,
+                context_output.open("w", encoding="utf-8", newline="\n") as context_stream,
             ):
                 result = tool.extract_jsonl(stream, context_stream)
             tool.write_tsv(output, result)
