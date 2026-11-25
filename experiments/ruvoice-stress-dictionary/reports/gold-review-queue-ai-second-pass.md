@@ -42,3 +42,13 @@ This is a fresh, form-by-form AI review of the ten queued candidates. It checks 
 The proposed stress positions and contexts are supported for all ten rows in this AI pass. No direct disagreement was found for P001–P004 or P007–P010. P005 needs the normative label to preserve the distinction between preferred and colloquial use. P006 is correct for the specifically cited 3rd-person form, but its `accepted_marked` field should be checked against the modern dictionary's treatment of the infinitive variant rather than inferred from the infinitive.
 
 Recommended action for the human second linguist: independently annotate all ten rows from the cited lexicographic sources (and any newer edition they consider authoritative), explicitly decide P005's register note and P006's accepted-form set, then record reviewer identity/date/decision and resolve any disagreement. Only the adjudicated results may be moved into the gold seed. Until then the queue and seed remain unchanged.
+
+
+## Follow-up source recheck for P005 and P006 (2026-11-25)
+
+A follow-up query of current Gramota references adds precision to the two entries that were flagged for register/paradigm care:
+
+- **P005 (`договор`)**: Gramota's current Meta-dictionary entry gives the paradigm with preferred `догово́р`; reference answer №321561 explicitly says `до́говор` has been marked permissible in colloquial speech for decades, while the preferred form remains `догово́р` for exemplary literary speech. Keep `догов+ор` as `primary_marked` and `д+оговор` as accepted but less desirable/register-marked. Sources: https://gramota.ru/meta/dogovor and https://gramota.ru/spravka/vopros/321561.
+- **P006 (`балуется`)**: reference answer №232830 directly gives `балУется`; answer №271909 also confirms `он балУется`. A separate, newer answer №323862 says the infinitive variant `бАловаться` is now allowed by the modern Large Orthoepic Dictionary. These claims concern different morphological forms. The newer infinitive variant does not, by itself, refute the form-specific `балУется` decision for 3sg present. The current Large Orthoepic Dictionary also lists both accentual infinitive types (`БÁЛОВАТЬСЯ` / `БАЛОВÁТЬСЯ`) but the exact finite form remains supported as `балУется` by the form-specific Gramota answers. Sources: https://gramota.ru/poisk?mode=spravka&query=%D0%B1%D0%B0%D0%BB%D0%BE%D0%B2%D0%B0%D1%82%D1%8C%D1%81%D1%8F and https://gramota.ru/storage/public/normdicts/orfoepicheskij_slovar.pdf.
+
+No queue row is promoted: all P001–P010 remain awaiting an external second human linguist. This follow-up narrows the notes but does not replace that required review.
