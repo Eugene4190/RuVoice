@@ -722,6 +722,16 @@ class UploadedEpubPairedEvaluationTest {
             "десять" to "д+есять",
             "издревле" to "издр+евле",
             "утолщилась" to "утолщ+илась",
+            "арбайт" to "+арбайт",
+            "маше" to "маш+е",
+            "сапинс" to "+сапинс",
+            "взаимовымогательства" to "взаимовымог+ательства",
+            "взаимовымогающим" to "взаимовымог+ающим",
+            "внутриличностных" to "внутрил+ичностных",
+            "неприспособление" to "неприспособл+ение",
+            "нетелесного" to "нетел+есного",
+            "религиообразовании" to "религиообразов+ании",
+            "самосуществования" to "самосуществов+ания",
         )
         check(bookOverrides == expectedBookOverrides) {
             "Book-specific override set differs from reviewed manifest: $bookOverrides"
@@ -733,7 +743,7 @@ class UploadedEpubPairedEvaluationTest {
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
         // Three independent full-book passes: untouched production baseline; production with
-        // the reviewed phrase hint and seven book-only dictionary corrections; RUAccent on top
+        // the reviewed phrase hint and seventeen book-only dictionary corrections; RUAccent on top
         // of the untouched baseline. This isolates the impact of RuVoice-specific fixes.
         val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
