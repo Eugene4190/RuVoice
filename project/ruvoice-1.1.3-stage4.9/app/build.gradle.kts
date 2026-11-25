@@ -88,8 +88,9 @@ androidComponents { onVariants { it.sources.assets?.addGeneratedSourceDirectory(
  * after the Android plugin finalizes variants, so register this task after evaluation.
  */
 afterEvaluate {
+    // Runtime classpath already contains compile dependencies; resolving Android's compile
+    // configuration separately can be ambiguous because it exposes multiple app variants.
     val desktopAuditRuntimeClasspath = configurations.getByName("fullDebugUnitTestRuntimeClasspath")
-    val desktopAuditCompileClasspath = configurations.getByName("fullDebugUnitTestCompileClasspath")
 
     tasks.register<Sync>("assembleDesktopAuditRuntime") {
         dependsOn(
@@ -104,7 +105,6 @@ afterEvaluate {
         from(layout.buildDirectory.dir("tmp/kotlin-classes/fullDebugUnitTest")) { into("classes") }
         from(layout.buildDirectory.dir("intermediates/javac/fullDebugUnitTest/compileFullDebugUnitTestJavaWithJavac/classes")) { into("classes") }
         from(desktopAuditRuntimeClasspath) { into("lib") }
-        from(desktopAuditCompileClasspath) { into("lib") }
         // AGP mockable android.jar is needed when production classes touch Android APIs on desktop.
         from(fileTree(layout.buildDirectory).matching { include("**/mockable-android*.jar") }) { into("lib") }
         duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
