@@ -117,7 +117,7 @@ class BookDictionaryTests(unittest.TestCase):
 
             book.write_text("берег", encoding="utf-8")
             system.write_text(
-                "берёг бе+рёг\\n"
+                "берёг б+ерёг\\n"
                 "берёг бер+ёг\\n",
                 encoding="utf-8",
             )

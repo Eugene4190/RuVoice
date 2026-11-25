@@ -101,7 +101,7 @@ class AppendOnlyApprovalTests(unittest.TestCase):
             candidate.write_text("берег б+ерег\\n", encoding="utf-8")
             selected.write_text("берег\\n", encoding="utf-8")
             system.write_text(
-                "берёг бе+рёг\\n"
+                "берёг б+ерёг\\n"
                 "берёг бер+ёг\\n",
                 encoding="utf-8",
             )
