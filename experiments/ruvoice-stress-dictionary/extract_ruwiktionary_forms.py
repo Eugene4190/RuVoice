@@ -263,11 +263,11 @@ def write_tsv(path: Path, extraction: Extraction) -> None:
 def write_context_jsonl(path: Path, extraction: Extraction) -> None:
     """Write one row per source context, retaining senses and pronunciation evidence."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\\n") as output:
+    with path.open("w", encoding="utf-8", newline="\n") as output:
         for surface in sorted(extraction.contexts):
             for marked in sorted(extraction.contexts[surface]):
                 for context_json in sorted(extraction.contexts[surface][marked]):
-                    output.write(context_json + "\\n")
+                    output.write(context_json + "\n")
 
 
 def build_manifest(
