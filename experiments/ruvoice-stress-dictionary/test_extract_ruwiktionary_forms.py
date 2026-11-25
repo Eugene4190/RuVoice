@@ -121,9 +121,14 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             article(
                 "замок",
                 "noun",
-                [{"form": "за\u0301мок", "tags": tags}],
+                [{"form": "за\u0301мок", "tags": tags, "raw_tags": ["form-qualifier"]}],
                 tags=["masculine"],
-                senses=[{"glosses": ["укреплённое жилище"], "tags": ["masculine"]}],
+                raw_tags=["entry-qualifier"],
+                senses=[{
+                    "glosses": ["укреплённое жилище"],
+                    "tags": ["masculine"],
+                    "raw_tags": ["sense-qualifier"],
+                }],
             ),
             article(
                 "замок",
@@ -155,6 +160,13 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             {record["senses"][0]["glosses"][0] for record in records},
             {"укреплённое жилище", "устройство для запирания"},
         )
+        first_sense = next(
+            record for record in records
+            if record["senses"][0]["glosses"][0] == "укреплённое жилище"
+        )
+        self.assertEqual(first_sense["form_raw_tags"], ["form-qualifier"])
+        self.assertEqual(first_sense["entry_raw_tags"], ["entry-qualifier"])
+        self.assertEqual(first_sense["senses"][0]["raw_tags"], ["sense-qualifier"])
         self.assertTrue(all(record["source_line"] in {1, 2} for record in records))
 
     def test_malformed_json_reports_line_number(self):
