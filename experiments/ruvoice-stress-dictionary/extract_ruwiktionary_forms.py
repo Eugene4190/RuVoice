@@ -43,22 +43,13 @@ SKIP_TAGS = {
 class Extraction:
     # surface -> marked form -> source descriptors
     forms: dict[str, dict[str, set[str]]]
-    # surface -> marked form -> JSON-encoded source-context records
-    contexts: dict[str, dict[str, set[str]]]
     russian_article_count: int
     skipped_form_count: int
+    context_record_count: int
 
     @property
     def multi_variant_surface_count(self) -> int:
         return sum(1 for variants in self.forms.values() if len(variants) > 1)
-
-    @property
-    def context_record_count(self) -> int:
-        return sum(
-            len(records)
-            for variants in self.contexts.values()
-            for records in variants.values()
-        )
 
 
 def strip_stress_marks(value: str) -> str:
@@ -106,12 +97,12 @@ def _normalised_form(value: str) -> str:
     return strip_stress_marks(value.lower())
 
 
-def extract_jsonl(lines: Iterable[str]) -> Extraction:
-    """Parse Wiktextract JSONL without retaining raw article objects."""
+def extract_jsonl(lines: Iterable[str], context_writer: TextIO | None = None) -> Extraction:
+    """Parse JSONL and optionally stream source context records to a JSONL writer."""
     table: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-    contexts: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     russian_article_count = 0
     skipped_form_count = 0
+    context_record_count = 0
 
     for line_number, line in enumerate(lines, 1):
         if not line.strip():
@@ -217,20 +208,21 @@ def extract_jsonl(lines: Iterable[str]) -> Extraction:
                 "form_ipa": item.get("ipa"),
                 "form_source": item.get("source"),
             }
-            contexts[surface][marked].add(
-                json.dumps(
-                    context_record,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
+            context_json = json.dumps(
+                context_record,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
             )
+            if context_writer is not None:
+                context_writer.write(context_json + "\\n")
+            context_record_count += 1
 
     return Extraction(
         forms={word: dict(variants) for word, variants in table.items()},
-        contexts={word: dict(variants) for word, variants in contexts.items()},
         russian_article_count=russian_article_count,
         skipped_form_count=skipped_form_count,
+        context_record_count=context_record_count,
     )
 
 
@@ -258,16 +250,6 @@ def write_tsv(path: Path, extraction: Extraction) -> None:
                 for marked in sorted(variants)
             ]
             output.write(surface + "\t" + "\t".join(columns) + "\n")
-
-
-def write_context_jsonl(path: Path, extraction: Extraction) -> None:
-    """Write one row per source context, retaining senses and pronunciation evidence."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as output:
-        for surface in sorted(extraction.contexts):
-            for marked in sorted(extraction.contexts[surface]):
-                for context_json in sorted(extraction.contexts[surface][marked]):
-                    output.write(context_json + "\n")
 
 
 def build_manifest(
@@ -330,10 +312,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.input.is_file():
             raise FileNotFoundError(f"Input file not found: {args.input}")
         input_sha256 = sha256_file(args.input)
-        with open_jsonl(args.input) as source:
-            extraction = extract_jsonl(source)
+        args.context_output.parent.mkdir(parents=True, exist_ok=True)
+        with (
+            open_jsonl(args.input) as source,
+            args.context_output.open("w", encoding="utf-8", newline="\\n") as context_stream,
+        ):
+            extraction = extract_jsonl(source, context_stream)
         write_tsv(args.output, extraction)
-        write_context_jsonl(args.context_output, extraction)
 
         manifest = build_manifest(
             args.input,
