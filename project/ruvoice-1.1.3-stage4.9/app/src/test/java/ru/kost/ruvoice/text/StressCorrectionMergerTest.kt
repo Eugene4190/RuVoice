@@ -191,7 +191,7 @@ class StressCorrectionMergerTest {
             original = "берег",
             ruVoice = "б+ерег",
             prediction = IndependentStressPrediction(
-                "берё\\u0301г",
+                "берё\u0301г",
                 listOf(StressDecision.STRESSED),
                 listOf(YoDecision.RESTORE_YO),
                 listOf(YoDecisionSource.FIXED_DICTIONARY),
@@ -206,7 +206,7 @@ class StressCorrectionMergerTest {
             original = "берег",
             ruVoice = "б+ерег",
             prediction = IndependentStressPrediction(
-                "берё\\u0301г",
+                "берё\u0301г",
                 listOf(StressDecision.STRESSED),
                 listOf(YoDecision.RESTORE_YO),
                 listOf(YoDecisionSource.FIXED_DICTIONARY),
