@@ -39,20 +39,26 @@ class GoldSetEvaluatorTests(unittest.TestCase):
                 "accepted_variants": ["марк+ированный"],
                 "evaluation_scope": "contextual", "category": "semantic_stress",
             },
+            {
+                "gold_id": "G4", "surface": "создана", "primary_marked": "создан+а",
+                "accepted_variants": ["создан+а", "с+оздана"],
+                "evaluation_scope": "word", "category": "short_participle",
+            },
         ]
         report = tool.evaluate(
             rows,
-            {"G1": "твор+ог", "G2": "позв+онит", "G3": ""},
+            {"G1": "твор+ог", "G2": "позв+онит", "G3": "", "G4": "с+оздана"},
         )
         overall = report["overall"]
-        self.assertEqual(overall["gold_rows"], 3)
-        self.assertEqual(overall["emitted_predictions"], 2)
-        self.assertEqual(overall["correct_predictions"], 1)
+        self.assertEqual(overall["gold_rows"], 4)
+        self.assertEqual(overall["emitted_predictions"], 3)
+        self.assertEqual(overall["correct_predictions"], 2)
         self.assertEqual(overall["incorrect_predictions"], 1)
         self.assertEqual(overall["abstentions_or_missing"], 1)
-        self.assertEqual(overall["coverage_percent"], 66.67)
-        self.assertEqual(overall["exact_accuracy_among_emitted_percent"], 50.0)
-        self.assertEqual(overall["accuracy_over_all_gold_rows_percent"], 33.33)
+        self.assertEqual(overall["coverage_percent"], 75.0)
+        self.assertEqual(overall["exact_accuracy_among_emitted_percent"], 66.67)
+        self.assertEqual(overall["accuracy_over_all_gold_rows_percent"], 50.0)
+        self.assertEqual(overall["accepted_non_primary_predictions"], 1)
         self.assertEqual(report["by_evaluation_scope"]["contextual"]["coverage_percent"], 0.0)
         self.assertEqual(report["by_category"]["semantic_stress"]["abstentions_or_missing"], 1)
 
