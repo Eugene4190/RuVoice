@@ -18,9 +18,9 @@ from pathlib import Path
 
 from analyze_book import WORD_RE, extract_text, parse_dictionary
 from build_dictionary import Entry, validate_entry, write_dictionary
+from book_tool_paths import resolve_app_paths
 
-HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parents[1]
+REPO_ROOT, HERE = resolve_app_paths(__file__)
 DEFAULT_SYSTEM = (
     REPO_ROOT / "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/"
     "dicts/stress/Системный.txt"

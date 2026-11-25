@@ -27,8 +27,9 @@ import approve_book_entries
 import build_book_dictionary
 from analyze_book import extract_text, parse_dictionary
 from build_dictionary import Entry, write_dictionary
+from book_tool_paths import resolve_app_paths
 
-HERE = Path(__file__).resolve().parent
+REPO_ROOT, HERE = resolve_app_paths(__file__)
 DEFAULT_PRIVATE_HOME = Path(
     os.environ.get("RUVOICE_PRIVATE_HOME", str(Path.home() / ".ruvoice-book-workflow"))
 )

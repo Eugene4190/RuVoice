@@ -26,6 +26,11 @@ jobs:
       - name: Compile Python tools
         run: |
           python -m py_compile \
+            experiments/ruvoice-stress-dictionary/book_tool_paths.py \
+            experiments/ruvoice-stress-dictionary/private_book_server.py \
+            experiments/ruvoice-stress-dictionary/personal_book_workflow.py \
+            experiments/ruvoice-stress-dictionary/test_book_tool_paths.py \
+            experiments/ruvoice-stress-dictionary/test_private_book_server.py \
             experiments/ruvoice-stress-dictionary/build_dictionary.py \
             experiments/ruvoice-stress-dictionary/analyze_book.py \
             experiments/ruvoice-stress-dictionary/build_book_dictionary.py \

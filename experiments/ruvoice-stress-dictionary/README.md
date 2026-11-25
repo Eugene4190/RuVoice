@@ -4,7 +4,9 @@
 >
 > **Текущий статус:** локальная страница загрузки, приватный append-only накопитель, ZIP-пакет и тесты A → B → повтор B уже добавлены. Нужны ручной запуск на настоящей пользовательской EPUB, импорт в RuVoice и проверка одновременной озвучки на телефоне. Автоматически выбираются уже проверенные phrase rules, если точная фраза есть в книге; универсальное извлечение новых контекстных замен ещё не реализовано. Также можно приложить свой TXT.
 >
-> **Запуск:** Windows — двойной щелчок по `Start_RuVoice_Book_Tool_Windows.bat`; macOS/Linux — `bash start_ruvoice_book_tool.sh`. Требуется Python 3.11+. Страница открывается на `http://127.0.0.1:8765/`.
+> **Windows без установки Python:** скачай артефакт `RuVoiceBookTool-Windows-x64` из workflow [Build RuVoice Book Tool for Windows](../../../actions/workflows/build-ruvoice-book-tool-windows.yml), распакуй ZIP и дважды щёлкни `Start_RuVoice_Book_Tool_Windows.bat`. Он запускает локальную страницу и открывает её в браузере. Окно консоли оставь открытым до окончания работы; Ctrl+C останавливает сервер.
+>
+> **Запуск из исходников:** Windows — двойной щелчок по `Start_RuVoice_Book_Tool_Windows.bat` при установленном Python 3.11+; macOS/Linux — `bash start_ruvoice_book_tool.sh`. Страница открывается на `http://127.0.0.1:8765/`.
 >
 > **Приватность:** сервер слушает только localhost. EPUB обрабатывается локально, временный файл после сборки удаляется; мастер и ZIP остаются вне репозитория в `~/.ruvoice-book-workflow` (Windows: `%USERPROFILE%\.ruvoice-book-workflow`). Это локальное хранение, не облако и не шифрование.
 >

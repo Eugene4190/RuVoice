@@ -1,0 +1,141 @@
+name: Build RuVoice Book Tool for Windows
+
+on:
+  pull_request:
+    paths:
+      - "experiments/ruvoice-stress-dictionary/**"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
+      - "private-files/paired_eval/book_reviewed_replacements.txt"
+      - ".github/workflows/build-ruvoice-book-tool-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-portable-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pyinstaller
+
+      - name: Build one-file Windows executable
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $tool = Join-Path $root "experiments\ruvoice-stress-dictionary"
+          $out = Join-Path $env:RUNNER_TEMP "ruvoice-win-build"
+          $dist = Join-Path $out "dist"
+          $work = Join-Path $out "work"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+          $system = Join-Path $root "project\ruvoice-1.1.3-stage4.9\app\src\main\assets\dicts\stress\Системный.txt"
+          $pool = Join-Path $tool "output\RuVoice_AutoStress.txt"
+          $audit = Join-Path $tool "reports\RuVoice_AutoStress_accepted.tsv"
+          $rules = Join-Path $tool "data\curated\book_candidate_review_rules.tsv"
+          $phrases = Join-Path $root "private-files\paired_eval\book_reviewed_replacements.txt"
+
+          foreach ($path in @($system, $pool, $audit, $rules, $phrases)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required bundled resource is missing: $path"
+            }
+          }
+
+          $pyArgs = @(
+            "--noconfirm", "--clean", "--onefile", "--console",
+            "--name", "RuVoiceBookTool",
+            "--distpath", $dist,
+            "--workpath", $work,
+            "--specpath", $out,
+            "--paths", $tool,
+            "--add-data", "$system;project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress",
+            "--add-data", "$pool;experiments/ruvoice-stress-dictionary/output",
+            "--add-data", "$audit;experiments/ruvoice-stress-dictionary/reports",
+            "--add-data", "$rules;experiments/ruvoice-stress-dictionary/data/curated",
+            "--add-data", "$phrases;private-files/paired_eval",
+            (Join-Path $tool "private_book_server.py")
+          )
+          & pyinstaller @pyArgs
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller failed with exit code $LASTEXITCODE"
+          }
+          if (-not (Test-Path (Join-Path $dist "RuVoiceBookTool.exe"))) {
+            throw "PyInstaller did not produce RuVoiceBookTool.exe"
+          }
+
+      - name: Smoke-test the packaged local page
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP "ruvoice-win-build\dist\RuVoiceBookTool.exe"
+          $privateHome = Join-Path $env:RUNNER_TEMP "ruvoice-portable-private"
+          $port = 18765
+          $process = Start-Process -FilePath $exe -ArgumentList @(
+            "--no-browser", "--port", "$port", "--private-home", "$privateHome"
+          ) -PassThru -WindowStyle Hidden
+          $ready = $false
+          try {
+            for ($i = 0; $i -lt 45; $i++) {
+              if ($process.HasExited) {
+                throw "Portable server exited early with code $($process.ExitCode)"
+              }
+              try {
+                $page = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -TimeoutSec 2
+                if ($page.StatusCode -eq 200 -and $page.Content.Contains("Дополнение словаря RuVoice")) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $ready) {
+              throw "Portable Windows executable did not serve the local page"
+            }
+            if (-not (Test-Path (Join-Path $privateHome "RuVoice_Accumulated_Approved.txt"))) {
+              throw "Portable executable did not initialize the private dictionary"
+            }
+            Write-Host "PASS: portable EXE served the local RuVoice page on 127.0.0.1:$port"
+          } finally {
+            & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
+          }
+
+      - name: Assemble portable ZIP
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP "ruvoice-win-build\dist\RuVoiceBookTool.exe") $stage
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "experiments\ruvoice-stress-dictionary\Start_RuVoice_Book_Tool_Windows.bat") $stage
+          @'
+          RuVoice Book Tool — Windows x64
+
+          1. Распакуйте весь ZIP в отдельную папку.
+          2. Дважды щёлкните Start_RuVoice_Book_Tool_Windows.bat.
+          3. Дождитесь открытия страницы в браузере. Используйте адрес 127.0.0.1.
+          4. Не закрывайте чёрное окно, пока работает локальная страница.
+          5. Ctrl+C в этом окне останавливает сервер.
+
+          Python отдельно устанавливать не требуется.
+          Личный накопительный словарь и ZIP сохраняются в:
+          %USERPROFILE%\.ruvoice-book-workflow
+
+          Эта папка локальная и не зашифрована. Сделайте резервную копию MyBooks_Cumulative.txt.
+          '@ | Set-Content -Encoding UTF8 (Join-Path $stage "START_HERE.txt")
+          $archive = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64.zip"
+          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -Force
+
+      - name: Upload portable Windows ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuVoiceBookTool-Windows-x64
+          path: ${{ runner.temp }}/RuVoiceBookTool-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
