@@ -35,7 +35,7 @@ private val reviewHomographs = setOf(
 )
 
 private data class Paragraph(val chapter: String, val number: Int, val text: String)
-private data class BookSegment(val chapter: String, val paragraph: Int, val part: Int, val text: String)
+private data class BookSegment(val chapter: String, val paragraph: Int, val part: Int, val text: String, val sourceContext: String = text)
 
 private fun localName(node: Node): String =
     (node.localName ?: node.nodeName.substringAfter(':')).lowercase(Locale.ROOT)
@@ -209,6 +209,30 @@ private fun makeSegments(paragraphs: List<Paragraph>): List<BookSegment> {
                 part++
                 result += BookSegment(paragraph.chapter, paragraph.number, part, piece)
             }
+        }
+    }
+    return result
+}
+
+private fun makeProductionSegments(
+    paragraphs: List<Paragraph>,
+    data: SileroData,
+    replacements: Replacements,
+    rules: Rules,
+): List<BookSegment> {
+    val result = ArrayList<BookSegment>()
+    for (paragraph in paragraphs) {
+        // Use the exact public planner used by SileroTtsService: replacements happen before
+        // paragraph/sentence splitting, not in a parallel BreakIterator approximation.
+        val planned = Pipeline.plan(paragraph.text, data, 0, 0, replacements, rules)
+        for ((index, segment) in planned.withIndex()) {
+            result += BookSegment(
+                paragraph.chapter,
+                paragraph.number,
+                index + 1,
+                segment.text,
+                paragraph.text,
+            )
         }
     }
     return result
@@ -1029,8 +1053,19 @@ class UploadedEpubPairedEvaluationTest {
             println("BOOK_STRESS_END_TO_END=PASS cases=$stressRegressionPassed/${stressCases.length()}")
 
             val paragraphs = epubParagraphs(epub)
-            val segments = makeSegments(paragraphs)
-            require(segments.isNotEmpty()) { "No text segments extracted from EPUB" }
+            val segments = makeProductionSegments(paragraphs, baselineData, systemReplacements, rules)
+            val reviewedSegments = makeProductionSegments(paragraphs, data, bookReplacements, rules)
+            require(segments.isNotEmpty()) { "No text segments extracted from EPUB by the original RuVoice planner" }
+            check(segments.size == reviewedSegments.size) {
+                "Book-only replacement overlay changed production segmentation: baseline=${segments.size}, reviewed=${reviewedSegments.size}"
+            }
+            for (index in segments.indices) {
+                val before = segments[index]
+                val after = reviewedSegments[index]
+                check(before.chapter == after.chapter && before.paragraph == after.paragraph && before.part == after.part) {
+                    "Production segment alignment changed at index $index"
+                }
+            }
             var wordCount = 0
             var baselineMarked = 0
             var combinedMarked = 0
@@ -1054,11 +1089,13 @@ class UploadedEpubPairedEvaluationTest {
             val reviewedPhrasePattern = Regex("(?<![а-яё])сети\\s+значений(?![а-яё])")
 
             for ((segmentIndex, segment) in segments.withIndex()) {
-                // Baseline and RUAccent use production system replacements; only the reviewed
-                // stream receives the additional book-specific replacement overlay.
-                val baselineSource = systemReplacements.apply(segment.text)
-                val reviewedSource = bookReplacements.apply(segment.text)
-                val combinedSource = systemReplacements.apply(segment.text)
+                // Pipeline.plan has already applied system replacements and split this source
+                // paragraph exactly as the production TTS path does. The reviewed stream was
+                // independently planned with the book overlay before sentence splitting.
+                val reviewedSegment = reviewedSegments[segmentIndex]
+                val baselineSource = segment.text
+                val reviewedSource = reviewedSegment.text
+                val combinedSource = segment.text
                 val baseline = StressDiagnosticFormatter.readable(
                     Pipeline.accent(baselineSource, baselineData, baselineStress, baselineData.allowed, rules)
                 )
@@ -1126,7 +1163,7 @@ class UploadedEpubPairedEvaluationTest {
                     .put("chapter", segment.chapter)
                     .put("paragraph", segment.paragraph)
                     .put("part", segment.part)
-                    .put("context", segment.text))
+                    .put("context", segment.sourceContext))
                 for (wordIndex in oldWords.indices) {
                     val outputWord = oldWords[wordIndex].value
                     val sourceWord = if (sourceWords.size == oldWords.size) {
