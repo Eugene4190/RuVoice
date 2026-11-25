@@ -1167,7 +1167,8 @@ class UploadedEpubPairedEvaluationTest {
                     .put("chapter", segment.chapter)
                     .put("paragraph", segment.paragraph)
                     .put("part", segment.part)
-                    .put("context", segment.sourceContext))
+                    .put("context", segment.text)
+                    .put("source_paragraph", segment.sourceContext))
                 for (wordIndex in oldWords.indices) {
                     val outputWord = oldWords[wordIndex].value
                     val sourceWord = if (sourceWords.size == oldWords.size) {
