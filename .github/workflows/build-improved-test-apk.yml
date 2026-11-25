@@ -1,6 +1,13 @@
 name: Build RuVoice Improved test APK
 
 on:
+  pull_request:
+    paths:
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/BookAccent.kt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/SileroModels.kt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/Stress.kt"
+      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/IndependentStressCorrection.kt"
+      - ".github/workflows/build-improved-test-apk.yml"
   workflow_dispatch:
 
 permissions:
