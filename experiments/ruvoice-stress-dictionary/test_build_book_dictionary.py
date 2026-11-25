@@ -299,7 +299,7 @@ class BookDictionaryTests(unittest.TestCase):
             pool.write_text("берег б+ерег\n", encoding="utf-8")
             audit.write_text(
                 "word\tstress\tsource\n"
-                "берег бер+ег aot_wiktionary_silero_consensus\n",
+                "берег\tбер+ег\taot_wiktionary_silero_consensus\n",
                 encoding="utf-8",
             )
             args = Namespace(
