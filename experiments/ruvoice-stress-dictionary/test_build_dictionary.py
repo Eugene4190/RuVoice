@@ -38,10 +38,10 @@ class StressDictionaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source.txt"
             source.write_text(
-                "# header\\n"
-                "замок = з+амок\\n"
-                "строка без разделителя\\n"
-                "молоко = мол+око лишний_текст\\n",
+                "# header\n"
+                "замок = з+амок\n"
+                "строка без разделителя\n"
+                "молоко = мол+око лишний_текст\n",
                 encoding="utf-8",
             )
             accepted, rejected = tool.read_source_list(source, "test-source")
@@ -55,8 +55,8 @@ class StressDictionaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "stress_candidates.txt"
             source.write_text(
-                "творог = твор+ог  # 5, v5: тв+орог\\n"
-                "битая строка\\n",
+                "творог = твор+ог  # 5, v5: тв+орог\n"
+                "битая строка\n",
                 encoding="utf-8",
             )
             accepted, rejected = tool.read_consensus_candidates(source, 3)
