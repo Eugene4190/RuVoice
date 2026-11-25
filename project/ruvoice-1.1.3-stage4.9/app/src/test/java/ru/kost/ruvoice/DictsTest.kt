@@ -25,7 +25,10 @@ class DictsTest {
     }
 
     @Test fun importsBookStressDeltaAsASeparateRuVoiceList() {
-        val text = "# Дополнение книги A\nмолоко мол+око\nтворог твор+ог\n"
+        val text = """# Дополнение книги A
+молоко мол+око
+творог твор+ог
+"""
         val imported = Dicts.importText(text, Dicts.Kind.STRESS)
         val rows = imported.lineSequence().mapNotNull { DictLines.parseStress(it) }.toMap()
         assertEquals("мол+око", rows["молоко"])
@@ -36,7 +39,9 @@ class DictsTest {
     }
 
     @Test fun importsBookReplacementTxtInNativeRuVoiceFormat() {
-        val text = "# Только для книги B\nшелка и = шелк+а и\n"
+        val text = """# Только для книги B
+шелка и = шелк+а и
+"""
         val imported = Dicts.importText(text, Dicts.Kind.REPLACE)
         val rule = imported.lineSequence().first { it.isNotBlank() && !it.startsWith("#") }
         assertEquals(Triple("шелка и", "шелк+а и", false), DictLines.parseReplace(rule))
