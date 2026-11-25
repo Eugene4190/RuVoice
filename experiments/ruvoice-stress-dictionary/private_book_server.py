@@ -127,6 +127,13 @@ class Handler(BaseHTTPRequestHandler):
                 upload, private_home=self.server.home, book_name=Path(filename).name,
                 replacements=replacement_upload,
             )
+            # Remove incoming files before sending the success response: once
+            # the browser sees the download link, no temporary book data remains.
+            upload.unlink(missing_ok=True)
+            upload = None
+            if replacement_upload is not None:
+                replacement_upload.unlink(missing_ok=True)
+                replacement_upload = None
             key = secrets.token_urlsafe(24)
             self.server.downloads[key] = Path(result["archive"])
             note = f"ZIP готов. Новых записей: {result['new_entry_count']}; всего в личном накопителе: {result['cumulative_entry_count']}."
