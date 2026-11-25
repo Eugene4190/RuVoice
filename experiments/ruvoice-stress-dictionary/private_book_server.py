@@ -7,26 +7,25 @@ from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
-import build_book_dictionary
-from personal_book_workflow import DEFAULT_PRIVATE_HOME, process_book
+from local_full_book_workflow import process_book
+
+DEFAULT_PRIVATE_HOME = Path(
+    os.environ.get("RUVOICE_PRIVATE_HOME", str(Path.home() / ".ruvoice-book-workflow"))
+)
 
 MAX_BYTES = 256 * 1024 * 1024
-ALLOWED = {".epub", ".txt", ".html", ".htm"}
+ALLOWED = {".epub"}
 
 
 def validate_setup(private_home: Path, required_paths=None) -> Path:
-    required = required_paths or (
-        build_book_dictionary.DEFAULT_SYSTEM,
-        build_book_dictionary.DEFAULT_POOL,
-        build_book_dictionary.DEFAULT_AUDIT,
-        build_book_dictionary.DEFAULT_RULES,
-    )
-    missing = [str(path) for path in required if not Path(path).is_file()]
-    if missing:
-        raise FileNotFoundError(
-            "Не найдены файлы словарного pipeline. Запустите инструмент из полного checkout "
-            "репозитория RuVoice. Отсутствуют: " + ", ".join(missing)
-        )
+    if required_paths is None:
+        # Full original RuVoice desktop runtime. Never fall back to the old small candidate builder.
+        from local_full_book_workflow import _require_runtime
+        _require_runtime()
+    else:
+        missing = [str(path) for path in required_paths if not Path(path).is_file()]
+        if missing:
+            raise FileNotFoundError("Не найдены обязательные файлы RuVoice: " + ", ".join(missing))
     private_home = private_home.expanduser().resolve()
     private_home.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
@@ -61,8 +60,8 @@ def page(token, message="", download_href=None):
         feedback += f'<p><a href="{html.escape(download_href, quote=True)}">Скачать ZIP для RuVoice</a></p>'
     return f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RuVoice — книга</title><style>body{{font:16px system-ui;max-width:700px;margin:8vh auto;padding:0 20px;line-height:1.55}}main{{border:1px solid #8888;border-radius:16px;padding:26px}}input,button{{font:inherit;margin:14px 0}}input[type=file]{{display:block;width:100%;padding:14px;box-sizing:border-box}}button{{padding:12px 20px}}.notice{{background:#8882;padding:12px;border-radius:10px}}</style>
-<main><h1>Дополнение словаря RuVoice</h1><p>Выберите EPUB. Книга обрабатывается локально; накопитель сохраняется в приватной папке этого компьютера.</p>
-<form method="post" action="/upload" enctype="multipart/form-data"><input type="hidden" name="token" value="{html.escape(token)}"><label>Книга (EPUB, TXT или HTML; до 256 МБ)</label><input type="file" name="book" accept=".epub,.txt,.html,.htm" required><label>Книжные контекстные замены (необязательно, TXT)</label><input type="file" name="replacements" accept=".txt"><button type="submit">Собрать ZIP</button></form>
+<main><h1>Дополнение словаря RuVoice</h1><p>Выберите EPUB. Оригинальный RuVoice проверит книгу целиком; обработка выполняется на этом компьютере.</p>
+<form method="post" action="/upload" enctype="multipart/form-data"><input type="hidden" name="token" value="{html.escape(token)}"><label>Книга EPUB (до 256 МБ)</label><input type="file" name="book" accept=".epub,.txt,.html,.htm" required><label>Книжные контекстные замены (необязательно, TXT)</label><input type="file" name="replacements" accept=".txt"><button type="submit">Собрать ZIP</button></form>
 {feedback}<p class="notice"><b>Приватность:</b> сервер доступен только на 127.0.0.1. Книга не отправляется в GitHub и удаляется после сборки. Текст книги не включается в ZIP.</p></main></html>""".encode("utf-8")
 
 class Server(ThreadingHTTPServer):
@@ -129,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
             filename, data = fields.get("book", (None, b""))
             suffix = Path(filename or "").suffix.lower()
             if not filename or not data or suffix not in ALLOWED:
-                raise ValueError("Выберите EPUB, TXT или HTML.")
+                raise ValueError("Выберите EPUB.")
             private_home = self.server.home.expanduser().resolve()
             private_home.mkdir(parents=True, exist_ok=True, mode=0o700)
             try:
@@ -167,9 +166,12 @@ class Handler(BaseHTTPRequestHandler):
                 replacement_upload = None
             key = secrets.token_urlsafe(24)
             self.server.downloads[key] = Path(result["archive"])
-            note = f"ZIP готов. Новых записей: {result['new_entry_count']}; всего в личном накопителе: {result['cumulative_entry_count']}."
+            note = (
+                f"ZIP готов. Проверено словоупотреблений: {result['ledger_coverage_percent']}% покрытия; "
+                f"словарь: {result['new_entry_count']} ударений и {result['replacement_rule_count']} контекстных правил."
+            )
             if result["already_processed"]:
-                note += " (повторная книга, дубликаты не добавлены)"
+                note += " (эта книга уже обрабатывалась ранее; история сохранена)"
             self.send_page(200, note, download_href=f"/download/{key}")
         except (ValueError, OSError, RuntimeError, KeyError, zipfile.BadZipFile, EOFError) as exc:
             self.send_page(400, str(exc))
