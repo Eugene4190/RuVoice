@@ -109,6 +109,9 @@ tasks.register<Sync>("assembleDesktopAuditRuntime") {
     duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
     doLast {
         val root = layout.buildDirectory.dir("desktop-audit/classes").get().asFile
+        check(root.resolve("ru/kost/ruvoice/text/UploadedEpubPairedEvaluationMain.class").isFile) {
+            "Desktop whole-book main entry point was not compiled"
+        }
         check(root.resolve("ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class").isFile) {
             "Desktop whole-book JUnit test class was not compiled"
         }
