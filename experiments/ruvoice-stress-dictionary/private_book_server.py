@@ -7,6 +7,7 @@ from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+import build_book_dictionary
 from personal_book_workflow import DEFAULT_PRIVATE_HOME, process_book
 
 MAX_BYTES = 256 * 1024 * 1024
