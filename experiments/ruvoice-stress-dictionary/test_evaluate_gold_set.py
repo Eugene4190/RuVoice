@@ -10,7 +10,7 @@ class GoldSetEvaluatorTests(unittest.TestCase):
     def test_repository_seed_is_valid_and_keeps_contextual_homographs_separate(self):
         path = Path(__file__).parent / "data" / "gold" / "seed.tsv"
         rows = tool.load_gold(path)
-        self.assertEqual(len(rows), 7)
+        self.assertEqual(len(rows), 10)
         marked = [row for row in rows if row["surface"] == "маркированный"]
         self.assertEqual(len(marked), 2)
         self.assertEqual({row["sense_id"] for row in marked}, {"linguistic_term", "labelled_goods"})
