@@ -293,6 +293,23 @@ def build(args: argparse.Namespace) -> int:
             conflict_forms += 1
             continue
         if approved_rows:
+            # The approved master is append-only: a later book/source may
+            # disagree, but it must never silently replace the stored entry.
+            pool_marked = pool.get(word)
+            if word in pool_conflicts or (
+                pool_marked is not None and norm(pool_marked) != norm(approved_rows[0][1])
+            ):
+                proposed = pool_marked or " / ".join(
+                    sorted(marked for _, marked, _ in pool_rows)
+                )
+                review_rows.append([
+                    word, frequency, proposed, "ACCUMULATED_MASTER_CONFLICT",
+                    "новое предложение источника расходится с уже утверждённой записью; "
+                    "старое ударение сохранено без перезаписи",
+                ])
+                conflict_tokens += frequency
+                conflict_forms += 1
+                continue
             already_approved_tokens += frequency
             try:
                 approved_marked = adapt_marked_form(word, approved_rows[0][1])
