@@ -13,6 +13,46 @@ from local_full_book_workflow import _jar_contains
 
 
 class DesktopRuntimeJarValidationTests(unittest.TestCase):
+    def test_frozen_onefile_uses_side_by_side_engine_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            bundle = root / "_MEIPASS"
+            executable = root / "dist"
+            (executable / "engine").mkdir(parents=True)
+            resolved = workflow.resolve_engine_root(
+                root / "source",
+                frozen=True,
+                bundle_root=bundle,
+                executable_dir=executable,
+            )
+            self.assertEqual(resolved, executable.resolve())
+
+    def test_frozen_build_prefers_engine_embedded_in_bundle(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            bundle = root / "_MEIPASS"
+            executable = root / "dist"
+            (bundle / "engine").mkdir(parents=True)
+            (executable / "engine").mkdir(parents=True)
+            resolved = workflow.resolve_engine_root(
+                root / "source",
+                frozen=True,
+                bundle_root=bundle,
+                executable_dir=executable,
+            )
+            self.assertEqual(resolved, bundle.resolve())
+
+    def test_source_checkout_keeps_repository_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            resolved = workflow.resolve_engine_root(
+                root,
+                frozen=False,
+                bundle_root=None,
+                executable_dir=root / "bin",
+            )
+            self.assertEqual(resolved, root.resolve())
+
     def test_local_runner_invokes_the_junit_wrapping_desktop_main(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
