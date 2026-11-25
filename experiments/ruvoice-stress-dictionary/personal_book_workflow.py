@@ -25,7 +25,7 @@ from typing import Any
 
 import approve_book_entries
 import build_book_dictionary
-from analyze_book import parse_dictionary
+from analyze_book import extract_text, parse_dictionary
 from build_dictionary import Entry, write_dictionary
 
 HERE = Path(__file__).resolve().parent
@@ -232,6 +232,107 @@ def _recover_pending(root: Path, master: Path, system_dictionary: Path) -> None:
     pending_path.unlink(missing_ok=True)
 
 
+def _replacement_rule_parts(line: str) -> tuple[str, str] | None:
+    text = line.strip()
+    if not text or text.startswith("#") or "=" not in text:
+        return None
+    left, right = text.split("=", 1)
+    key, value = left.strip(), right.strip()
+    if not key or not value:
+        return None
+    return key, value
+
+
+def _literal_phrase_pattern(key: str) -> re.Pattern[str] | None:
+    words = key.split()
+    if len(words) < 2:
+        return None
+    if not all(re.fullmatch(r"[A-Za-zА-Яа-яЁё-]+", word) for word in words):
+        return None
+    return re.compile(
+        r"(?<![\\w])" + r"\\s+".join(re.escape(word) for word in words) + r"(?![\\w])",
+        re.IGNORECASE | re.UNICODE,
+    )
+
+
+def _build_book_replacements(
+    book: Path,
+    *,
+    prior_path: Path,
+    user_path: Path | None,
+) -> tuple[str, list[list[str]], int]:
+    """Keep prior per-book rules, add matching reviewed phrases and explicit user rules."""
+    book_text = extract_text(book)
+    curated_path = HERE.parents[1] / "private-files/paired_eval/book_reviewed_replacements.txt"
+    curated_lines = (
+        curated_path.read_text(encoding="utf-8-sig").splitlines()
+        if curated_path.is_file() else []
+    )
+    prior_lines = (
+        prior_path.read_text(encoding="utf-8-sig").splitlines()
+        if prior_path.is_file() else []
+    )
+    user_lines = (
+        Path(user_path).read_text(encoding="utf-8-sig").splitlines()
+        if user_path is not None else []
+    )
+
+    selected: list[str] = []
+    by_key: dict[str, tuple[str, str]] = {}
+    review: list[list[str]] = []
+    auto_count = 0
+
+    def add_lines(lines: list[str], source: str, *, auto_match: bool = False) -> None:
+        nonlocal auto_count
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = _replacement_rule_parts(line)
+            if parts is None:
+                review.append([line, "", source, "INVALID_RULE", "ожидается строка «ключ = замена»"])
+                continue
+            key, value = parts
+            if auto_match:
+                pattern = _literal_phrase_pattern(key)
+                if pattern is None or not pattern.search(book_text):
+                    continue
+            normalized_key = re.sub(r"\\s+", " ", key.lower())
+            previous = by_key.get(normalized_key)
+            if previous is not None:
+                if previous[0] != value:
+                    review.append([
+                        key, f"{previous[0]} <> {value}", source, "HELD_CONFLICT",
+                        f"сохранено более раннее правило из источника {previous[1]}",
+                    ])
+                continue
+            by_key[normalized_key] = (value, source)
+            selected.append(line)
+            if auto_match:
+                auto_count += 1
+            review.append([
+                key, value, source, "INCLUDED",
+                "буквальная фраза найдена в тексте книги" if auto_match
+                else "явно приложенное или ранее сохранённое правило",
+            ])
+
+    # Earlier book-specific choices have the highest priority and are append-only.
+    add_lines(prior_lines, "previously_saved_for_this_book")
+    add_lines(curated_lines, "curated_reviewed_phrase", auto_match=True)
+    add_lines(user_lines, "user_supplied_for_this_book")
+
+    header = "# Контекстные замены только для этой книги. Не объединять с глобальным Системный.txt.\\n"
+    content = header + "".join(line + "\\n" for line in selected)
+    return content, review, auto_count
+
+
+def _write_replacement_review(path: Path, rows: list[list[str]]) -> None:
+    with path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.writer(stream, delimiter="\\t")
+        writer.writerow(["key", "replacement_or_conflict", "source", "status", "reason"])
+        writer.writerows(rows)
+
+
 def _write_import_guide(
     path: Path,
     book_name: str,
@@ -404,19 +505,14 @@ def process_book(
         replacements_dir = private_root / "replacements"
         _private_dir(replacements_dir)
         replacement_store = replacements_dir / f"{digest}.txt"
-        if replacements is not None:
-            replacements = Path(replacements)
-            if replacements.suffix.lower() != ".txt":
-                raise ValueError("Файл контекстных замен должен иметь расширение .txt")
-            _atomic_text(
-                replacement_store,
-                replacements.read_text(encoding="utf-8-sig"),
-            )
-        elif not replacement_store.exists():
-            _atomic_text(
-                replacement_store,
-                "# Для этой книги отдельные контекстные/фразовые замены не заданы.\n",
-            )
+        if replacements is not None and Path(replacements).suffix.lower() != ".txt":
+            raise ValueError("Файл контекстных замен должен иметь расширение .txt")
+        replacement_content, replacement_review_rows, auto_phrase_count = _build_book_replacements(
+            book,
+            prior_path=replacement_store,
+            user_path=Path(replacements) if replacements is not None else None,
+        )
+        _atomic_text(replacement_store, replacement_content)
         shutil.copyfile(replacement_store, replacement_path)
         try:
             os.chmod(replacement_path, 0o600)
@@ -427,6 +523,8 @@ def process_book(
             if line.strip() and not line.lstrip().startswith("#")
         ]
         has_replacements = bool(replacement_lines)
+        replacement_review_path = builder_output / "Book_Replacements_Review.tsv"
+        _write_replacement_review(replacement_review_path, replacement_review_rows)
         history = _load_json(history_path, {"schema_version": 1, "books": {}})
         book_record = history.setdefault("books", {}).setdefault(digest, {})
         book_record["replacements"] = {
@@ -457,6 +555,7 @@ def process_book(
             "append_only": True,
             "private_storage": True,
             "per_book_replacements_persisted": True,
+            "auto_selected_reviewed_phrase_rules": auto_phrase_count,
             "book_text_included_in_package": False,
         }
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -470,8 +569,8 @@ def process_book(
 
         archive_path = package_dir / f"{_safe_stem(Path(display_name).stem)}-{digest[:10]}.zip"
         include = [
-            delta_path, snapshot_path, history_snapshot, replacement_path, guide_path, report_path,
-            builder_output / "Book_AutoStress_Review.tsv",
+            delta_path, snapshot_path, history_snapshot, replacement_path, replacement_review_path,
+            guide_path, report_path, builder_output / "Book_AutoStress_Review.tsv",
             builder_output / "Book_Unresolved_Words.tsv",
         ]
         with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
