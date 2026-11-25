@@ -2,50 +2,55 @@
 
 Дата проверки: 2026-11-25.
 Рабочая ветка: `stress-dictionary-pipeline`.
+Код и Windows portable build: `501cc1e8957cac0a078ead1a5397b58144358850`.
 
 ## Уже реализовано
 
 - Локальная browser-страница `private_book_server.py`, привязанная к `127.0.0.1`; загрузка EPUB/TXT/HTML до 256 МБ и необязательного TXT с книжными replacements.
 - Проверки Host/Origin и одноразового токена формы; HTTP access-log отключён.
 - Входные EPUB и TXT временные, удаляются до выдачи ссылки на ZIP.
-- Append-only мастер и история provenance хранятся вне Git: `~/.ruvoice-book-workflow` (Windows: `%USERPROFILE%\\.ruvoice-book-workflow`); локальная папка не зашифрована.
+- Append-only мастер и история provenance хранятся вне Git: `%USERPROFILE%\\.ruvoice-book-workflow` на Windows (по умолчанию). Локальная папка не зашифрована.
 - SHA-256 обеспечивает идемпотентность повторной книги. Конфликтующие новые ударения не перезаписывают утверждённые записи.
 - ZIP содержит дельту этой книги, полный cumulative snapshot, историю, отдельные per-book replacements, Import guide и review-отчёты.
 - Кандидаты добавляются только после разрешённых source/context/spelling/conflict checks.
 - OPF spine reading order поддержан; есть fallback для минимальных EPUB.
-- Публичный корневой `.gitignore` блокирует новые файлы книг и локальные данные пользователя.
+- Публичный корневой `.gitignore` блокирует новые файлы EPUB/MOBI/FB2 и локальные данные пользователя.
 
-## Windows portable build — в разработке
+## Windows portable build — готов
 
-- Добавлен resolver путей для исходного checkout и PyInstaller one-file bundle: ресурсы читаются из `sys._MEIPASS` внутри EXE.
-- Добавлены unit tests на source/bundle path resolution.
-- Windows launcher теперь сначала запускает `RuVoiceBookTool.exe`, если он лежит рядом; иначе пытается использовать установленный Python 3.11+.
-- Workflow `Build RuVoice Book Tool for Windows` собирает one-file EXE, проверяет запуск локальной страницы и публикует ZIP `RuVoiceBookTool-Windows-x64` как Actions artifact.
-- Windows workflow и обновлённый Python compile list ещё проходят CI. Пока smoke test не прошёл, ZIP не объявляется доступным/готовым.
+- One-file EXE собран с PyInstaller; отдельная установка Python пользователю не нужна.
+- Launcher `Start_RuVoice_Book_Tool_Windows.bat` запускает EXE и открывает локальную страницу в браузере.
+- [Windows build run 45684945444](https://github.com/Eugene4190/RuVoice/actions/runs/45684945444) — **success**. На чистом Windows runner прошёл сквозной smoke-test: EXE стартует, отдаёт страницу, принимает synthetic EPUB, выполняет обработку, скачивает ZIP, проверяет обязательные файлы пакета и создаёт приватный append-only master. Временная загруженная EPUB удаляется.
+- Артефакт: `RuVoiceBookTool-Windows-x64`, 9,729,033 bytes, retention 30 дней. Его можно скачать на странице run выше, в секции Artifacts.
+- Архив содержит `RuVoiceBookTool.exe`, BAT launcher и `START_HERE.txt`.
 
-## Последние подтверждённые тесты до Windows packaging
+## Автоматические проверки
 
-- Dictionary tools [run 45678874104](https://github.com/Eugene4190/RuVoice/actions/runs/45678874104) — success.
-- На коде до portable-build обе проверки прошли: 61 основной Python unit test + 26 private paired-evaluation tests; Kotlin Full/Lite — success.
-- Новые тесты пути и Windows EXE проверяются отдельными CI jobs.
+На версии кода `501cc1e8957cac0a078ead1a5397b58144358850`:
+
+- [Dictionary tools run 45684945447](https://github.com/Eugene4190/RuVoice/actions/runs/45684945447) — **success**, включая новые тесты resolver путей для source checkout/frozen bundle.
+- [Windows portable build run 45684945444](https://github.com/Eugene4190/RuVoice/actions/runs/45684945444) — **success**, в том числе сквозной synthetic EPUB → ZIP smoke-test.
+- [Kotlin Full/Lite run 45684945387](https://github.com/Eugene4190/RuVoice/actions/runs/45684945387) — выполняется на момент записи; это JVM-тесты, а не APK build.
+- Тесты A → B → повтор B, конфликтной защиты, восстановления транзакции, OPF spine, per-book replacements, ZIP и localhost upload/download проходят на синтетических данных.
+
+Автоматические тесты не заменяют запуск настоящей пользовательской EPUB и ручной импорт/прослушивание на телефоне.
 
 ## Что осталось до пользовательской приёмки
 
-1. Успешно собрать Windows portable ZIP и пройти smoke test на чистом Windows runner.
-2. Скачать ZIP, распаковать и запустить BAT двойным щелчком.
-3. Обработать настоящую EPUB и проверить дельту, полный snapshot, replacements и отчёты.
-4. Проверить качество ударений на этой книге, особенно неизвестные формы и омографы.
-5. Расширить безопасное предложение новых контекстных replacements; текущий автоматический выбор ограничен curated-фразами, пользовательский TXT поддержан.
-6. Импортировать дельту и replacements в RuVoice на телефоне.
-7. Проверить чтение той же EPUB с одновременной озвучкой.
-8. Повторить цикл на второй книге, проверив сохранение первой.
+1. Скачать Windows ZIP, распаковать и запустить BAT двойным щелчком.
+2. Обработать настоящую EPUB и проверить ZIP, отчёты, количество новых записей и локальную папку.
+3. Проверить качество ударений на этой книге, особенно неизвестные формы и омографы.
+4. Расширить автоматическое безопасное предложение новых контекстных replacements. Сейчас автоматически выбираются только ограниченные curated-фразы; пользовательский TXT поддержан.
+5. Импортировать дельту и replacements в RuVoice на телефоне.
+6. Открыть ту же EPUB в RuVoice и проверить порядок текста и одновременную озвучку.
+7. Повторить реальный цикл на второй книге, проверив сохранение первого списка.
 
 ## Приватность и границы
 
 - Репозиторий публичный; старый тестовый `private-files/8.Iskusstvo..epub` и часть review-материалов доступны через GitHub.
 - Новые пользовательские книги через локальную страницу не отправляются в GitHub.
 - Локальный мастер, ZIP и review data не зашифрованы.
-- Пользовательские книги и их контент не добавлять в Git, Issues, PR и Actions artifacts/logs.
+- Пользовательские книги и их контент не добавлять в Git, Issues, PR, Actions artifacts или логи.
 - `main`, production `Системный.txt`, глобальные replacements и APK assets не менялись.
 
 ## Состояние репозитория
