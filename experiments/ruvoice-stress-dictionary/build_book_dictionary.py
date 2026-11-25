@@ -94,26 +94,33 @@ def orthographic_alias_review_reason(
     return None
 
 
-def load_provenance(path: Path) -> dict[str, str]:
-    """Keep provenance keyed by the exact written form, including е/ё."""
+def load_provenance(path: Path) -> dict[str, tuple[str, str]]:
+    """Keep exact spelling, marked form and source together for every candidate."""
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
         data_lines = (line for line in stream if not line.lstrip().startswith("#"))
         reader = csv.DictReader(data_lines, delimiter="\t")
         required = {"word", "stress", "source"}
         if not reader.fieldnames or not required.issubset(reader.fieldnames):
             raise ValueError(f"Некорректный аудит источников: {path}")
-        result: dict[str, str] = {}
+        result: dict[str, tuple[str, str]] = {}
         for row in reader:
             word = (row.get("word") or "").strip().lower()
+            marked = (row.get("stress") or "").strip().lower()
             source = (row.get("source") or "").strip()
             if not word or source not in ALLOWED_SOURCES:
                 continue
-            previous = result.get(word)
-            if previous is not None and previous != source:
+            reason = validate_entry(word, marked)
+            if reason:
                 raise ValueError(
-                    f"Несколько источников provenance для точной формы {word}: {previous} / {source}"
+                    f"Некорректное ударение в provenance для {word}: {marked!r}: {reason}"
                 )
-            result[word] = source
+            current = (marked, source)
+            previous = result.get(word)
+            if previous is not None and previous != current:
+                raise ValueError(
+                    f"Конфликт provenance для точной формы {word}: {previous} / {current}"
+                )
+            result[word] = current
     return result
 
 
@@ -188,10 +195,15 @@ def build(args: argparse.Namespace) -> int:
     # Provenance is attached only to the exact spelling in the audit and pool.
     # A normalized е/ё alias must never inherit another form's source label.
     eligible_pool: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
-    for word, source in provenance.items():
+    for word, (provenance_stress, source) in provenance.items():
         marked = pool.get(word)
-        if marked is not None:
-            eligible_pool[word].append((word, marked, source))
+        if marked is None:
+            continue
+        if marked != provenance_stress:
+            raise ValueError(
+                f"Provenance stress mismatch for {word}: audit={provenance_stress!r}, pool={marked!r}"
+            )
+        eligible_pool[word].append((word, marked, source))
 
     candidates: list[Entry] = []
     review_rows: list[list[object]] = []
