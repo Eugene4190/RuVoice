@@ -307,6 +307,33 @@ def verdict(
     return "NO_INDEPENDENT_REFERENCE", "Независимая словарная форма не найдена"
 
 
+def non_russian_occurrence_row(
+    token: dict[str, Any],
+    source_word: str,
+    output_word: str,
+    reviewed_word: str,
+    ruaccent_word: str,
+    context: str,
+) -> list[Any]:
+    """Retain every non-Cyrillic/special token in the ledger without inventing a Russian stress verdict."""
+    base = token.get("ruvoice_stress_vowel_index")
+    base = None if base in (None, "null", "") else int(base)
+    reviewed = acute_position(reviewed_word)
+    ruaccent = acute_position(ruaccent_word)
+    reason = "NOT_RUSSIAN_LEXICAL_STRESS: token is retained for coverage but is not scored by Russian lexical-stress references."
+    return [
+        "NON_RUSSIAN_OR_SPECIAL", "NON_RUSSIAN_OR_SPECIAL",
+        source_word, output_word, reviewed_word, ruaccent_word,
+        "" if base is None else base,
+        "" if reviewed is None else reviewed,
+        "" if ruaccent is None else ruaccent,
+        "", "", "", "", "",
+        token.get("segment_index", ""), token.get("word_index", ""),
+        token.get("chapter", ""), token.get("paragraph", ""), context,
+        reason, reason,
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--paired-json", type=Path, required=True)
@@ -414,23 +441,28 @@ def main() -> int:
             source_word = output_word
         source_word = str(source_word)
         key = norm(source_word)
-        if not CYR.fullmatch(key):
-            continue
         segment_index = int(token.get("segment_index", -1))
         word_index = int(token.get("word_index", -1))
         ruaccent_word = ruaccent_by_occurrence.get((segment_index, word_index), output_word)
+        reviewed_word = reviewed_by_occurrence.get((segment_index, word_index), output_word)
+        context = context_by_segment.get(segment_index, "")
+        if not CYR.fullmatch(key):
+            counts["NON_RUSSIAN_OR_SPECIAL"] += 1
+            reviewed_counts["NON_RUSSIAN_OR_SPECIAL"] += 1
+            occurrence_rows.append(non_russian_occurrence_row(
+                token, source_word, output_word, reviewed_word, ruaccent_word, context
+            ))
+            continue
         base_position = token.get("ruvoice_stress_vowel_index")
         base_position = None if base_position in (None, "null") else int(base_position)
         ruaccent_position = acute_position(ruaccent_word)
         system_positions = system.get(key, set())
         aot_positions = aot.get(key, {})
         wikt_positions = wikt.get(key, {})
-        context = context_by_segment.get(segment_index, "")
         status, reason = verdict(
             key, base_position, ruaccent_position, aot_positions, wikt_positions,
             system_positions, context, contextual_acceptances
         )
-        reviewed_word = reviewed_by_occurrence.get((segment_index, word_index), output_word)
         reviewed_position = acute_position(reviewed_word)
         reviewed_status, reviewed_reason = verdict(
             key, reviewed_position, ruaccent_position, aot_positions, wikt_positions,
@@ -529,6 +561,9 @@ def main() -> int:
     summary = {
         "book": paired.get("book_file"),
         "tokens_from_ruvoice": len(tokens),
+        "occurrences_in_quality_ledger": len(occurrence_rows),
+        "ledger_coverage_percent": round(100 * len(occurrence_rows) / len(tokens), 4) if tokens else 100.0,
+        "non_russian_or_special_occurrences": counts["NON_RUSSIAN_OR_SPECIAL"],
         "valid_russian_occurrences": total,
         "unique_wordforms": len(aggregate),
         "aot_forms_found": len(aot),
