@@ -11,6 +11,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Test
+import org.junit.runner.JUnitCore
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import ru.kost.ruvoice.Pipeline
@@ -489,7 +490,12 @@ private class PairedTorchLiteStressModels(
     private val padId: Int,
 ) : StressModels, AutoCloseable {
     private val process = ProcessBuilder(
-        "python3", bridgeScript.absolutePath, accentorFile.absolutePath, homoFile.absolutePath
+        System.getenv("RUVOICE_TORCH_BRIDGE_EXE")?.takeIf { it.isNotBlank() }?.let { exe ->
+            listOf(exe, accentorFile.absolutePath, homoFile.absolutePath)
+        } ?: listOf(
+            System.getenv("RUVOICE_PYTHON")?.takeIf { it.isNotBlank() } ?: "python3",
+            bridgeScript.absolutePath, accentorFile.absolutePath, homoFile.absolutePath
+        )
     ).redirectError(ProcessBuilder.Redirect.INHERIT).start()
     private val writer = process.outputStream.bufferedWriter(Charsets.UTF_8)
     private val reader = process.inputStream.bufferedReader(Charsets.UTF_8)
@@ -572,7 +578,9 @@ private class PairedRemoteRuAccentCorrector(
     nativeDirectory: String,
 ) : IndependentStressCorrector, AutoCloseable {
     private val process = ProcessBuilder(
-        "java", "-Xmx4g", "-Djava.library.path=" + nativeDirectory, "-cp", bridgeClasspath,
+        System.getenv("RUVOICE_JAVA")?.takeIf { it.isNotBlank() }
+            ?: File(System.getProperty("java.home"), "bin/java").absolutePath,
+        "-Xmx4g", "-Djava.library.path=" + nativeDirectory, "-cp", bridgeClasspath,
         "ru.kost.ruvoice.text.RuAccentBridgeKt", modelDirectory.absolutePath
     ).redirectError(ProcessBuilder.Redirect.INHERIT).start()
     private val writer = process.outputStream.bufferedWriter(Charsets.UTF_8)
@@ -1467,5 +1475,22 @@ class UploadedEpubPairedEvaluationTest {
             torchModels.close()
             modelRoot.deleteRecursively()
         }
+    }
+}
+
+
+/** Desktop entry point: run the same full-book JVM audit without Android Gradle on the user's PC. */
+object UploadedEpubPairedEvaluationMain {
+    @JvmStatic
+    fun main(args: Array<String>) {
+        val result = JUnitCore.runClasses(UploadedEpubPairedEvaluationTest::class.java)
+        for (failure in result.failures) {
+            System.err.println("RUVOICE_AUDIT_FAILURE=" + failure.testHeader + " :: " + failure.message)
+            failure.exception.printStackTrace(System.err)
+        }
+        if (!result.wasSuccessful()) {
+            throw IllegalStateException("RuVoice whole-book audit failed: " + result.failureCount + " test failures")
+        }
+        println("RUVOICE_WHOLE_BOOK_AUDIT=PASS")
     }
 }
