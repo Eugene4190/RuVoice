@@ -1,3 +1,4 @@
+import csv
 import gzip
 import json
 import tempfile
@@ -104,6 +105,47 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
     def test_malformed_json_reports_line_number(self):
         with self.assertRaisesRegex(ValueError, "line 2"):
             tool.extract_jsonl(['{"lang_code":"en"}', "{broken json"])
+
+    def test_four_bedroom_candidate_sheet_is_complete_and_withheld(self):
+        root = Path(__file__).resolve().parent
+        review_file = root / "reports" / "ruwiktionary-four-bedroom-provisional.tsv"
+        with review_file.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream, delimiter="\\t"))
+
+        expected_surfaces = {
+            "четырёхбедрумна",
+            "четырёхбедрумная",
+            "четырёхбедрумно",
+            "четырёхбедрумного",
+            "четырёхбедрумное",
+            "четырёхбедрумной",
+            "четырёхбедрумном",
+            "четырёхбедрумному",
+            "четырёхбедрумною",
+            "четырёхбедрумную",
+            "четырёхбедрумны",
+            "четырёхбедрумные",
+            "четырёхбедрумный",
+            "четырёхбедрумным",
+            "четырёхбедрумными",
+            "четырёхбедрумных",
+        }
+        self.assertEqual(len(rows), 16)
+        self.assertEqual({row["surface"] for row in rows}, expected_surfaces)
+        self.assertEqual(len({row["candidate_id"] for row in rows}), 16)
+        for row in rows:
+            self.assertEqual(
+                row["provisional_marked"],
+                row["surface"].replace("бедрум", "б+едрум"),
+            )
+            self.assertEqual(
+                row["approval_status"],
+                "WITHHELD_PENDING_HUMAN_PRONUNCIATION_REVIEW",
+            )
+            self.assertEqual(
+                row["source_url"],
+                "https://ru.wiktionary.org/wiki/четырёхбедрумный",
+            )
 
     def test_gzip_input_and_tsv_manifest_are_written(self):
         lines = [
