@@ -8,11 +8,10 @@ from pathlib import Path
 import extract_ruwiktionary_forms as tool
 
 
-def article(word, pos, forms, lang_code="ru"):
-    return json.dumps(
-        {"word": word, "pos": pos, "lang_code": lang_code, "forms": forms},
-        ensure_ascii=False,
-    )
+def article(word, pos, forms, lang_code="ru", **extra):
+    payload = {"word": word, "pos": pos, "lang_code": lang_code, "forms": forms}
+    payload.update(extra)
+    return json.dumps(payload, ensure_ascii=False)
 
 
 class RussianWiktionaryExtractorTests(unittest.TestCase):
@@ -116,6 +115,48 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         )
         self.assertEqual(result.multi_variant_surface_count, 1)
 
+    def test_context_jsonl_keeps_distinct_senses_for_same_form(self):
+        tags = ["singular", "nominative"]
+        lines = [
+            article(
+                "замок",
+                "noun",
+                [{"form": "за\\u0301мок", "tags": tags}],
+                tags=["masculine"],
+                senses=[{"glosses": ["укреплённое жилище"], "tags": ["masculine"]}],
+            ),
+            article(
+                "замок",
+                "noun",
+                [{"form": "за\\u0301мок", "tags": tags}],
+                tags=["masculine"],
+                senses=[{"glosses": ["устройство для запирания"], "tags": ["masculine"]}],
+            ),
+        ]
+        result = tool.extract_jsonl(lines)
+
+        # The compact stress TSV can merge identical lemma/POS/form-tag descriptors,
+        # but the context stream must keep both source senses.
+        self.assertEqual(
+            result.forms["замок"]["з+амок"],
+            {"замок:noun:nominative,singular"},
+        )
+        self.assertEqual(len(result.contexts["замок"]["з+амок"]), 2)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "contexts.jsonl"
+            tool.write_context_jsonl(output, result)
+            records = [
+                json.loads(line)
+                for line in output.read_text(encoding="utf-8").splitlines()
+            ]
+        self.assertEqual(len(records), 2)
+        self.assertEqual(
+            {record["senses"][0]["glosses"][0] for record in records},
+            {"укреплённое жилище", "устройство для запирания"},
+        )
+        self.assertTrue(all(record["source_line"] in {1, 2} for record in records))
+
     def test_malformed_json_reports_line_number(self):
         with self.assertRaisesRegex(ValueError, "line 2"):
             tool.extract_jsonl(['{"lang_code":"en"}', "{broken json"])
@@ -173,6 +214,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             root = Path(tmp)
             source = root / "raw.jsonl.gz"
             output = root / "forms.tsv"
+            context_output = root / "contexts.jsonl"
             manifest = root / "manifest.json"
             with gzip.open(source, "wt", encoding="utf-8") as stream:
                 stream.write("\n".join(lines) + "\n")
@@ -180,12 +222,14 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             with tool.open_jsonl(source) as stream:
                 result = tool.extract_jsonl(stream)
             tool.write_tsv(output, result)
+            tool.write_context_jsonl(context_output, result)
             metadata = tool.build_manifest(
                 source,
                 output,
                 "2026-11-01",
                 tool.sha256_file(source),
                 result,
+                context_output,
             )
             manifest.write_text(
                 json.dumps(metadata, ensure_ascii=False),
@@ -197,6 +241,9 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             self.assertEqual(loaded["source_dump_date"], "2026-11-01")
             self.assertEqual(loaded["source_edition"], "Russian-language Wiktionary (ru.wiktionary.org)")
             self.assertEqual(loaded["distinct_surface_form_count"], 1)
+            self.assertEqual(loaded["context_record_count"], 1)
+            self.assertEqual(loaded["context_output_file"], "contexts.jsonl")
+            self.assertEqual(len(loaded["context_output_sha256"]), 64)
             self.assertEqual(len(loaded["input_sha256"]), 64)
 
 
