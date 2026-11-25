@@ -27,6 +27,23 @@ class BookAnalyzerTests(unittest.TestCase):
             self.assertIn("берег", conflicts[0])
             self.assertIn("ударения", conflicts[0])
 
+    def test_parse_dictionary_accepts_hard_e_phonetic_projection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stress.txt"
+            path.write_text("альбукерк альбук+эрк\n", encoding="utf-8")
+            dictionary, conflicts = tool.parse_dictionary(path)
+            self.assertEqual(dictionary["альбукерк"], "альбук+эрк")
+            self.assertEqual(conflicts, [])
+
+    def test_parse_dictionary_rejects_other_letter_substitutions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stress.txt"
+            path.write_text("замок з+амак\n", encoding="utf-8")
+            dictionary, conflicts = tool.parse_dictionary(path)
+            self.assertNotIn("замок", dictionary)
+            self.assertEqual(len(conflicts), 1)
+            self.assertIn("замок", conflicts[0])
+
     def test_missing_stress_field_is_reported_as_a_conflict(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "stress.txt"

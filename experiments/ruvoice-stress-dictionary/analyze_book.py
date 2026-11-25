@@ -95,6 +95,21 @@ def extract_text(path: Path) -> str:
     raise ValueError("Поддерживаются EPUB, TXT и HTML")
 
 
+def dictionary_form_matches_key(word: str, bare: str) -> bool:
+    """Accept orthographic е/ё plus the app's hard-е phonetic projection (е→э)."""
+    if len(word) != len(bare):
+        return False
+    for source, rendered in zip(word, bare):
+        if source == rendered:
+            continue
+        if source in "её" and rendered in "её":
+            continue
+        if source == "е" and rendered == "э":
+            continue
+        return False
+    return True
+
+
 def parse_dictionary(path: Path) -> tuple[dict[str, str], list[str]]:
     entries: dict[str, str] = {}
     conflicts: list[str] = []
@@ -138,7 +153,7 @@ def parse_dictionary(path: Path) -> tuple[dict[str, str], list[str]]:
         pos = marked.index("+")
         bare = marked.replace("+", "")
         if (
-            bare.replace("ё", "е") != word.replace("ё", "е")
+            not dictionary_form_matches_key(word, bare)
             or pos >= len(bare)
             or bare[pos] not in VOWELS
         ):
