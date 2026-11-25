@@ -1030,15 +1030,18 @@ class UploadedEpubPairedEvaluationTest {
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
                 val checkedWithBookOverlay = caseId == "silks-plural-01" && bookReplacementLines.any { it.trim() == "шелка и = шелк+а и" }
+                val checkedWithManualStress = plain(targetWord) in bookOverrides
                 val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
                 val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
                 check(targetIndex >= 0) { "Stress precheck $caseId: target '$targetWord' is missing" }
                 val baselineText = readable(sourceText, baselineStress)
                 val mergedText = readable(sourceText, combinedStress)
-                val checkedText = if (checkedWithBookOverlay)
-                    readable(sourceText, reviewedStress, data, bookReplacements)
-                else mergedText
+                val checkedText = when {
+                    checkedWithBookOverlay -> readable(sourceText, reviewedStress, data, bookReplacements)
+                    checkedWithManualStress -> readable(sourceText, reviewedStress, data)
+                    else -> mergedText
+                }
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
                 val mergedTokens = wordRegex.findAll(mergedText).toList()
                 val checkedTokens = wordRegex.findAll(checkedText).toList()
