@@ -712,6 +712,17 @@ class UploadedEpubPairedEvaluationTest {
         check(requiredReplacementRules.all { it in replacementLines }) {
             "System replacement dictionary is missing book-relevant production rules"
         }
+        // Book-specific replacement overrides are applied only in the reviewed stream.
+        val bookReplacementFile = File(checkNotNull(System.getenv("RUVOICE_BOOK_REPLACEMENTS"))).canonicalFile
+        check(bookReplacementFile.isFile && bookReplacementFile.length() > 0L) {
+            "Missing book-only replacement overlay: $bookReplacementFile"
+        }
+        val bookReplacementLines = bookReplacementFile.readLines(Charsets.UTF_8)
+        val requiredBookReplacement = "шелка и = шелк+а и"
+        check(bookReplacementLines.map { it.trim() }.contains(requiredBookReplacement)) {
+            "Book-only replacement overlay must preserve plural stress in 'шелка и'"
+        }
+        val bookReplacements = Replacements.parse(systemReplacementFile.readLines(Charsets.UTF_8) + bookReplacementLines)
 
         // Book-reviewed overlay is kept separate from the installed system dictionary.
         // Conflicting or duplicate entries fail closed; the overlay is used only by this
@@ -774,8 +785,13 @@ class UploadedEpubPairedEvaluationTest {
         )
 
         try {
-            fun readable(text: String, stress: Stress, inputData: SileroData = baselineData): String {
-                val replaced = systemReplacements.apply(text)
+            fun readable(
+                text: String,
+                stress: Stress,
+                inputData: SileroData = baselineData,
+                replacements: Replacements = systemReplacements,
+            ): String {
+                val replaced = replacements.apply(text)
                 return StressDiagnosticFormatter.readable(Pipeline.accent(replaced, inputData, stress, inputData.allowed, rules))
             }
             val sanity = JSONObject()
@@ -861,24 +877,32 @@ class UploadedEpubPairedEvaluationTest {
                 val targetWord = item.getString("word")
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
-                val sourceTokens = wordRegex.findAll(systemReplacements.apply(sourceText).replace("+", "")).toList()
+                val checkedWithBookOverlay = caseId == "silks-plural-01"
+                val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
+                val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
                 check(targetIndex >= 0) { "Stress precheck $caseId: target '$targetWord' is missing" }
                 val baselineText = readable(sourceText, baselineStress)
                 val mergedText = readable(sourceText, combinedStress)
+                val checkedText = if (checkedWithBookOverlay)
+                    readable(sourceText, reviewedStress, data, bookReplacements)
+                else mergedText
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
                 val mergedTokens = wordRegex.findAll(mergedText).toList()
-                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
+                val checkedTokens = wordRegex.findAll(checkedText).toList()
+                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size &&
+                    checkedTokens.size == sourceTokens.size) {
                     "Stress precheck $caseId: token alignment changed (source=${sourceTokens.size}, " +
-                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
+                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size}, checked=${checkedTokens.size})"
                 }
                 val baselineWord = baselineTokens[targetIndex].value
                 val mergedWord = mergedTokens[targetIndex].value
-                val actualPosition = stressPosition(mergedWord)
-                println("STRESS_PRECHECK_CASE=$caseId baseline='$baselineWord' merged='$mergedWord' actual=$actualPosition accepted=$acceptedPositions")
+                val checkedWord = checkedTokens[targetIndex].value
+                val actualPosition = stressPosition(checkedWord)
+                println("STRESS_PRECHECK_CASE=$caseId baseline='$baselineWord' merged='$mergedWord' checked='$checkedWord' actual=$actualPosition accepted=$acceptedPositions")
                 check(actualPosition != null && actualPosition in acceptedPositions) {
                     "Stress precheck $caseId: expected one of $acceptedPositions, " +
-                        "baseline='$baselineWord', merged='$mergedWord', actual=$actualPosition"
+                        "baseline='$baselineWord', merged='$mergedWord', checked='$checkedWord', actual=$actualPosition"
                 }
                 earlyStressPassed++
             }
@@ -1022,21 +1046,24 @@ class UploadedEpubPairedEvaluationTest {
             val reviewedPhrasePattern = Regex("(?<![а-яё])сети\\s+значений(?![а-яё])")
 
             for ((segmentIndex, segment) in segments.withIndex()) {
-                // Match the app's real order: Replacements.apply first, then Pipeline.accent + Stress.
-                val replacedSource = systemReplacements.apply(segment.text)
+                // Baseline and RUAccent use production system replacements; only the reviewed
+                // stream receives the additional book-specific replacement overlay.
+                val baselineSource = systemReplacements.apply(segment.text)
+                val reviewedSource = bookReplacements.apply(segment.text)
+                val combinedSource = systemReplacements.apply(segment.text)
                 val baseline = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(replacedSource, baselineData, baselineStress, baselineData.allowed, rules)
+                    Pipeline.accent(baselineSource, baselineData, baselineStress, baselineData.allowed, rules)
                 )
                 val reviewed = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(replacedSource, data, reviewedStress, data.allowed, rules)
+                    Pipeline.accent(reviewedSource, data, reviewedStress, data.allowed, rules)
                 )
                 val combined = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(replacedSource, baselineData, combinedStress, baselineData.allowed, rules)
+                    Pipeline.accent(combinedSource, baselineData, combinedStress, baselineData.allowed, rules)
                 )
                 val oldWords = wordRegex.findAll(baseline).toList()
                 val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
-                val sourceWords = wordRegex.findAll(replacedSource.replace("+", "")).toList()
+                val sourceWords = wordRegex.findAll(baselineSource.replace("+", "")).toList()
 
                 // The book overlay is deliberately narrow: only its seven exact wordforms
                 // and the one contextual phrase may change. This catches accidental loading
@@ -1055,8 +1082,10 @@ class UploadedEpubPairedEvaluationTest {
                     val beforePosition = stressPosition(beforeWord)
                     val reviewedPosition = stressPosition(reviewedWord)
                     val expectedVariant = bookOverrides[beforeKey]
-                    val phraseTarget = beforeKey == "сети" &&
-                        reviewedPhrasePattern.containsMatchIn(segment.text.lowercase(Locale.ROOT))
+                    val phraseTarget = (beforeKey == "сети" &&
+                        reviewedPhrasePattern.containsMatchIn(segment.text.lowercase(Locale.ROOT))) ||
+                        (beforeKey == "шелка" &&
+                            Regex("(?<![а-яё])шелка\\s+и(?![а-яё])").containsMatchIn(segment.text.lowercase(Locale.ROOT)))
                     if (expectedVariant != null) {
                         val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
                             "Invalid reviewed dictionary marker for " + beforeKey + ": " + expectedVariant
@@ -1068,8 +1097,11 @@ class UploadedEpubPairedEvaluationTest {
                         }
                         reviewedOverrideSeen[beforeKey] = (reviewedOverrideSeen[beforeKey] ?: 0) + 1
                     } else if (phraseTarget) {
-                        check(reviewedPosition == 0) {
-                            "The phrase 'Сети значений' must stress the first vowel of 'сети': '" + reviewedWord + "'"
+                        val expectedPhrasePosition = if (beforeKey == "сети") 0 else 1
+                        check(reviewedPosition == expectedPhrasePosition) {
+                            "Book-only phrase override failed for " + beforeKey + " in segment " + segmentIndex +
+                                ": expected=" + expectedPhrasePosition + " actual=" + reviewedPosition +
+                                " context='" + segment.text + "'"
                         }
                         reviewedPhraseOverrideHits++
                     } else {
@@ -1285,10 +1317,13 @@ class UploadedEpubPairedEvaluationTest {
                         put(JSONObject().put("word", word).put("variant", variant))
                     }
                 })
-                .put("book_reviewed_phrase_overrides", JSONArray().put(
-                    JSONObject().put("word", "сети")
-                        .put("phrase", "сети значений").put("variant", "с+ети")
-                ))
+                .put("book_reviewed_phrase_overrides", JSONArray()
+                    .put(JSONObject().put("word", "сети")
+                        .put("phrase", "сети значений").put("variant", "с+ети"))
+                    .put(JSONObject().put("word", "шелка")
+                        .put("phrase", "шелка и").put("variant", "шелк+а"))
+                )
+                .put("book_replacement_overlay_entries", bookReplacementLines.size)
                 .put("baseline_tokens", baselineTokens)
                 .put("reviewed_tokens", reviewedTokens)
                 .put("combined_tokens", combinedTokens)
