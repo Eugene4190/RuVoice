@@ -121,14 +121,14 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             article(
                 "замок",
                 "noun",
-                [{"form": "за\\u0301мок", "tags": tags}],
+                [{"form": "за\u0301мок", "tags": tags}],
                 tags=["masculine"],
                 senses=[{"glosses": ["укреплённое жилище"], "tags": ["masculine"]}],
             ),
             article(
                 "замок",
                 "noun",
-                [{"form": "за\\u0301мок", "tags": tags}],
+                [{"form": "за\u0301мок", "tags": tags}],
                 tags=["masculine"],
                 senses=[{"glosses": ["устройство для запирания"], "tags": ["masculine"]}],
             ),
