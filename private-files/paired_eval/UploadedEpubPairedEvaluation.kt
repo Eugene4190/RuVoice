@@ -765,7 +765,6 @@ class UploadedEpubPairedEvaluationTest {
             "самосуществования" to "самосуществов+ания",
             "биополя" to "биопол+я",
             "призывного" to "приз+ывного",
-            "челюстей" to "ч+елюстей",
             "рефлекторное" to "рефл+екторное",
         )
         check(bookOverrides == expectedBookOverrides) {
