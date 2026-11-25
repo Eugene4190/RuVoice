@@ -332,4 +332,15 @@
  
 **Защита очереди:** добавлен Python-тест структуры review queue: десять уникальных candidate_id, источники и контексты, пустые поля второго рецензента, отдельность от gold IDs, пара е/ё и две смысловые записи «пахта».
  
-**Kotlin runtime correction:** исправлена test fixture: combining acute marker кодируется одним Unicode escape. Focused Gradle workflow #1 для предыдущей фикстуры завершился failure ожидаемым assertion mismatch; второй прогон на HEAD `12c0e81` выполняется. Production-код exact-key correction компилировался в первом Gradle прогоне, но тест на актуальной корректной фикстуре ещё ожидает подтверждения.
+**Kotlin runtime correction — проверено:** в `StressCorrectionMerger` для выравнивания токенов сохранена нормализация `ё → е`, но для защиты user dictionary и дефисных compound-ключей используется точный case-insensitive ключ без схлопывания ё/е. Два регрессионных теста подтверждают, что `берёг` не защищает `берег`, а точный ключ `берег` защищает именно эту форму.
+
+**Focused Gradle CI без APK:**
+- Run #2 [45615882162](https://github.com/Eugene4190/RuVoice/actions/runs/45615882162), HEAD `12c0e81` — success.
+- Run #3 [45616486303](https://github.com/Eugene4190/RuVoice/actions/runs/45616486303), HEAD `02bbc83` — success.
+- Run #4 [45616797661](https://github.com/Eugene4190/RuVoice/actions/runs/45616797661), HEAD `bb7c462` — success. `:app:testFullDebugUnitTest` и `:app:testLiteDebugUnitTest` прошли; запускался только `StressCorrectionMergerTest`. APK, NDK, Rust cross-compile и release packaging не запускались.
+
+**Исправления тестового контура:** первый Kotlin run #1 упал из-за двойного escape вместо combining acute в новой фикстуре; это исправлено коммитом `12c0e81`. Словарный run #237 упал из-за двойного escape в TSV delimiter теста review queue; это исправлено коммитом `bb7c462`.
+
+**Словарный CI:** run #238 [45616797675](https://github.com/Eugene4190/RuVoice/actions/runs/45616797675), HEAD `bb7c462` — success: 38 Python unit tests, 26 paired-evaluation tests, gold seed validation, построение книжного дополнения, проверки snapshot/overrides и оба EPUB-сканирования прошли. Полный системный scan по-прежнему сообщает 18 конфликтных ключей; все они удерживаются.
+
+**Отдельный paired run:** baseline vs RUAccent evaluation run #162 [45615871250](https://github.com/Eugene4190/RuVoice/actions/runs/45615871250) на HEAD `12c0e81` оставался in progress на момент записи; его результат не учитывается как подтверждение Kotlin regression.
