@@ -99,8 +99,18 @@ class Handler(BaseHTTPRequestHandler):
             suffix = Path(filename or "").suffix.lower()
             if not filename or not data or suffix not in ALLOWED:
                 raise ValueError("Выберите EPUB, TXT или HTML.")
-            incoming = self.server.home / "incoming"
-            incoming.mkdir(parents=True, exist_ok=True)
+            private_home = self.server.home.expanduser().resolve()
+            private_home.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                os.chmod(private_home, 0o700)
+            except OSError:
+                pass
+            incoming = private_home / "incoming"
+            incoming.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                os.chmod(incoming, 0o700)
+            except OSError:
+                pass
             fd, name = tempfile.mkstemp(prefix="upload-", suffix=suffix, dir=incoming)
             os.close(fd)
             upload = Path(name)
