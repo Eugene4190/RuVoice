@@ -113,11 +113,68 @@ def _load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
 def _record_book(state: dict[str, Any], pending: dict[str, Any]) -> None:
     state.setdefault("schema_version", 1)
     state.setdefault("books", {})
-    state["books"][pending["book_sha256"]] = {
-        "book_name": pending["book_name"],
+    state.setdefault("entries", {})
+    digest = pending["book_sha256"]
+    book_name = pending["book_name"]
+    state["books"][digest] = {
+        "book_name": book_name,
         "processed_utc": pending["created_utc"],
         "new_entries": pending.get("new_entries", []),
+        "encountered_master_entries": state["books"].get(digest, {}).get(
+            "encountered_master_entries", []
+        ),
     }
+    for row in pending.get("new_entries", []):
+        word = row["word"]
+        entry = state["entries"].setdefault(word, {
+            "stress": row["stress"],
+            "source": row.get("source", "source-provenance-not-recorded"),
+            "first_added_in": book_name,
+            "first_added_book_sha256": digest,
+            "books_seen_in": [],
+        })
+        if entry.get("stress") != row["stress"]:
+            raise ValueError(
+                f"История provenance содержит конфликт для {word}: "
+                f"{entry.get('stress')} / {row['stress']}"
+            )
+
+
+def _record_book_occurrences(
+    state: dict[str, Any],
+    *,
+    book_sha256: str,
+    book_name: str,
+    encountered: list[dict[str, str]],
+) -> None:
+    state.setdefault("entries", {})
+    record = state.setdefault("books", {}).setdefault(book_sha256, {
+        "book_name": book_name,
+        "processed_utc": _utc_now(),
+        "new_entries": [],
+    })
+    by_word = {row["word"]: row for row in record.get("encountered_master_entries", [])}
+    for row in encountered:
+        word, stress = row["word"], row["stress"]
+        by_word[word] = {"word": word, "stress": stress}
+        entry = state["entries"].setdefault(word, {
+            "stress": stress,
+            "source": "pre-existing-master-without-local-provenance",
+            "first_added_in": None,
+            "first_added_book_sha256": None,
+            "books_seen_in": [],
+        })
+        if entry.get("stress") != stress:
+            raise ValueError(
+                f"Master и private provenance расходятся для {word}: "
+                f"{entry.get('stress')} / {stress}"
+            )
+        seen = entry.setdefault("books_seen_in", [])
+        if not any(item.get("book_sha256") == book_sha256 for item in seen):
+            seen.append({"book_name": book_name, "book_sha256": book_sha256})
+    record["encountered_master_entries"] = sorted(
+        by_word.values(), key=lambda row: row["word"]
+    )
 
 
 def _approve_into_private_master(
@@ -308,6 +365,27 @@ def process_book(
         # Rebuild against the updated master so reports and per-book known forms
         # reflect the state that the user will actually have after this run.
         build_book_dictionary.build(args)
+        approved_in_book, approved_conflicts_in_book = parse_dictionary(
+            builder_output / "Book_Approved_Additions.txt"
+        )
+        if approved_conflicts_in_book:
+            raise ValueError(
+                "Неоднозначные ранее утверждённые записи в книге: "
+                + "; ".join(approved_conflicts_in_book)
+            )
+        current_history = _load_json(
+            history_path, {"schema_version": 1, "books": {}, "entries": {}}
+        )
+        _record_book_occurrences(
+            current_history,
+            book_sha256=digest,
+            book_name=display_name,
+            encountered=[
+                {"word": word, "stress": marked}
+                for word, marked in sorted(approved_in_book.items())
+            ],
+        )
+        _atomic_json(history_path, current_history)
         delta_path = builder_output / "Book_New_Stress_Delta.txt"
         _atomic_text(delta_path, delta_text)
         snapshot_path = builder_output / "MyBooks_Cumulative.txt"
