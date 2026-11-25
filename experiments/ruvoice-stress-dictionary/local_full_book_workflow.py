@@ -207,6 +207,7 @@ def _run_quality_module(paths: dict[str, Path], work: Path, paired: Path, output
 def _run_third_model(paths: dict[str, Path], paired: Path, occurrences: Path, reviewed: Path, output: Path) -> None:
     command = [
         str(paths["third_model"]),
+        "--third-model",
         "--paired-json", str(paired),
         "--quality-occurrences", str(occurrences),
         "--reviewed-overrides", str(reviewed),
