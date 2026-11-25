@@ -160,12 +160,12 @@ class AutomaticBookOverrideTests(unittest.TestCase):
         tokens = [
             {"segment_index": 0, "word_index": 0, "source_word": "когда", "ruvoice_output": "ко+гда",
              "ruvoice_stress_vowel_index": 0, "chapter": "Г", "paragraph": 1},
-            {"segment_index": 0, "word_index": 1, "source_word": "всё", "ruvoice_output": "всё",
+            {"segment_index": 0, "word_index": 1, "source_word": "ёлочка", "ruvoice_output": "ёлочка",
              "ruvoice_stress_vowel_index": 0, "chapter": "Г", "paragraph": 1},
         ]
         combined = [
             {"segment_index": 0, "word_index": 0, "ruaccent_merged_output": "когда́", "ruaccent_stress_vowel_index": 1},
-            {"segment_index": 0, "word_index": 1, "ruaccent_merged_output": "всё", "ruaccent_stress_vowel_index": 0},
+            {"segment_index": 0, "word_index": 1, "ruaccent_merged_output": "ёлочка", "ruaccent_stress_vowel_index": 0},
         ]
         quality = {
             (0, 0): self.quality(0, 0, aot="1", wikt="1"),
