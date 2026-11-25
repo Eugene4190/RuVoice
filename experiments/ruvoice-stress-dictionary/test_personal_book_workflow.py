@@ -127,6 +127,9 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             guide = archive.read("IMPORT.txt").decode("utf-8")
             self.assertIn("B_New_Stress_Delta.txt", guide)
             self.assertIn("B_Replacements.txt", guide)
+            self.assertIn("меню ⋮", guide)
+            self.assertIn("Импорт…", guide)
+            self.assertIn("сделает его текущим", guide)
             self.assertIn("не импортируйте его второй раз", guide.lower())
 
     def test_incomplete_pending_transaction_recovers_append_only_master_once(self):
