@@ -722,17 +722,30 @@ class UploadedEpubPairedEvaluationTest {
             "Official Silero stress models are missing"
         }
 
-        val modelRoot = Files.createTempDirectory("ruvoice-paired-ruaccent").toFile()
+        val modelCachePath = System.getenv("RUVOICE_RUACCENT_MODEL_CACHE")?.takeIf { it.isNotBlank() }
+        val persistentModelCache = modelCachePath != null
+        val modelRoot = if (modelCachePath != null) {
+            File(modelCachePath).canonicalFile.apply { mkdirs() }
+        } else {
+            Files.createTempDirectory("ruvoice-paired-ruaccent").toFile()
+        }
         val downloader = RuAccentHttpDownloader(connectTimeoutMillis = 30_000, readTimeoutMillis = 120_000)
         var downloaded = 0L
         for ((index, relative) in RuAccentInt8ModelManifest.files.withIndex()) {
             val destination = File(modelRoot, relative)
             destination.parentFile?.mkdirs()
-            downloader.download(RuAccentInt8ModelManifest.downloadUrl(relative), destination) { bytes ->
-                if (bytes == 0L) println("RUAccent model " + (index + 1) + "/" + RuAccentInt8ModelManifest.files.size + ": " + relative)
+            val expectedHash = RuAccentInt8ModelManifest.expectedSha256.getValue(relative)
+            val cacheHit = destination.isFile && destination.length() > 0L &&
+                pairedSha256(destination) == expectedHash
+            if (!cacheHit) {
+                destination.delete()
+                downloader.download(RuAccentInt8ModelManifest.downloadUrl(relative), destination) { bytes ->
+                    if (bytes == 0L) println("RUAccent model " + (index + 1) + "/" + RuAccentInt8ModelManifest.files.size + ": " + relative)
+                }
+            } else {
+                println("RUACCENT_MODEL_CACHE_HIT=$relative")
             }
             check(destination.isFile && destination.length() > 0L) { "RUAccent model download failed: " + relative }
-            val expectedHash = RuAccentInt8ModelManifest.expectedSha256.getValue(relative)
             check(pairedSha256(destination) == expectedHash) { "RUAccent SHA-256 mismatch: " + relative }
             downloaded += destination.length()
         }
@@ -1533,7 +1546,7 @@ class UploadedEpubPairedEvaluationTest {
         } finally {
             corrector.close()
             torchModels.close()
-            modelRoot.deleteRecursively()
+            if (!persistentModelCache) modelRoot.deleteRecursively()
         }
     }
 }
