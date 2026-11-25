@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import posixpath
 import re
 import sys
+import urllib.parse
 import zipfile
+import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from html.parser import HTMLParser
 from pathlib import Path
@@ -63,16 +66,72 @@ def html_to_text(raw: str) -> str:
     return parser.text()
 
 
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _epub_spine_html_names(archive: zipfile.ZipFile) -> list[str]:
+    """Resolve XHTML reading order from EPUB container.xml and OPF spine."""
+    available = set(archive.namelist())
+    try:
+        container_root = ET.fromstring(archive.read("META-INF/container.xml"))
+        rootfile = next(
+            element for element in container_root.iter()
+            if _xml_local_name(element.tag) == "rootfile"
+        )
+        package_path = urllib.parse.unquote(rootfile.attrib["full-path"])
+        package_root = ET.fromstring(archive.read(package_path))
+    except (KeyError, StopIteration, ET.ParseError, UnicodeDecodeError, OSError):
+        return []
+
+    manifest: dict[str, str] = {}
+    for element in package_root.iter():
+        if _xml_local_name(element.tag) != "item":
+            continue
+        item_id = element.attrib.get("id")
+        href = element.attrib.get("href")
+        media_type = element.attrib.get("media-type", "").lower()
+        if not item_id or not href:
+            continue
+        parsed_href = urllib.parse.urlsplit(href)
+        decoded_href = urllib.parse.unquote(parsed_href.path)
+        resolved = posixpath.normpath(
+            posixpath.join(posixpath.dirname(package_path), decoded_href)
+        )
+        if media_type in {"application/xhtml+xml", "text/html"}:
+            manifest[item_id] = resolved
+
+    ordered: list[str] = []
+    for element in package_root.iter():
+        if _xml_local_name(element.tag) != "itemref":
+            continue
+        item_id = element.attrib.get("idref")
+        candidate = manifest.get(item_id or "")
+        if (
+            candidate
+            and candidate in available
+            and candidate.lower().endswith((".xhtml", ".html", ".htm"))
+            and not candidate.lower().split("/")[-1].startswith("nav")
+            and candidate not in ordered
+        ):
+            ordered.append(candidate)
+    return ordered
+
+
 def extract_epub(path: Path) -> str:
     pieces: list[str] = []
     try:
         with zipfile.ZipFile(path) as archive:
-            names = [
-                name for name in archive.namelist()
-                if name.lower().endswith((".xhtml", ".html", ".htm"))
-                and not name.lower().split("/")[-1].startswith("nav")
-            ]
-            for name in sorted(names):
+            names = _epub_spine_html_names(archive)
+            if not names:
+                # Retain compatibility with minimal/non-conforming EPUBs
+                # that lack container/OPF metadata: stable path-sorted fallback.
+                names = sorted(
+                    name for name in archive.namelist()
+                    if name.lower().endswith((".xhtml", ".html", ".htm"))
+                    and not name.lower().split("/")[-1].startswith("nav")
+                )
+            for name in names:
                 raw = archive.read(name).decode("utf-8-sig", errors="replace")
                 section = html_to_text(raw)
                 if section:
