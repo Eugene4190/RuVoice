@@ -141,11 +141,11 @@ jobs:
           eyo_path = Path(os.environ["RUNNER_TEMP"]) / "ruvoice-1.1.3-official-eyo_safe.txt"
           data = eyo_path.read_bytes()
           # This is the Git blob SHA-1 returned by the official v1.1.3 tree API.
-          digest = hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\\0" + data).hexdigest()
+          digest = hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
           if digest != "7d36a88a29cae298ad4507d4ec1f87e19d826d51":
               raise SystemExit("Official v1.1.3 eyo_safe.txt Git blob SHA mismatch: " + digest)
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write("RUVOICE_OFFICIAL_EYO_ASSET=" + str(eyo_path) + "\\n")
+              env.write("RUVOICE_OFFICIAL_EYO_ASSET=" + str(eyo_path) + "\n")
           print("OFFICIAL_EYO_GIT_BLOB_SHA=" + digest)
           PY
 
