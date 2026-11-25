@@ -116,7 +116,9 @@ def quality_source_assessment(
     wiktionary_positions = parse_positions(row.get("wiktionary_stress_positions"))
     shared_positions = aot_positions & wiktionary_positions
 
-    if not aot_positions and not wiktionary_positions:
+    if row.get("baseline_status") == "CONTEXTUAL_VARIANT_ACCEPTED":
+        verdict = "CONTEXTUAL_VARIANT_ACCEPTED"
+    elif not aot_positions and not wiktionary_positions:
         verdict = "NO_INDEPENDENT_REFERENCE"
     elif aot_positions and wiktionary_positions and not shared_positions:
         verdict = "AOT_WIKTIONARY_DISAGREE_NO_SHARED_VARIANT"
@@ -190,6 +192,7 @@ def main() -> int:
     detail_rows: list[list[Any]] = []
     quality_rows_joined = 0
     quality_rows_missing = 0
+    quality_missing_words: set[str] = set()
     grouped: dict[tuple[str, int | None, int | None, str], list[dict[str, Any]]] = defaultdict(list)
 
     for row in raw_rows:
@@ -225,6 +228,8 @@ def main() -> int:
         )
         quality_rows_joined += quality_row is not None
         quality_rows_missing += quality_row is None
+        if quality_row is None:
+            quality_missing_words.add(word)
 
         if is_clitic:
             consensus_verdict = "NOT_A_DICTIONARY_WORD: clitic/particle"
@@ -245,6 +250,8 @@ def main() -> int:
         priority = "MANUAL_REVIEW_REQUIRED"
         if is_clitic:
             priority = "EXCLUDE_FROM_WORD_DICTIONARY"
+        elif consensus_verdict == "CONTEXTUAL_VARIANT_ACCEPTED":
+            priority = "CONTEXTUAL_VARIANT_ACCEPTED_BY_FULL_QUALITY_AUDIT"
         elif consensus_verdict == "CONSENSUS_SUPPORTS_RUACCENT" and system_verdict != "BUILTIN_SUPPORTS_RUVOICE":
             priority = "HIGHER_PRIORITY_REVIEW_RUACCENT_AND_BOTH_SOURCES_AGREE"
         elif consensus_verdict == "CONSENSUS_SUPPORTS_RUVOICE":
@@ -310,6 +317,8 @@ def main() -> int:
         "review_unique_change_pairs": len(grouped),
         "quality_candidate_rows_joined": quality_rows_joined,
         "quality_candidate_rows_missing": quality_rows_missing,
+        "quality_missing_occurrence_words": sorted(quality_missing_words),
+        "contextual_variants_accepted_by_full_quality_audit": sum(1 for r in detail_rows if r[11] == "CONTEXTUAL_VARIANT_ACCEPTED"),
         "consensus_supports_ruaccent": sum(1 for r in detail_rows if r[11] == "CONSENSUS_SUPPORTS_RUACCENT"),
         "consensus_supports_ruvoice": sum(1 for r in detail_rows if r[11] == "CONSENSUS_SUPPORTS_RUVOICE"),
         "consensus_supports_both_variants": sum(1 for r in detail_rows if r[11] == "CONSENSUS_SUPPORTS_BOTH_VARIANTS"),

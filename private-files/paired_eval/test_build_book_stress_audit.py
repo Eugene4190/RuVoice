@@ -53,6 +53,16 @@ class FullDictionaryEvidenceTests(unittest.TestCase):
         self.assertEqual(shared, set())
         self.assertEqual(verdict, "AOT_WIKTIONARY_DISAGREE_NO_SHARED_VARIANT")
 
+    def test_contextual_acceptance_overrides_a_dictionary_only_preference(self) -> None:
+        row = {
+            "aot_stress_positions": "0",
+            "wiktionary_stress_positions": "0",
+            "baseline_status": "CONTEXTUAL_VARIANT_ACCEPTED",
+        }
+        _, _, shared, verdict = audit.quality_source_assessment(row, 1, 0)
+        self.assertEqual(shared, {0})
+        self.assertEqual(verdict, "CONTEXTUAL_VARIANT_ACCEPTED")
+
     def test_missing_quality_row_is_explicit(self) -> None:
         _, _, shared, verdict = audit.quality_source_assessment(None, 1, 2)
         self.assertEqual(shared, set())
