@@ -37,6 +37,103 @@ class ThirdModelAuditParsingTests(unittest.TestCase):
 
 
 
+
+class ThirdModelCandidateSelectionTests(unittest.TestCase):
+    @staticmethod
+    def occurrence(word="пример", base=0, ra=1, segment=0, index=0):
+        return [
+            segment, index, "Глава", segment + 1, word,
+            "при+мер", "" if base is None else base,
+            "приме́р", "" if ra is None else ra,
+        ]
+
+    @staticmethod
+    def evidence(aot="1", wikt="", status=""):
+        return {
+            "aot_stress_positions": aot,
+            "wiktionary_stress_positions": wikt,
+            "baseline_status": status,
+        }
+
+    def test_selects_all_occurrences_of_a_dictionary_supported_disagreement(self):
+        rows = [
+            self.occurrence(segment=0, index=2),
+            self.occurrence(segment=4, index=8),
+        ]
+        quality = {
+            (0, 2): self.evidence("1"),
+            (4, 8): self.evidence("1"),
+        }
+        keys, coords, summary = module.select_third_model_candidates(rows, quality, set())
+        self.assertEqual(keys, {"пример"})
+        self.assertEqual(coords, {(0, 2), (4, 8)})
+        self.assertEqual(summary["candidate_occurrences"], 2)
+        self.assertEqual(summary["candidate_segments"], 2)
+
+    def test_oov_consensus_is_not_sent_to_expensive_model_by_default(self):
+        rows = [self.occurrence(segment=i) for i in range(3)]
+        quality = {(i, 0): self.evidence("", "") for i in range(3)}
+        keys, coords, summary = module.select_third_model_candidates(rows, quality, set())
+        self.assertEqual(keys, set())
+        self.assertEqual(coords, set())
+        self.assertEqual(summary["candidate_wordforms"], 0)
+
+    def test_mixed_baseline_occurrences_exclude_whole_wordform(self):
+        rows = [
+            self.occurrence(base=0, segment=0),
+            self.occurrence(base=1, segment=1),
+        ]
+        quality = {(0, 0): self.evidence("1"), (1, 0): self.evidence("1")}
+        keys, coords, _ = module.select_third_model_candidates(rows, quality, set())
+        self.assertEqual(keys, set())
+        self.assertEqual(coords, set())
+
+    def test_contextual_exception_excludes_whole_wordform(self):
+        rows = [
+            self.occurrence(segment=0),
+            self.occurrence(segment=1),
+        ]
+        quality = {
+            (0, 0): self.evidence("1", "", "CONTEXTUAL_VARIANT_ACCEPTED"),
+            (1, 0): self.evidence("1"),
+        }
+        keys, coords, _ = module.select_third_model_candidates(rows, quality, set())
+        self.assertEqual(keys, set())
+        self.assertEqual(coords, set())
+
+    def test_dictionary_conflicts_exclude_whole_wordform(self):
+        rows = [
+            self.occurrence(segment=0),
+            self.occurrence(segment=1),
+        ]
+        quality = {
+            (0, 0): self.evidence("0,1", "1"),
+            (1, 0): self.evidence("0,1", "1"),
+        }
+        keys, coords, _ = module.select_third_model_candidates(rows, quality, set())
+        self.assertEqual(keys, set())
+        self.assertEqual(coords, set())
+
+    def test_function_words_yo_and_existing_overrides_are_not_selected(self):
+        rows = [
+            self.occurrence(word="молоко", base=0, ra=1, segment=0),
+            self.occurrence(word="уже", base=0, ra=1, segment=1),
+            self.occurrence(word="ёлка", base=0, ra=1, segment=2),
+            self.occurrence(word="пример", base=0, ra=1, segment=3),
+        ]
+        quality = {
+            (0, 0): self.evidence("1"),
+            (1, 0): self.evidence("1"),
+            (2, 0): self.evidence("1"),
+            (3, 0): self.evidence("1"),
+        }
+        keys, coords, summary = module.select_third_model_candidates(rows, quality, {"пример"})
+        self.assertEqual(keys, {"молоко"})
+        self.assertEqual(coords, {(0, 0)})
+        self.assertGreaterEqual(summary["excluded_by_reason"]["function_word"], 1)
+        self.assertGreaterEqual(summary["excluded_by_reason"]["contains_yo"], 1)
+
+
 class ThreeModelOverrideTests(unittest.TestCase):
     @staticmethod
     def row(word="пример", base=0, ra=1, third=1, segment=0, index=0, context="Это пример контекста."):

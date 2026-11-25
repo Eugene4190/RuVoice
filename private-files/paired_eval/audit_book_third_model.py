@@ -18,6 +18,14 @@ from typing import Any
 VOWELS = set("аеёиоуыэюя")
 WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*'?", re.UNICODE)
 CYR_RE = re.compile(r"^[а-яё]+$")
+FUNCTION_WORDS = {
+    "а", "и", "но", "да", "или", "ли", "не", "ни", "бы", "же", "в", "во",
+    "на", "над", "под", "с", "со", "к", "ко", "у", "о", "об", "от", "до",
+    "из", "за", "по", "при", "для", "без", "через", "перед", "после",
+    "между", "около", "вокруг", "как", "что", "чтобы", "если", "когда",
+    "где", "кто", "то", "это", "вот", "там", "тут", "уже", "лишь", "ведь",
+    "либо", "нибудь", "таки", "обо",
+}
 
 
 def norm(value: str) -> str:
@@ -95,6 +103,120 @@ def to_plus(word: str, position: int) -> str | None:
     return clean[:at] + "+" + clean[at:]
 
 
+def _position(value: Any) -> int | None:
+    if value in (None, "", "null"):
+        return None
+    return int(value)
+
+
+def select_third_model_candidates(
+    rows: list[list[Any]],
+    quality: dict[tuple[int, int], dict[str, str]],
+    existing: set[str],
+) -> tuple[set[str], set[tuple[int, int]], dict[str, Any]]:
+    """
+    Select only wordforms that could still become safe automatic corrections.
+
+    Every occurrence of a selected form must be present and agree on spelling,
+    baseline stress, RUAccent stress and dictionary evidence. The third model is
+    then run on every full context segment containing one of those occurrences.
+    OOVs and ambiguous forms remain in the full occurrence ledger, but do not
+    consume the expensive third-model pass because that model cannot establish
+    an importable correction without independent dictionary support.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    excluded = Counter()
+    for row in rows:
+        segment = int(row[0])
+        word_index = int(row[1])
+        raw_word = str(row[4]).lower()
+        key = norm(raw_word)
+        if not CYR_RE.fullmatch(key) or len(word_vowels(key)) < 2:
+            excluded["not_multisyllabic_russian"] += 1
+            continue
+        if key in FUNCTION_WORDS:
+            excluded["function_word"] += 1
+            continue
+        if "ё" in raw_word:
+            excluded["contains_yo"] += 1
+            continue
+        if key in existing:
+            excluded["already_in_reviewed_overlay"] += 1
+            continue
+
+        evidence = quality.get((segment, word_index), {})
+        aot = {int(x) for x in re.split(r"[,;]", evidence.get("aot_stress_positions", "")) if x}
+        wikt = {int(x) for x in re.split(r"[,;]", evidence.get("wiktionary_stress_positions", "")) if x}
+        grouped.setdefault(key, []).append({
+            "word": raw_word,
+            "base": _position(row[6]),
+            "ruaccent": _position(row[8]),
+            "aot": aot,
+            "wikt": wikt,
+            "status": evidence.get("baseline_status", ""),
+            "coord": (segment, word_index),
+        })
+
+    candidate_keys: set[str] = set()
+    candidate_coords: set[tuple[int, int]] = set()
+    for key, group in grouped.items():
+        if len({item["word"] for item in group}) != 1:
+            excluded["orthographic_variants_share_key"] += 1
+            continue
+        aot_sets = {tuple(sorted(item["aot"])) for item in group}
+        wikt_sets = {tuple(sorted(item["wikt"])) for item in group}
+        if len(aot_sets) != 1 or len(wikt_sets) != 1:
+            excluded["dictionary_evidence_varies_by_occurrence"] += 1
+            continue
+        if any(item["status"] == "CONTEXTUAL_VARIANT_ACCEPTED" for item in group):
+            excluded["contextual_exception"] += 1
+            continue
+
+        baseline_positions = {item["base"] for item in group}
+        ruaccent_positions = {item["ruaccent"] for item in group}
+        if (len(baseline_positions) != 1 or None in baseline_positions
+                or len(ruaccent_positions) != 1 or None in ruaccent_positions):
+            excluded["baseline_or_ruaccent_not_uniform"] += 1
+            continue
+        baseline = next(iter(baseline_positions))
+        target = next(iter(ruaccent_positions))
+        if baseline == target:
+            excluded["ruvoice_already_agrees_with_ruaccent"] += 1
+            continue
+
+        aot = set(next(iter(aot_sets)))
+        wikt = set(next(iter(wikt_sets)))
+        if any(position != target for position in aot | wikt):
+            excluded["dictionary_records_alternative_or_conflict"] += 1
+            continue
+        dictionary_support = (
+            (aot == {target} and wikt == {target})
+            or (aot == {target} and not wikt)
+            or (wikt == {target} and not aot)
+        )
+        if not dictionary_support:
+            excluded["no_unambiguous_dictionary_support"] += 1
+            continue
+
+        candidate_keys.add(key)
+        candidate_coords.update(item["coord"] for item in group)
+
+    candidate_segments = {segment for segment, _ in candidate_coords}
+    return candidate_keys, candidate_coords, {
+        "candidate_wordforms": len(candidate_keys),
+        "candidate_occurrences": len(candidate_coords),
+        "candidate_segments": len(candidate_segments),
+        "excluded_by_reason": dict(excluded),
+        "policy": (
+            "The character model is restricted to forms where all book occurrences "
+            "have one baseline stress, RUAccent consistently disagrees, and AOT "
+            "and/or Wiktionary provides the same unambiguous alternative. OOV, "
+            "contextual and conflicting forms remain in the complete ledger and "
+            "are not auto-corrected by this optimization."
+        ),
+    }
+
+
 def build_three_model_overrides(
     rows: list[list[Any]],
     quality: dict[tuple[int, int], dict[str, str]],
@@ -114,12 +236,7 @@ def build_three_model_overrides(
         key = norm(raw_word)
         if not CYR_RE.fullmatch(key) or len(word_vowels(key)) < 2:
             continue
-        if key in {"а", "и", "но", "да", "или", "ли", "не", "ни", "бы", "же", "в", "во",
-                   "на", "над", "под", "с", "со", "к", "ко", "у", "о", "об", "от", "до",
-                   "из", "за", "по", "при", "для", "без", "через", "перед", "после",
-                   "между", "около", "вокруг", "как", "что", "чтобы", "если", "когда",
-                   "где", "кто", "то", "это", "вот", "там", "тут", "уже", "лишь", "ведь",
-                   "либо", "нибудь", "таки", "обо"}:
+        if key in FUNCTION_WORDS:
             excluded["function_word"] += 1
             continue
         if "ё" in raw_word:
@@ -257,6 +374,7 @@ def main() -> int:
     parser.add_argument("--reviewed-overrides", type=Path)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--max-chars", type=int, default=220)
+    parser.add_argument("--all-segments", action="store_true", help="Run the research model over every segment; default checks only fully eligible correction candidates.")
     args = parser.parse_args()
 
     if args.batch_size < 1 or args.batch_size > 32:
@@ -286,9 +404,37 @@ def main() -> int:
     for values in base_by_segment.values():
         values.sort(key=lambda row: int(row["word_index"]))
 
+    # Build the exact occurrence input once, then identify complete wordforms
+    # where an independent third opinion could still produce a safe correction.
+    all_segments = sorted(segment_rows, key=lambda row: int(row["segment_index"]))
+    preselection_rows: list[list[Any]] = []
+    for baseline in baseline_rows:
+        segment_index = int(baseline["segment_index"])
+        word_index = int(baseline["word_index"])
+        combined = combined_by_coord.get((segment_index, word_index), {})
+        preselection_rows.append([
+            segment_index, word_index, baseline.get("chapter", ""),
+            baseline.get("paragraph", ""), baseline.get("source_word", ""),
+            baseline.get("ruvoice_output", ""),
+            baseline.get("ruvoice_stress_vowel_index", ""),
+            combined.get("ruaccent_merged_output", ""),
+            combined.get("ruaccent_stress_vowel_index", ""),
+        ])
+    candidate_keys, candidate_coords, candidate_summary = select_third_model_candidates(
+        preselection_rows, quality, existing_overrides
+    )
+
+    if args.all_segments:
+        segments = all_segments
+    else:
+        selected_segment_ids = {segment for segment, _ in candidate_coords}
+        segments = [
+            row for row in all_segments
+            if int(row["segment_index"]) in selected_segment_ids
+        ]
+
     jobs: list[tuple[int, int, str, int, int]] = []
     # tuple: (segment index, chunk number, chunk text, global word offset, count)
-    segments = sorted(segment_rows, key=lambda row: int(row["segment_index"]))
     expected_segment_count = 0
     for seg in segments:
         index = int(seg["segment_index"])
@@ -301,27 +447,32 @@ def main() -> int:
             word_offset += count
         expected_segment_count += len(base_by_segment.get(index, []))
 
-    from ruaccent import load_accentor
-    import torch
-
-    torch.set_num_threads(min(4, torch.get_num_threads()))
-    print("THIRD_MODEL=ruaccent-predictor 1.2.0", flush=True)
-    print("THIRD_MODEL_SEGMENTS=" + str(len(segments)), flush=True)
-    print("THIRD_MODEL_WINDOWS=" + str(len(jobs)), flush=True)
-    predictor = load_accentor(device="cpu", quantize=False)
-
-    chunks = [job[2] for job in jobs]
     predictions: list[str] = []
-    for start in range(0, len(chunks), args.batch_size):
-        batch = chunks[start:start + args.batch_size]
-        output = predictor(batch, format="apostrophe", batch_size=args.batch_size)
-        if isinstance(output, str):
-            output = [output]
-        if len(output) != len(batch):
-            raise RuntimeError("Third model returned an unaligned batch")
-        predictions.extend(str(value) for value in output)
-        if (start // args.batch_size) % 25 == 0:
-            print(f"THIRD_MODEL_PROGRESS={min(start + len(batch), len(chunks))}/{len(chunks)}", flush=True)
+    if jobs:
+        from ruaccent import load_accentor
+        import torch
+
+        torch.set_num_threads(min(4, torch.get_num_threads()))
+        print("THIRD_MODEL=ruaccent-predictor 1.2.0", flush=True)
+        predictor = load_accentor(device="cpu", quantize=False)
+        chunks = [job[2] for job in jobs]
+        for start in range(0, len(chunks), args.batch_size):
+            batch = chunks[start:start + args.batch_size]
+            output = predictor(batch, format="apostrophe", batch_size=args.batch_size)
+            if isinstance(output, str):
+                output = [output]
+            if len(output) != len(batch):
+                raise RuntimeError("Third model returned an unaligned batch")
+            predictions.extend(str(value) for value in output)
+            if (start // args.batch_size) % 25 == 0:
+                print(f"THIRD_MODEL_PROGRESS={min(start + len(batch), len(chunks))}/{len(chunks)}", flush=True)
+    else:
+        print("THIRD_MODEL_SKIPPED=NO_ELIGIBLE_CORRECTION_CANDIDATES", flush=True)
+
+    print("THIRD_MODEL_BOOK_SEGMENTS=" + str(len(all_segments)), flush=True)
+    print("THIRD_MODEL_SEGMENTS_INFERRED=" + str(len(segments)), flush=True)
+    print("THIRD_MODEL_WINDOWS_INFERRED=" + str(len(jobs)), flush=True)
+    print("THIRD_MODEL_CANDIDATE_WORDFORMS=" + str(candidate_summary["candidate_wordforms"]), flush=True)
 
     context_by_segment = {int(row["segment_index"]): str(row.get("context", "")) for row in segments}
     out_rows: list[list[Any]] = []
@@ -369,6 +520,8 @@ def main() -> int:
             if not CYR_RE.fullmatch(key) or len(word_vowels(key)) < 2:
                 counters["not_multisyllabic_russian"] += 1
                 continue
+            if not args.all_segments and key not in candidate_keys:
+                continue
             context = context_by_segment.get(segment_index, "")
             out_rows.append([
                 segment_index, word_index, baseline.get("chapter", ""),
@@ -386,6 +539,15 @@ def main() -> int:
                 mismatch_groups.setdefault(pair, Counter())[context[:160]] += 1
 
     out_rows.sort(key=lambda row: (int(row[0]), int(row[1])))
+    if not args.all_segments:
+        actual_coords = [(int(row[0]), int(row[1])) for row in out_rows]
+        if len(actual_coords) != len(set(actual_coords)) or set(actual_coords) != candidate_coords:
+            missing = sorted(candidate_coords - set(actual_coords))[:20]
+            extra = sorted(set(actual_coords) - candidate_coords)[:20]
+            raise RuntimeError(
+                "Third-model occurrence coverage mismatch; automatic corrections are blocked. "
+                f"missing={missing} extra={extra}"
+            )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output_path = args.output_dir / "Book_Third_Model_AllOccurrences.tsv"
     write_tsv(output_path, out_rows)
@@ -440,9 +602,15 @@ def main() -> int:
 
     summary = {
         "book": paired.get("book_file"),
+        "all_book_segments": len(all_segments),
         "segments": len(segments),
         "windows": len(jobs),
-        "expected_production_tokens": expected_segment_count,
+        "expected_production_tokens_in_inferred_segments": expected_segment_count,
+        "candidate_selection": candidate_summary,
+        "candidate_occurrence_coverage": (
+            "FULL" if args.all_segments else f"{len(out_rows)}/{len(candidate_coords)}"
+        ),
+        "all_segments_mode": bool(args.all_segments),
         "aligned_multisyllabic_occurrences": len(out_rows),
         "third_model_disagreement_occurrences": counters["third_model_disagreement_occurrences"],
         "unique_disagreement_groups": len(mismatch_groups),
@@ -450,7 +618,10 @@ def main() -> int:
         "model": "ruaccent-predictor 1.2.0",
         "model_note": (
             "Independent character-level seq2seq model. Its self-reported validation metric is not "
-            "treated as a gold score; use this output only as a third opinion."
+            "treated as a gold score; use this output only as a third opinion. In default mode, "
+            "inference is limited to complete wordforms with a consistent RUAccent disagreement "
+            "and unambiguous AOT/Wiktionary support; every occurrence of each selected wordform "
+            "is still inferred and alignment-checked. Use --all-segments for an exhaustive research run."
         ),
         "auto_override_summary": auto_summary,
         "confirmed_override_file": str(confirmed_path),

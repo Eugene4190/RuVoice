@@ -64,7 +64,9 @@ jobs:
             private-files/paired_eval/test_apply_book_phrase_override.py \
             private-files/paired_eval/test_build_book_stress_audit.py \
             private-files/paired_eval/test_full_book_ruvoice_quality.py \
-            private-files/paired_eval/torch_lite_bridge.py
+            private-files/paired_eval/torch_lite_bridge.py \
+            private-files/paired_eval/audit_book_third_model.py \
+            private-files/paired_eval/test_audit_book_third_model.py
 
       - name: Run private paired-evaluation unit tests
         run: |

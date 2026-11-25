@@ -19,7 +19,10 @@ from typing import Any
 from book_tool_paths import resolve_app_paths
 
 REPO_ROOT, TOOL_DIR = resolve_app_paths(__file__)
-APP_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else REPO_ROOT
+APP_ROOT = (
+    Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent)).resolve()
+    if getattr(sys, "frozen", False) else REPO_ROOT
+)
 ENGINE = APP_ROOT / "engine"
 REFERENCE_SHA256 = "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
 LOCK = threading.RLock()
@@ -99,7 +102,7 @@ def _require_runtime() -> dict[str, Path]:
     ]
     if any(not item.is_file() for item in required_classes):
         raise FileNotFoundError("Не собран полный JVM runtime оригинального RuVoice.")
-    if not paths["libs"].glob("*.jar"):
+    if not any(paths["libs"].glob("*.jar")):
         raise FileNotFoundError("Не найдены JVM-зависимости локального RuVoice.")
     return paths
 
@@ -296,10 +299,22 @@ def process_book(book: Path, *, private_home: Path, book_name: str | None = None
         if not auto_overrides.is_file():
             raise RuntimeError("Независимая модель не создала список подтверждённых кандидатов.")
 
-        _run_java(paths, book, paired, work, private_home, digest, book_replacements, manual_overrides, auto_overrides)
+        has_manual_stress = bool(read_stress_entries(manual_overrides))
+        has_auto_stress = bool(read_stress_entries(auto_overrides))
+        has_book_replacements = any(
+            line.strip() and not line.lstrip().startswith("#")
+            for line in book_replacements.read_text(encoding="utf-8-sig").splitlines()
+        )
+        needs_final_production_pass = has_manual_stress or has_auto_stress or has_book_replacements
 
-        final_quality = work / "final-quality"
-        _run_quality_module(paths, work, paired, final_quality, paths["context_rules"] if is_reference else None)
+        if needs_final_production_pass:
+            _run_java(paths, book, paired, work, private_home, digest, book_replacements, manual_overrides, auto_overrides)
+            final_quality = work / "final-quality"
+            _run_quality_module(paths, work, paired, final_quality, paths["context_rules"] if is_reference else None)
+        else:
+            # No pronunciation rule was created. The first full-book RuVoice report
+            # is already the final state; do not repeat an identical inference run.
+            final_quality = first_quality
         final_replacements = final_quality / "Book_Importable_Replacements.txt"
         shutil.copyfile(book_replacements, final_replacements)
 

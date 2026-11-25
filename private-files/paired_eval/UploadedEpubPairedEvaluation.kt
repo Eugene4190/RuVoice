@@ -1208,6 +1208,10 @@ class UploadedEpubPairedEvaluationTest {
             val reviewedOverrideSeen = LinkedHashMap<String, Int>()
             var reviewedPhraseOverrideHits = 0
             val reviewedPhrasePattern = Regex("(?<![а-яё])сети\\s+значений(?![а-яё])")
+            // For ordinary books there is no review overlay. Reuse the baseline output
+            // instead of running the identical production neural pipeline a second time.
+            val hasReviewedBookOverlay = allBookOverrides.isNotEmpty() ||
+                bookReplacementLines.any { it.isNotBlank() && !it.trimStart().startsWith("#") }
 
             for ((segmentIndex, segment) in segments.withIndex()) {
                 // Pipeline.plan has already applied system replacements and split this source
@@ -1220,9 +1224,13 @@ class UploadedEpubPairedEvaluationTest {
                 val baseline = StressDiagnosticFormatter.readable(
                     Pipeline.accent(baselineSource, baselineData, baselineStress, baselineData.allowed, rules)
                 )
-                val reviewed = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(reviewedSource, data, reviewedStress, data.allowed, rules)
-                )
+                val reviewed = if (hasReviewedBookOverlay) {
+                    StressDiagnosticFormatter.readable(
+                        Pipeline.accent(reviewedSource, data, reviewedStress, data.allowed, rules)
+                    )
+                } else {
+                    baseline
+                }
                 val combined = StressDiagnosticFormatter.readable(
                     Pipeline.accent(combinedSource, baselineData, combinedStress, baselineData.allowed, rules)
                 )

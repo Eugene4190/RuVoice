@@ -1,17 +1,6 @@
 name: Build RuVoice Book Tool for Windows
 
 on:
-  pull_request:
-    paths:
-      - "experiments/ruvoice-stress-dictionary/**"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
-      - "private-files/paired_eval/book_reviewed_replacements.txt"
-      - "private-files/paired_eval/book_reviewed_overrides.txt"
-      - "private-files/paired_eval/book_reviewed_text_cleanup.txt"
-      - "private-files/paired_eval/book_context_acceptances.tsv"
-      - "private-files/paired_eval/BOOK_REVIEWED_OVERRIDES.md"
-      - "experiments/ruvoice-stress-dictionary/reports/8-Iskusstvo-stress-movements-review.tsv"
-      - ".github/workflows/build-ruvoice-book-tool-windows.yml"
   workflow_dispatch:
 
 permissions:
