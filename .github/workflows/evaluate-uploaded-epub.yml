@@ -264,6 +264,8 @@ jobs:
           python -m py_compile private-files/paired_eval/audit_book_third_model.py
           python private-files/paired_eval/audit_book_third_model.py \
             --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --quality-occurrences private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv \
+            --reviewed-overrides private-files/paired_eval/book_reviewed_overrides.txt \
             --output-dir private-files/ruvoice-third-model-audit \
             --batch-size 8 --max-chars 220
 
@@ -276,6 +278,10 @@ jobs:
             private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json
             private-files/ruvoice-third-model-audit/Book_Third_Model_AllOccurrences.tsv
             private-files/ruvoice-third-model-audit/Book_Third_Model_Disagreements.tsv
+            private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt
+            private-files/ruvoice-third-model-audit/Book_Three_Model_OOV_Review.txt
+            private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Evidence.tsv
+            private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Summary.json
           if-no-files-found: warn
           retention-days: 14
 
