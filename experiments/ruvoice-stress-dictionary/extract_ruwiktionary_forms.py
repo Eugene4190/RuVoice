@@ -239,8 +239,8 @@ def open_text_output(path: Path) -> TextIO:
     """Open UTF-8 text output, transparently compressing .gz destinations."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".gz":
-        return gzip.open(path, "wt", encoding="utf-8", newline="\\n")  # type: ignore[return-value]
-    return path.open("w", encoding="utf-8", newline="\\n")
+        return gzip.open(path, "wt", encoding="utf-8", newline="\n")  # type: ignore[return-value]
+    return path.open("w", encoding="utf-8", newline="\n")
 
 
 def sha256_file(path: Path) -> str:
