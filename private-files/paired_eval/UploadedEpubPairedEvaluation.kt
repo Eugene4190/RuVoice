@@ -1141,34 +1141,43 @@ class UploadedEpubPairedEvaluationTest {
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
                 val checkedWithBookOverlay = caseId == "silks-plural-01"
+                val checkedWithManualStress = plain(targetWord).lowercase(Locale.ROOT) in bookOverrides
                 val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
                 val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
                 check(targetIndex >= 0) { "Stress regression $caseId: target '$targetWord' is missing" }
 
                 val baselineText = readable(sourceText, baselineStress)
-                val mergedText = if (checkedWithBookOverlay)
-                    readable(sourceText, reviewedStress, data, bookReplacements)
-                else readable(sourceText, combinedStress)
+                val checkedSource = when {
+                    checkedWithBookOverlay -> "book_phrase_overlay"
+                    checkedWithManualStress -> "manual_book_override"
+                    else -> "ruaccent_merged"
+                }
+                val checkedText = when {
+                    checkedWithBookOverlay -> readable(sourceText, reviewedStress, data, bookReplacements)
+                    checkedWithManualStress -> readable(sourceText, reviewedStress, data)
+                    else -> readable(sourceText, combinedStress)
+                }
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
-                val mergedTokens = wordRegex.findAll(mergedText).toList()
-                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
+                val checkedTokens = wordRegex.findAll(checkedText).toList()
+                check(baselineTokens.size == sourceTokens.size && checkedTokens.size == sourceTokens.size) {
                     "Stress regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
-                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
+                        "baseline=${baselineTokens.size}, checked=${checkedTokens.size})"
                 }
                 val baselineWord = baselineTokens[targetIndex].value
-                val mergedWord = mergedTokens[targetIndex].value
-                val actualPosition = stressPosition(mergedWord)
+                val checkedWord = checkedTokens[targetIndex].value
+                val actualPosition = stressPosition(checkedWord)
                 check(actualPosition != null && actualPosition in acceptedPositions) {
                     "Stress regression $caseId: expected one of $acceptedPositions, " +
-                        "baseline='$baselineWord', merged='$mergedWord', actual=$actualPosition"
+                        "baseline='$baselineWord', checked='$checkedWord' source=$checkedSource actual=$actualPosition"
                 }
                 stressRegressionPassed++
                 stressRegressionResults.put(JSONObject()
                     .put("id", caseId)
                     .put("accepted_vowel_indices", JSONArray(acceptedPositions.toList()))
                     .put("baseline", baselineWord)
-                    .put("merged", mergedWord)
+                    .put("checked", checkedWord)
+                    .put("checked_source", checkedSource)
                     .put("actual_vowel_index", actualPosition)
                     .put("result", "PASS"))
             }
