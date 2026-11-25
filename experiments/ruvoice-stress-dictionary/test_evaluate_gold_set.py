@@ -16,6 +16,31 @@ class GoldSetEvaluatorTests(unittest.TestCase):
         self.assertEqual({row["sense_id"] for row in marked}, {"linguistic_term", "labelled_goods"})
         self.assertEqual({row["evaluation_scope"] for row in marked}, {"contextual"})
 
+    def test_review_queue_is_separate_and_awaits_independent_second_review(self):
+        gold_dir = Path(__file__).parent / "data" / "gold"
+        seed = tool.load_gold(gold_dir / "seed.tsv")
+        gold_ids = {row["gold_id"] for row in seed}
+        with (gold_dir / "review_queue.tsv").open(
+            "r", encoding="utf-8-sig", newline=""
+        ) as stream:
+            reader = csv.DictReader(stream, delimiter="\\t")
+            queued = list(reader)
+
+        self.assertEqual(len(queued), 10)
+        self.assertTrue(all(row["review_status"] == "AWAITING_SECOND_LINGUIST_REVIEW" for row in queued))
+        self.assertEqual(len({row["candidate_id"] for row in queued}), len(queued))
+        self.assertTrue(all(row["candidate_id"] not in gold_ids for row in queued))
+        self.assertTrue(all(row["source_url"].startswith("https://") for row in queued))
+        self.assertTrue(all(row["context"] and row["evidence"] for row in queued))
+        self.assertTrue(all(not row["second_reviewer"] and not row["second_reviewed_on"] for row in queued))
+
+        e_yo = {row["surface"] for row in queued if row["candidate_id"] in {"P007", "P008"}}
+        self.assertEqual(e_yo, {"берег", "берёг"})
+        пахта = [row for row in queued if row["surface"] == "пахта"]
+        self.assertEqual(len(пахта), 2)
+        self.assertEqual({row["sense_id"] for row in пахта}, {"dairy_product", "raw_cotton"})
+        self.assertEqual({row["accepted_marked"] for row in пахта}, {"п+ахта", "пахт+а"})
+
     def test_marked_form_requires_exact_surface_and_stress_before_vowel(self):
         self.assertIsNone(tool.validate_marked("творог", "тв+орог"))
         self.assertIsNotNone(tool.validate_marked("берег", "бер+ёг"))
