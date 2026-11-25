@@ -132,6 +132,36 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             self.assertIn("сделает его текущим", guide)
             self.assertIn("не импортируйте его второй раз", guide.lower())
 
+    def test_reviewed_override_overlay_is_hash_scoped_and_filters_absent_forms(self):
+        book = self.root / "reviewed-reference.epub"
+        self.make_epub(book, "Несчастлив герой, рядом арбайт и неизвестное слово.")
+        overrides = self.root / "reviewed-overrides.txt"
+        overrides.write_text(
+            "несчастлив несчастл+ив\n"
+            "арбайт +арбайт\n"
+            "отнята отнят+а\n",
+            encoding="utf-8",
+        )
+
+        original_hash = workflow.REFERENCE_BOOK_SHA256
+        try:
+            workflow.REFERENCE_BOOK_SHA256 = "a" * 64
+            content, count = workflow._build_reviewed_stress_overrides(
+                book, "a" * 64, source_path=overrides
+            )
+            self.assertEqual(count, 2)
+            self.assertIn("несчастлив несчастл+ив", content)
+            self.assertIn("арбайт +арбайт", content)
+            self.assertNotIn("отнята отнят+а", content)
+
+            other_content, other_count = workflow._build_reviewed_stress_overrides(
+                book, "b" * 64, source_path=overrides
+            )
+            self.assertEqual(other_count, 0)
+            self.assertNotIn("несчастлив несчастл+ив", other_content)
+        finally:
+            workflow.REFERENCE_BOOK_SHA256 = original_hash
+
     def test_incomplete_pending_transaction_recovers_append_only_master_once(self):
         private = self.root / "recovery-private"
         master, state_dir, _ = workflow._ensure_private_store(private)
