@@ -158,7 +158,7 @@ class BookDictionaryTests(unittest.TestCase):
             )
             self.assertEqual(
                 tool.load_provenance(audit),
-                {"берёг": "aot_wiktionary_silero_consensus"},
+                {"берёг": ("бер+ёг", "aot_wiktionary_silero_consensus")},
             )
 
     def test_e_yo_alias_without_exact_spelling_is_held_for_review(self):
@@ -281,6 +281,37 @@ class BookDictionaryTests(unittest.TestCase):
             self.assertIn("холеной хол+еной", candidate_text)
             review_text = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
             self.assertNotIn("ORTHOGRAPHY_ALIAS_REVIEW", review_text)
+
+
+    def test_provenance_stress_must_match_exact_candidate_pool_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("берег", encoding="utf-8")
+            system.write_text("# empty\\n", encoding="utf-8")
+            approved.write_text("# empty\\n", encoding="utf-8")
+            pool.write_text("берег б+ерег\\n", encoding="utf-8")
+            audit.write_text(
+                "word\\tstress\\tsource\\n"
+                "берег бер+ег aot_wiktionary_silero_consensus\\n",
+                encoding="utf-8",
+            )
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            with self.assertRaisesRegex(ValueError, "Provenance stress mismatch"):
+                tool.build(args)
 
 
 if __name__ == "__main__":
