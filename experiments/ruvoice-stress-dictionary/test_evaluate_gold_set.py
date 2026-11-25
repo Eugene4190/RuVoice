@@ -23,7 +23,7 @@ class GoldSetEvaluatorTests(unittest.TestCase):
         with (gold_dir / "review_queue.tsv").open(
             "r", encoding="utf-8-sig", newline=""
         ) as stream:
-            reader = csv.DictReader(stream, delimiter="\\t")
+            reader = csv.DictReader(stream, delimiter="\t")
             queued = list(reader)
 
         self.assertEqual(len(queued), 10)
