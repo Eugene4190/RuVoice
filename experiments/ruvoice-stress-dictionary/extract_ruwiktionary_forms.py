@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_INPUT = ROOT / "data" / "raw" / "raw-wiktextract-data.jsonl.gz"
 DEFAULT_OUTPUT = ROOT / ".work" / "ruwiktionary_forms.tsv"
 DEFAULT_MANIFEST = ROOT / ".work" / "ruwiktionary_forms_manifest.json"
+DEFAULT_CONTEXT_OUTPUT = ROOT / ".work" / "ruwiktionary_forms_context.jsonl.gz"
 SOURCE_URL = "https://kaikki.org/ruwiktionary/rawdata.html"
 ACCENT = "\u0301"
 VOWELS = set("аеёиоуыэюя")
@@ -234,6 +235,14 @@ def open_jsonl(path: Path) -> TextIO:
     return path.open("r", encoding="utf-8-sig")
 
 
+def open_text_output(path: Path) -> TextIO:
+    """Open UTF-8 text output, transparently compressing .gz destinations."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".gz":
+        return gzip.open(path, "wt", encoding="utf-8", newline="\\n")  # type: ignore[return-value]
+    return path.open("w", encoding="utf-8", newline="\\n")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -284,7 +293,8 @@ def build_manifest(
     if context_path is not None:
         metadata.update({
             "context_output_file": context_path.name,
-            "context_output_sha256": hashlib.sha256(context_path.read_bytes()).hexdigest(),
+            "context_output_size_bytes": context_path.stat().st_size,
+            "context_output_sha256": sha256_file(context_path),
         })
     return metadata
 
@@ -301,7 +311,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--context-output",
         type=Path,
-        default=ROOT / ".work" / "ruwiktionary_forms_context.jsonl",
+        default=DEFAULT_CONTEXT_OUTPUT,
     )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     return parser.parse_args(argv)
@@ -314,10 +324,9 @@ def main(argv: list[str] | None = None) -> int:
         if not args.input.is_file():
             raise FileNotFoundError(f"Input file not found: {args.input}")
         input_sha256 = sha256_file(args.input)
-        args.context_output.parent.mkdir(parents=True, exist_ok=True)
         with (
             open_jsonl(args.input) as source,
-            args.context_output.open("w", encoding="utf-8", newline="\n") as context_stream,
+            open_text_output(args.context_output) as context_stream,
         ):
             extraction = extract_jsonl(source, context_stream)
         write_tsv(args.output, extraction)
