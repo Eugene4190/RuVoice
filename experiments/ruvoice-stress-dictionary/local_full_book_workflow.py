@@ -20,9 +20,31 @@ from typing import Any
 from book_tool_paths import resolve_app_paths
 
 REPO_ROOT, TOOL_DIR = resolve_app_paths(__file__)
-APP_ROOT = (
-    Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent)).resolve()
-    if getattr(sys, "frozen", False) else REPO_ROOT
+
+
+def resolve_engine_root(
+    repo_root: Path,
+    *,
+    frozen: bool,
+    bundle_root: Path | None,
+    executable_dir: Path,
+) -> Path:
+    """Find a side-by-side engine folder in a PyInstaller one-file or portable ZIP build."""
+    if not frozen:
+        return Path(repo_root).resolve()
+    candidates = [Path(value).resolve() for value in (bundle_root, executable_dir) if value is not None]
+    for candidate in candidates:
+        if (candidate / "engine").is_dir():
+            return candidate
+    # Prefer a stable location beside the executable so the missing-engine message is actionable.
+    return Path(executable_dir).resolve()
+
+
+APP_ROOT = resolve_engine_root(
+    REPO_ROOT,
+    frozen=bool(getattr(sys, "frozen", False)),
+    bundle_root=Path(sys._MEIPASS) if getattr(sys, "_MEIPASS", None) else None,
+    executable_dir=Path(sys.executable).resolve().parent,
 )
 ENGINE = APP_ROOT / "engine"
 # Kotlin object main wraps JUnitCore and runs the original production RuVoice paired test.
@@ -120,8 +142,12 @@ def _require_runtime() -> dict[str, Path]:
     jars = [path for path in paths["libs"].glob("*.jar") if path.is_file()]
     if not jars:
         raise FileNotFoundError("Не найдены JVM-зависимости локального RuVoice.")
+    bridge_class = paths["classes"] / "ru" / "kost" / "ruvoice" / "text" / "RuAccentBridgeKt.class"
+    if not bridge_class.is_file() and not any(
+        _jar_contains(jar, "ru/kost/ruvoice/text/RuAccentBridgeKt.class") for jar in jars
+    ):
+        raise FileNotFoundError("Не собран отдельный JVM-мост RUAccent.")
     required_jar_entries = {
-        "ru/kost/ruvoice/text/RuAccentBridgeKt.class": "Не собран отдельный JVM-мост RUAccent.",
         "org/junit/runner/JUnitCore.class": "Не включена библиотека JUnit для запуска полного аудита.",
         "org/json/JSONObject.class": "Не включена библиотека JSON для обмена между JVM-процессами.",
     }
