@@ -186,8 +186,11 @@ def wikt_mark(form: str) -> tuple[str, int | None] | None:
     return None
 
 
-def load_wiktionary(path: Path, target_words: set[str]) -> dict[str, dict[int, set[str]]]:
+def load_wiktionary(path: Path | None, target_words: set[str]) -> dict[str, dict[int, set[str]]]:
     result: dict[str, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
+    if path is None:
+        print("WIKTIONARY_DISABLED=optional local run; AOT + models remain active", flush=True)
+        return result
     articles = 0
     matched_forms = 0
     with gzip.open(path, "rt", encoding="utf-8") as stream:
@@ -338,7 +341,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--paired-json", type=Path, required=True)
     parser.add_argument("--aot-dir", type=Path, required=True)
-    parser.add_argument("--wiktionary-gz", type=Path, required=True)
+    parser.add_argument("--wiktionary-gz", type=Path, default=None)
     parser.add_argument("--system-dictionary", type=Path, required=True)
     parser.add_argument("--context-rules", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
