@@ -861,7 +861,7 @@ class UploadedEpubPairedEvaluationTest {
                 val targetWord = item.getString("word")
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
-                val sourceTokens = wordRegex.findAll(sourceText).toList()
+                val sourceTokens = wordRegex.findAll(systemReplacements.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
                 check(targetIndex >= 0) { "Stress precheck $caseId: target '$targetWord' is missing" }
                 val baselineText = readable(sourceText, baselineStress)
