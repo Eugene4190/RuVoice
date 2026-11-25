@@ -693,6 +693,26 @@ class UploadedEpubPairedEvaluationTest {
             "System stress dictionary does not contain the normative сня́то entry"
         }
 
+        // The Android service applies the installed system replacement table in Pipeline.plan
+        // before accentuation. The paired audit must use that exact layer too, or it will report
+        // false positives for entries such as всего-навсего, по-своему, сложена из and шелка и.
+        val systemReplacementFile = File(projectDir, "app/src/main/assets/dicts/replace/Системный.txt")
+        check(systemReplacementFile.isFile && systemReplacementFile.length() > 0L) {
+            "Missing generated RuVoice system replacement dictionary: $systemReplacementFile"
+        }
+        val systemReplacements = Replacements.parse(systemReplacementFile.readLines(Charsets.UTF_8))
+        val requiredReplacementRules = listOf(
+            "всего-навсего = всего-н+авсего",
+            "по-своему = по-св+оему",
+            "сложена из = сл+ожена из",
+            "окружающими средами = окружающими ср+едами",
+            "шелка и = ш+елка и",
+        )
+        val replacementLines = systemReplacementFile.readLines(Charsets.UTF_8).map { it.trim() }.toSet()
+        check(requiredReplacementRules.all { it in replacementLines }) {
+            "System replacement dictionary is missing book-relevant production rules"
+        }
+
         // Book-reviewed overlay is kept separate from the installed system dictionary.
         // Conflicting or duplicate entries fail closed; the overlay is used only by this
         // whole-book evaluation and never changes the APK asset.
@@ -742,9 +762,9 @@ class UploadedEpubPairedEvaluationTest {
         val torchModels = PairedTorchLiteStressModels(
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
-        // Three independent full-book passes: untouched production baseline; production with
-        // the reviewed phrase hint and seventeen book-only dictionary corrections; RUAccent on top
-        // of the untouched baseline. This isolates the impact of RuVoice-specific fixes.
+        // Three independent full-book passes: the same production system replacements + untouched
+        // baseline; reviewed book phrase and seventeen book-only dictionary corrections; and
+        // RUAccent on top of the same baseline. This isolates RuVoice-specific stress fixes.
         val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
         val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
         val corrector = PairedRemoteRuAccentCorrector(modelRoot, bridgeClasspath, nativeDir)
@@ -754,8 +774,10 @@ class UploadedEpubPairedEvaluationTest {
         )
 
         try {
-            fun readable(text: String, stress: Stress, inputData: SileroData = baselineData): String =
-                StressDiagnosticFormatter.readable(Pipeline.accent(text, inputData, stress, inputData.allowed, rules))
+            fun readable(text: String, stress: Stress, inputData: SileroData = baselineData): String {
+                val replaced = systemReplacements.apply(text)
+                return StressDiagnosticFormatter.readable(Pipeline.accent(replaced, inputData, stress, inputData.allowed, rules))
+            }
             val sanity = JSONObject()
             val genitiveHouse = readable("строительство дома", baselineStress, baselineData)
             val genitiveHouseCombined = readable("строительство дома", combinedStress, baselineData)
@@ -1000,19 +1022,21 @@ class UploadedEpubPairedEvaluationTest {
             val reviewedPhrasePattern = Regex("(?<![а-яё])сети\\s+значений(?![а-яё])")
 
             for ((segmentIndex, segment) in segments.withIndex()) {
+                // Match the app's real order: Replacements.apply first, then Pipeline.accent + Stress.
+                val replacedSource = systemReplacements.apply(segment.text)
                 val baseline = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, baselineData, baselineStress, baselineData.allowed, rules)
+                    Pipeline.accent(replacedSource, baselineData, baselineStress, baselineData.allowed, rules)
                 )
                 val reviewed = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, data, reviewedStress, data.allowed, rules)
+                    Pipeline.accent(replacedSource, data, reviewedStress, data.allowed, rules)
                 )
                 val combined = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, baselineData, combinedStress, baselineData.allowed, rules)
+                    Pipeline.accent(replacedSource, baselineData, combinedStress, baselineData.allowed, rules)
                 )
                 val oldWords = wordRegex.findAll(baseline).toList()
                 val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
-                val sourceWords = wordRegex.findAll(segment.text).toList()
+                val sourceWords = wordRegex.findAll(replacedSource).toList()
 
                 // The book overlay is deliberately narrow: only its seven exact wordforms
                 // and the one contextual phrase may change. This catches accidental loading
@@ -1233,7 +1257,7 @@ class UploadedEpubPairedEvaluationTest {
                 .put("ruaccent_model_files", RuAccentInt8ModelManifest.files.size)
                 .put("ruaccent_model_bytes", downloaded)
                 .put("silero_models", "Official RuVoice 1.1.3 accentor.ptl and homo.ptl; pack ru_voices uses the shared Russian stress models")
-                .put("pipeline", "Production Pipeline.accent + Stress; baseline without independentCorrector; merged result with production RUAccent ONNX and current protected gram/BERT merge")
+                .put("pipeline", "Production Replacements.apply -> Pipeline.accent + Stress; baseline without independentCorrector; merged result with production RUAccent ONNX and current protected gram/BERT merge")
                 .put("paragraphs", paragraphs.size)
                 .put("segments", segments.size)
                 .put("words_compared", wordCount)
