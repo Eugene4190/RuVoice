@@ -141,6 +141,10 @@ def _approve_into_private_master(
                 report=approval_report,
             )
         )
+        try:
+            os.chmod(staged_master, 0o600)
+        except OSError:
+            pass
         os.replace(staged_master, master)
     finally:
         if staged_master.exists():
@@ -208,7 +212,10 @@ def process_book(
 ) -> dict[str, Any]:
     """Process one book privately and return a ZIP bundle plus a safe summary."""
     book = Path(book)
-    display_name = Path(book_name).name if book_name else book.name
+    display_name = (
+        re.split(r"[/\\\\]", str(book_name))[-1]
+        if book_name else book.name
+    )
     if not book.is_file():
         raise FileNotFoundError(f"Книга не найдена: {book}")
     if book.suffix.lower() not in {".epub", ".txt", ".html", ".htm"}:
