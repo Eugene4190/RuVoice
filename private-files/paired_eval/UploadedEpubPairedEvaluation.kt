@@ -799,7 +799,33 @@ class UploadedEpubPairedEvaluationTest {
         check(bookOverrides == expectedBookOverrides) {
             "Book-specific override set differs from reviewed manifest: $bookOverrides"
         }
-        val reviewedStressDict = LinkedHashMap(systemStressDict).apply { putAll(bookOverrides) }
+        val autoBookOverrides = LinkedHashMap<String, String>()
+        val autoOverridePath = System.getenv("RUVOICE_AUTO_BOOK_OVERRIDES")
+        if (!autoOverridePath.isNullOrBlank()) {
+            val autoOverrideFile = File(autoOverridePath).canonicalFile
+            check(autoOverrideFile.isFile) {
+                "Configured automatic book override file does not exist: $autoOverrideFile"
+            }
+            for (line in autoOverrideFile.readLines(Charsets.UTF_8)) {
+                val (word, variant) = DictLines.parseStress(line) ?: continue
+                val key = word.lowercase(Locale.ROOT)
+                val value = variant.lowercase(Locale.ROOT)
+                val builtIn = systemStressDict[key]
+                check(builtIn == null || builtIn == value) {
+                    "Automatic book override conflicts with built-in system dictionary: $key ($builtIn vs $value)"
+                }
+                val manual = bookOverrides[key]
+                check(manual == null || manual == value) {
+                    "Automatic book override conflicts with manually reviewed book override: $key ($manual vs $value)"
+                }
+                val previous = autoBookOverrides.putIfAbsent(key, value)
+                check(previous == null || previous == value) {
+                    "Conflicting duplicate automatic book override: $key ($previous vs $value)"
+                }
+            }
+        }
+        val allBookOverrides = LinkedHashMap(bookOverrides).apply { putAll(autoBookOverrides) }
+        val reviewedStressDict = LinkedHashMap(systemStressDict).apply { putAll(allBookOverrides) }
 
         val rules = Rules()
         val torchModels = PairedTorchLiteStressModels(
@@ -1131,7 +1157,7 @@ class UploadedEpubPairedEvaluationTest {
                     }
                     val beforePosition = stressPosition(beforeWord)
                     val reviewedPosition = stressPosition(reviewedWord)
-                    val expectedVariant = bookOverrides[beforeKey]
+                    val expectedVariant = allBookOverrides[beforeKey]
                     val phraseTarget = (beforeKey == "сети" &&
                         reviewedPhrasePattern.containsMatchIn(segment.text.lowercase(Locale.ROOT))) ||
                         (beforeKey == "шелка" &&
@@ -1342,13 +1368,14 @@ class UploadedEpubPairedEvaluationTest {
                 "Context ledger does not cover every production segment"
             }
 
-            check(reviewedOverrideSeen.keys.containsAll(bookOverrides.keys)) {
-                "Not every reviewed book override was exercised: expected=" + bookOverrides.keys + " seen=" + reviewedOverrideSeen
+            check(reviewedOverrideSeen.keys.containsAll(allBookOverrides.keys)) {
+                "Not every reviewed book override was exercised: expected=" + allBookOverrides.keys + " seen=" + reviewedOverrideSeen
             }
             check(reviewedPhraseOverrideHits > 0) {
                 "The single reviewed phrase hint 'сети значений' was not exercised"
             }
             println("BOOK_REVIEWED_OVERLAY_GUARD=PASS wordforms=" + reviewedOverrideSeen +
+                " manual=" + bookOverrides.size + " automatic=" + autoBookOverrides.size +
                 " phrase_occurrences=" + reviewedPhraseOverrideHits)
 
 
@@ -1383,6 +1410,16 @@ class UploadedEpubPairedEvaluationTest {
                 .put("review_candidates", reviewCandidates)
                 .put("book_reviewed_override_entries", JSONArray().apply {
                     bookOverrides.forEach { (word, variant) ->
+                        put(JSONObject().put("word", word).put("variant", variant))
+                    }
+                })
+                .put("book_auto_override_entries", JSONArray().apply {
+                    autoBookOverrides.forEach { (word, variant) ->
+                        put(JSONObject().put("word", word).put("variant", variant))
+                    }
+                })
+                .put("book_all_override_entries", JSONArray().apply {
+                    allBookOverrides.forEach { (word, variant) ->
                         put(JSONObject().put("word", word).put("variant", variant))
                     }
                 })
