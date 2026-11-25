@@ -149,6 +149,10 @@ def metric_summary(items: Iterable[tuple[dict[str, str], str]]) -> dict[str, int
     correct = sum(pred in row["accepted_variants"] for row, pred in emitted)
     primary_available = [(row, pred) for row, pred in emitted if row["primary_marked"]]
     primary_correct = sum(pred == row["primary_marked"] for row, pred in primary_available)
+    accepted_non_primary = sum(
+        pred in row["accepted_variants"] and pred != row["primary_marked"]
+        for row, pred in primary_available
+    )
     return {
         "gold_rows": total,
         "emitted_predictions": len(emitted),
@@ -162,10 +166,11 @@ def metric_summary(items: Iterable[tuple[dict[str, str], str]]) -> dict[str, int
         "accuracy_over_all_gold_rows_percent": (
             round(100 * correct / total, 2) if total else 0.0
         ),
-        "primary_variant_accuracy_percent": (
+        "preferred_variant_match_rate_percent": (
             round(100 * primary_correct / len(primary_available), 2)
             if primary_available else None
         ),
+        "accepted_non_primary_predictions": accepted_non_primary,
     }
 
 
@@ -183,8 +188,8 @@ def evaluate(gold_rows: list[dict[str, str]], predictions: dict[str, str] | None
         "gold_rows": len(gold_rows),
         "predictions_supplied": predictions is not None,
         "independence_policy": (
-            "Gold labels are based on cited lexicographic sources and human annotation, "
-            "not on RuVoice/RUAccent predictions or AOT/Wiktionary model consensus."
+            "Gold labels are curated from cited lexicographic sources with explicit grammar "
+            "and context annotation, not from model predictions or source-agreement heuristics."
         ),
         "overall": metric_summary(pairs) if predictions is not None else None,
         "by_evaluation_scope": {
