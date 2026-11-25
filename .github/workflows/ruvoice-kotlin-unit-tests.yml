@@ -89,6 +89,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The Android plugin generates its mockable android.jar via a separate global task.
+          gradle --no-daemon --stacktrace :app:mockableAndroidJar
           gradle --no-daemon --stacktrace :app:assembleDesktopAuditRuntime
           test -s app/build/desktop-audit/classes/ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class
       - name: Diagnose mockable Android JAR output
