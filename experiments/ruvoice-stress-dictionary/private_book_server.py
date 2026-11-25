@@ -24,8 +24,10 @@ def parse_multipart(content_type: str, body: bytes):
             result[name] = (part.get_filename(), part.get_payload(decode=True) or b"")
     return result
 
-def page(token, message=""):
+def page(token, message="", download_href=None):
     feedback = f"<p>{html.escape(message)}</p>" if message else ""
+    if download_href:
+        feedback += f'<p><a href="{html.escape(download_href, quote=True)}">Скачать ZIP для RuVoice</a></p>'
     return f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RuVoice — книга</title><style>body{{font:16px system-ui;max-width:700px;margin:8vh auto;padding:0 20px;line-height:1.55}}main{{border:1px solid #8888;border-radius:16px;padding:26px}}input,button{{font:inherit;margin:14px 0}}input[type=file]{{display:block;width:100%;padding:14px;box-sizing:border-box}}button{{padding:12px 20px}}.notice{{background:#8882;padding:12px;border-radius:10px}}</style>
 <main><h1>Дополнение словаря RuVoice</h1><p>Выберите EPUB. Книга обрабатывается локально; накопитель сохраняется в приватной папке этого компьютера.</p>
@@ -44,8 +46,8 @@ class Handler(BaseHTTPRequestHandler):
         return
     def local_host(self):
         return self.headers.get("Host") in {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
-    def send_page(self, status, message=""):
-        data = page(self.server.token, message)
+    def send_page(self, status, message="", download_href=None):
+        data = page(self.server.token, message, download_href)
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
@@ -102,13 +104,13 @@ class Handler(BaseHTTPRequestHandler):
             os.close(fd)
             upload = Path(name)
             upload.write_bytes(data)
-            result = process_book(upload, private_home=self.server.home)
+            result = process_book(upload, private_home=self.server.home, book_name=Path(filename).name)
             key = secrets.token_urlsafe(24)
             self.server.downloads[key] = Path(result["archive"])
-            note = f"ZIP готов. Новых записей: {result['new_entry_count']}; всего: {result['cumulative_entry_count']}. Ссылка: /download/{key}"
+            note = f"ZIP готов. Новых записей: {result['new_entry_count']}; всего в личном накопителе: {result['cumulative_entry_count']}."
             if result["already_processed"]:
                 note += " (повторная книга, дубликаты не добавлены)"
-            self.send_page(200, note)
+            self.send_page(200, note, download_href=f"/download/{key}")
         except (ValueError, OSError, RuntimeError, KeyError) as exc:
             self.send_page(400, str(exc))
         finally:
