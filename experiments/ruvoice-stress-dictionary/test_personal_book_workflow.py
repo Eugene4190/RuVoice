@@ -186,7 +186,7 @@ class PersonalBookWorkflowTests(unittest.TestCase):
 
         result = self.run_book(contains_phrase)
         with zipfile.ZipFile(result["archive"]) as archive:
-            replacement_name = "contains-phrase_Replacements.txt"
+            replacement_name = f"contains-phrase_{result['book_sha256'][:8]}_Replacements.txt"
             replacements = archive.read(replacement_name).decode("utf-8")
             report = json.loads(archive.read("Book_Report.json"))
             review = archive.read("Book_Replacements_Review.tsv").decode("utf-8-sig")
@@ -197,7 +197,7 @@ class PersonalBookWorkflowTests(unittest.TestCase):
 
         unrelated_result = self.run_book(unrelated)
         with zipfile.ZipFile(unrelated_result["archive"]) as archive:
-            replacements = archive.read("unrelated_Replacements.txt").decode("utf-8")
+            replacements = archive.read(f"unrelated_{unrelated_result['book_sha256'][:8]}_Replacements.txt").decode("utf-8")
             report = json.loads(archive.read("Book_Report.json"))
             self.assertNotIn("шелка и = шелк+а и", replacements)
             self.assertEqual(report["workflow"]["auto_selected_reviewed_phrase_rules"], 0)
