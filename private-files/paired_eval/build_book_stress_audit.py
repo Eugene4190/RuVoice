@@ -346,7 +346,6 @@ def build_consensus_auto_overrides(
 
 
 def write_tsv(path: Path, headers: list[str], rows: list[list[Any]]) -> None:
-def write_tsv(path: Path, headers: list[str], rows: list[list[Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream, delimiter="\t")
@@ -361,6 +360,7 @@ def main() -> int:
     parser.add_argument("--auto-dictionary", type=Path, required=True)
     parser.add_argument("--provenance", type=Path, required=True)
     parser.add_argument("--quality-occurrences", type=Path, required=True)
+    parser.add_argument("--reviewed-overrides", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -369,6 +369,7 @@ def main() -> int:
     auto = read_marked_dictionary(args.auto_dictionary)
     provenance = read_provenance(args.provenance)
     quality_occurrences = read_quality_occurrences(args.quality_occurrences)
+    reviewed_override_positions = read_marked_dictionary(args.reviewed_overrides) if args.reviewed_overrides else {}
 
     raw_rows = paired.get("review_candidates", [])
     if not raw_rows:
@@ -491,8 +492,15 @@ def main() -> int:
         ])
     pair_rows.sort(key=lambda r: (-int(r[4]), r[0], r[3]))
 
+    auto_lines, auto_evidence_rows, auto_summary = build_consensus_auto_overrides(
+        paired, quality_occurrences, reviewed_override_positions
+    )
+
     summary = {
         "book": paired.get("book_file"),
+        "automatic_override_wordforms": auto_summary["automatic_override_wordforms"],
+        "automatic_override_occurrences": auto_summary["automatic_override_occurrences"],
+        "automatic_override_excluded_reasons": auto_summary["excluded_wordforms_by_reason"],
         "paragraphs": paired.get("paragraphs"),
         "segments": paired.get("segments"),
         "words_compared": paired.get("words_compared"),
@@ -519,6 +527,23 @@ def main() -> int:
     }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    overrides_path = args.output_dir / "Book_Auto_Stress_Overrides.txt"
+    overrides_path.write_text(
+        "# Автоматические книжные исправления: AOT + Wiktionary + RUAccent согласны на КАЖДОМ вхождении.\n"
+        "# Импортировать только как отдельный книжный словарь. Не переносить в глобальный Системный.txt.\n"
+        + ("\n".join(auto_lines) + "\n" if auto_lines else ""),
+        encoding="utf-8",
+    )
+    write_tsv(
+        args.output_dir / "Book_Auto_Stress_Overrides_Evidence.tsv",
+        ["word", "book_frequency", "ruvoice_wrong_position", "consensus_position",
+         "aot_positions", "wiktionary_positions", "chapters", "sample_contexts",
+         "aot_details", "wiktionary_details"],
+        auto_evidence_rows,
+    )
+    (args.output_dir / "Book_Auto_Stress_Overrides_Summary.json").write_text(
+        json.dumps(auto_summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     write_tsv(
         args.output_dir / "Book_Full_Stress_Review.tsv",
         ["priority", "change_type", "word_key", "ruvoice_output", "ruaccent_merged_output",
@@ -544,6 +569,7 @@ def main() -> int:
     print("WHOLE_BOOK_STRESS_AUDIT=" + json.dumps(summary, ensure_ascii=False, sort_keys=True))
     print("DETAIL_TSV=" + str(args.output_dir / "Book_Full_Stress_Review.tsv"))
     print("PAIR_TSV=" + str(args.output_dir / "Book_Full_Stress_Change_Pairs.tsv"))
+    print("AUTO_STRESS_OVERRIDES=" + str(overrides_path) + " WORDS=" + str(len(auto_lines)))
     return 0
 
 
