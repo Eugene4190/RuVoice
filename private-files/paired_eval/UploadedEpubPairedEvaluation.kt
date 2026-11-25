@@ -1036,7 +1036,7 @@ class UploadedEpubPairedEvaluationTest {
                 val oldWords = wordRegex.findAll(baseline).toList()
                 val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
-                val sourceWords = wordRegex.findAll(replacedSource).toList()
+                val sourceWords = wordRegex.findAll(replacedSource.replace("+", "")).toList()
 
                 // The book overlay is deliberately narrow: only its seven exact wordforms
                 // and the one contextual phrase may change. This catches accidental loading
