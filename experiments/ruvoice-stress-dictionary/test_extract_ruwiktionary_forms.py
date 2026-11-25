@@ -96,7 +96,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         line = article(
             "словарь",
             "noun",
-            [{"form": "слова\\u0301рь", "tags": ["canonical"]}],
+            [{"form": "слова\u0301рь", "tags": ["canonical"]}],
         )
         result = tool.extract_jsonl([line])
         self.assertEqual(
