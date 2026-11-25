@@ -42,7 +42,7 @@ class BookAnalyzerTests(unittest.TestCase):
             dictionary, conflicts = tool.parse_dictionary(path)
             self.assertNotIn("замок", dictionary)
             self.assertEqual(len(conflicts), 1)
-            self.assertIn("DIFFERENT_STRESS_POSITION", conflicts[0])
+            self.assertIn("ударная форма не соответствует ключу", conflicts[0])
             self.assertIn("замок", conflicts[0])
 
     def test_missing_stress_field_is_reported_as_a_conflict(self):
