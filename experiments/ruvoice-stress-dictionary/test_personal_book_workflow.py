@@ -199,6 +199,20 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             self.assertNotIn("шелка и = шелк+а и", replacements)
             self.assertEqual(report["workflow"]["auto_selected_reviewed_phrase_rules"], 0)
 
+    def test_import_list_filenames_fit_ruvoice_60_character_limit(self):
+        long_title = "оченьдлинноеназваниекнигидляпроверкиограниченияRuVoice"
+        book = self.root / f"{long_title}.epub"
+        self.make_epub(book, "незнакомое слово")
+        result = self.run_book(book)
+        with zipfile.ZipFile(result["archive"]) as archive:
+            delta_name = next(name for name in archive.namelist() if name.endswith("_New_Stress_Delta.txt"))
+            replacement_name = next(name for name in archive.namelist() if name.endswith("_Replacements.txt"))
+            self.assertLessEqual(len(Path(delta_name).stem), 60)
+            self.assertLessEqual(len(Path(replacement_name).stem), 60)
+            guide = archive.read("IMPORT.txt").decode("utf-8")
+            self.assertIn(Path(delta_name).name, guide)
+            self.assertIn(Path(replacement_name).name, guide)
+
     def test_different_book_with_same_word_does_not_duplicate_master_rows(self):
         book_a = self.root / "same-content-a.epub"
         book_b = self.root / "same-content-b.epub"
