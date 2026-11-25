@@ -69,10 +69,12 @@ Additional book-only text normalizations are kept in the phrase replacement list
 - дальнейшиекаскады → дальнейшие каскады
 - совершитьлогический → совершить логический
 
+The form `челюстей` is deliberately not overridden: the reference paradigm records both `че́люстей` and `челюсте́й`, so the existing RuVoice pronunciation is retained.
+
 These decisions are scoped to the exact reference EPUB and are not added to the global system dictionary or personal cumulative master.
 
 
-## Four further context-checked corrections from the full-book audit
+## Three further context-checked corrections from the full-book audit
 
 | Book form | Previous output | Reviewed output | Reason |
 |---|---|---|---|
