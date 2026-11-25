@@ -88,9 +88,9 @@ class PersonalBookWorkflowTests(unittest.TestCase):
 
         with zipfile.ZipFile(result_b_repeat["archive"]) as archive:
             names = archive.namelist()
-            delta = archive.read("Book_New_Stress_Delta.txt").decode("utf-8")
+            delta = archive.read("B_New_Stress_Delta.txt").decode("utf-8")
             snapshot = archive.read("MyBooks_Cumulative.txt").decode("utf-8")
-            replacements = archive.read("Book_Replacements.txt").decode("utf-8")
+            replacements = archive.read("B_Replacements.txt").decode("utf-8")
             history = json.loads(archive.read("MyBooks_History.json"))
             report = json.loads(archive.read("Book_Report.json"))
             self.assertIn("повторная обработка", delta.lower())
@@ -117,6 +117,9 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             self.assertNotIn("A.epub", names)
             self.assertNotIn("B.epub", names)
             self.assertIn("IMPORT.txt", names)
+            guide = archive.read("IMPORT.txt").decode("utf-8")
+            self.assertIn("B_New_Stress_Delta.txt", guide)
+            self.assertIn("B_Replacements.txt", guide)
 
     def test_different_book_with_same_word_does_not_duplicate_master_rows(self):
         book_a = self.root / "same-content-a.epub"
