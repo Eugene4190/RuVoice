@@ -632,8 +632,9 @@ private class PairedRemoteRuAccentCorrector(
 }
 
 
-private fun pairedSha256(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
+private fun pairedGitBlobSha(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-1")
+    digest.update(("blob " + file.length() + "\u0000").toByteArray(Charsets.UTF_8))
     file.inputStream().buffered().use { input ->
         val buffer = ByteArray(64 * 1024)
         while (true) {
@@ -684,7 +685,7 @@ class UploadedEpubPairedEvaluationTest {
         }
         val baselineJson = baselineJsonFile.readText(Charsets.UTF_8)
         val yoAsset = File(checkNotNull(System.getenv("RUVOICE_OFFICIAL_EYO_ASSET"))).canonicalFile
-        check(yoAsset.isFile && pairedSha256(yoAsset) == "7d36a88a29cae298ad4507d4ec1f87e19d826d51") {
+        check(yoAsset.isFile && pairedGitBlobSha(yoAsset) == "7d36a88a29cae298ad4507d4ec1f87e19d826d51") {
             "The baseline must use the exact official RuVoice 1.1.3 eyo_safe.txt asset"
         }
         val baselineData = SileroData(StressBin.File(ByteBuffer.wrap(
