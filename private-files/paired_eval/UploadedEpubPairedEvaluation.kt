@@ -1217,7 +1217,7 @@ class UploadedEpubPairedEvaluationTest {
                         .put("ruaccent_merged_output", outputWord)
                         .put("ruaccent_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
                 }
-                if (oldWords.size != newWords.size || oldWords.size != reviewedWords.size) {
+                if (sourceWords.size != oldWords.size || oldWords.size != newWords.size || oldWords.size != reviewedWords.size) {
                     alignmentMismatches++
                     continue
                 }
@@ -1320,6 +1320,24 @@ class UploadedEpubPairedEvaluationTest {
                 if ((segmentIndex + 1) % 500 == 0) {
                     println("PAIRED_PROGRESS segments=" + (segmentIndex + 1) + "/" + segments.size + " changed=" + changedSegments)
                 }
+            }
+
+            // A full-book comparison is valid only when every planned production token
+            // appears exactly once in all three streams. Never silently skip misaligned segments.
+            check(alignmentMismatches == 0) {
+                "Production token alignment failed in $alignmentMismatches segments"
+            }
+            check(lexicalMismatches == 0) {
+                "The baseline/reviewed/merged streams changed lexical tokens in $lexicalMismatches occurrences"
+            }
+            check(wordCount == baselineTokens.length() &&
+                wordCount == reviewedTokens.length() &&
+                wordCount == combinedTokens.length()) {
+                "Incomplete per-occurrence ledger: compared=$wordCount baseline=${baselineTokens.length()} " +
+                    "reviewed=${reviewedTokens.length()} merged=${combinedTokens.length()}"
+            }
+            check(segmentContexts.length() == segments.size) {
+                "Context ledger does not cover every production segment"
             }
 
             check(reviewedOverrideSeen.keys.containsAll(bookOverrides.keys)) {
