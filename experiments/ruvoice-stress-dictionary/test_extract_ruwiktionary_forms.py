@@ -140,13 +140,11 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         ]
 
         with tempfile.TemporaryDirectory() as tmp:
-            output = Path(tmp) / "contexts.jsonl"
-            with output.open("w", encoding="utf-8", newline="\n") as stream:
+            output = Path(tmp) / "contexts.jsonl.gz"
+            with tool.open_text_output(output) as stream:
                 result = tool.extract_jsonl(lines, stream)
-            records = [
-                json.loads(line)
-                for line in output.read_text(encoding="utf-8").splitlines()
-            ]
+            with tool.open_jsonl(output) as stream:
+                records = [json.loads(line) for line in stream]
 
         # The compact stress TSV may merge identical descriptors, but the streamed
         # context data must keep both source senses without retaining them in memory.
@@ -226,14 +224,14 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             root = Path(tmp)
             source = root / "raw.jsonl.gz"
             output = root / "forms.tsv"
-            context_output = root / "contexts.jsonl"
+            context_output = root / "contexts.jsonl.gz"
             manifest = root / "manifest.json"
             with gzip.open(source, "wt", encoding="utf-8") as stream:
                 stream.write("\n".join(lines) + "\n")
 
             with (
                 tool.open_jsonl(source) as stream,
-                context_output.open("w", encoding="utf-8", newline="\n") as context_stream,
+                tool.open_text_output(context_output) as context_stream,
             ):
                 result = tool.extract_jsonl(stream, context_stream)
             tool.write_tsv(output, result)
@@ -256,7 +254,8 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             self.assertEqual(loaded["source_edition"], "Russian-language Wiktionary (ru.wiktionary.org)")
             self.assertEqual(loaded["distinct_surface_form_count"], 1)
             self.assertEqual(loaded["context_record_count"], 1)
-            self.assertEqual(loaded["context_output_file"], "contexts.jsonl")
+            self.assertEqual(loaded["context_output_file"], "contexts.jsonl.gz")
+            self.assertGreater(loaded["context_output_size_bytes"], 0)
             self.assertEqual(len(loaded["context_output_sha256"]), 64)
             self.assertEqual(len(loaded["input_sha256"]), 64)
 
