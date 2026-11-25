@@ -31,7 +31,7 @@ def page(token, message="", download_href=None):
     return f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RuVoice — книга</title><style>body{{font:16px system-ui;max-width:700px;margin:8vh auto;padding:0 20px;line-height:1.55}}main{{border:1px solid #8888;border-radius:16px;padding:26px}}input,button{{font:inherit;margin:14px 0}}input[type=file]{{display:block;width:100%;padding:14px;box-sizing:border-box}}button{{padding:12px 20px}}.notice{{background:#8882;padding:12px;border-radius:10px}}</style>
 <main><h1>Дополнение словаря RuVoice</h1><p>Выберите EPUB. Книга обрабатывается локально; накопитель сохраняется в приватной папке этого компьютера.</p>
-<form method="post" action="/upload" enctype="multipart/form-data"><input type="hidden" name="token" value="{html.escape(token)}"><label>Книга (EPUB, TXT или HTML; до 256 МБ)</label><input type="file" name="book" accept=".epub,.txt,.html,.htm" required><button type="submit">Собрать ZIP</button></form>
+<form method="post" action="/upload" enctype="multipart/form-data"><input type="hidden" name="token" value="{html.escape(token)}"><label>Книга (EPUB, TXT или HTML; до 256 МБ)</label><input type="file" name="book" accept=".epub,.txt,.html,.htm" required><label>Книжные контекстные замены (необязательно, TXT)</label><input type="file" name="replacements" accept=".txt"><button type="submit">Собрать ZIP</button></form>
 {feedback}<p class="notice"><b>Приватность:</b> сервер доступен только на 127.0.0.1. Книга не отправляется в GitHub и удаляется после сборки. Текст книги не включается в ZIP.</p></main></html>""".encode("utf-8")
 
 class Server(ThreadingHTTPServer):
@@ -83,6 +83,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin and origin not in allowed_origins:
             return self.send_page(403, "Запрос с внешнего сайта отклонён.")
         upload = None
+        replacement_upload = None
         try:
             size = int(self.headers.get("Content-Length", "0"))
             if size < 1 or size > MAX_BYTES:
@@ -104,7 +105,18 @@ class Handler(BaseHTTPRequestHandler):
             os.close(fd)
             upload = Path(name)
             upload.write_bytes(data)
-            result = process_book(upload, private_home=self.server.home, book_name=Path(filename).name)
+            replacement_name, replacement_data = fields.get("replacements", (None, b""))
+            if replacement_name and replacement_data:
+                if Path(replacement_name).suffix.lower() != ".txt":
+                    raise ValueError("Файл контекстных замен должен быть TXT.")
+                fd, replacement_temp = tempfile.mkstemp(prefix="replacements-", suffix=".txt", dir=incoming)
+                os.close(fd)
+                replacement_upload = Path(replacement_temp)
+                replacement_upload.write_bytes(replacement_data)
+            result = process_book(
+                upload, private_home=self.server.home, book_name=Path(filename).name,
+                replacements=replacement_upload,
+            )
             key = secrets.token_urlsafe(24)
             self.server.downloads[key] = Path(result["archive"])
             note = f"ZIP готов. Новых записей: {result['new_entry_count']}; всего в личном накопителе: {result['cumulative_entry_count']}."
@@ -116,6 +128,8 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             if upload is not None:
                 upload.unlink(missing_ok=True)
+            if replacement_upload is not None:
+                replacement_upload.unlink(missing_ok=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Локальная приватная страница загрузки книг RuVoice")
