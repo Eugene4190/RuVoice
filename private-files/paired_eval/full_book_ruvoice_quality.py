@@ -411,7 +411,31 @@ def main() -> int:
         for row in override_entries
     }
     if actual_overrides != expected_overrides:
-        raise SystemExit(f"Набор книжных исправлений отличается от проверенного манифеста: {actual_overrides}")
+        raise SystemExit(f"Набор вручную проверенных книжных исправлений отличается от манифеста: {actual_overrides}")
+
+    auto_entries = paired.get("book_auto_override_entries", [])
+    auto_overrides = {
+        str(row.get("word", "")): str(row.get("variant", ""))
+        for row in auto_entries
+    }
+    if len(auto_overrides) != len(auto_entries):
+        raise SystemExit("Автоматический книжный оверлей содержит повторяющиеся формы")
+    conflicts = {
+        word: (actual_overrides[word], variant)
+        for word, variant in auto_overrides.items()
+        if word in actual_overrides and actual_overrides[word] != variant
+    }
+    if conflicts:
+        raise SystemExit(f"Автоматический оверлей конфликтует с ручным: {conflicts}")
+    all_entries = paired.get("book_all_override_entries", [])
+    all_overrides = {
+        str(row.get("word", "")): str(row.get("variant", ""))
+        for row in all_entries
+    }
+    expected_all = dict(actual_overrides)
+    expected_all.update(auto_overrides)
+    if all_overrides != expected_all:
+        raise SystemExit("Полный список книжных оверлеев не совпадает с ручными + автоматическими записями")
 
     # Use the complete independently merged token stream, not only changed-token samples.
     ruaccent_by_occurrence: dict[tuple[int, int], str] = {}
@@ -543,6 +567,17 @@ def main() -> int:
     occurrence_rows.sort(key=lambda row: (
         priority_order.get(row[0], 99), row[2], int(row[14]), int(row[15])
     ))
+    if len(occurrence_rows) != len(tokens):
+        raise SystemExit(
+            f"Неполный проверочный реестр: ledger={len(occurrence_rows)}, "
+            f"tokens_from_ruvoice={len(tokens)}"
+        )
+    coordinates = [
+        (int(row[14]), int(row[15]))
+        for row in occurrence_rows
+    ]
+    if len(set(coordinates)) != len(tokens):
+        raise SystemExit("Проверочный реестр содержит дублирующиеся координаты segment_index/word_index")
 
     total = sum(item["frequency"] for item in aggregate.values())
     scored = {
@@ -564,6 +599,9 @@ def main() -> int:
         "occurrences_in_quality_ledger": len(occurrence_rows),
         "ledger_coverage_percent": round(100 * len(occurrence_rows) / len(tokens), 4) if tokens else 100.0,
         "non_russian_or_special_occurrences": counts["NON_RUSSIAN_OR_SPECIAL"],
+        "manual_book_override_count": len(actual_overrides),
+        "automatic_book_override_count": len(auto_overrides),
+        "total_book_override_count": len(all_overrides),
         "valid_russian_occurrences": total,
         "unique_wordforms": len(aggregate),
         "aot_forms_found": len(aot),
@@ -633,6 +671,16 @@ def main() -> int:
             "occurrence_status_counts", "reviewed_occurrence_status_counts", "sample_contexts",
         ])
         writer.writerows(unique_rows)
+
+    importable_lines = [
+        "# Только для отдельного пользовательского списка RuVoice «Ударения» этой книги.",
+        "# Не импортировать в системный словарь; исходный EPUB не изменяется.",
+    ]
+    for word, variant in sorted(all_overrides.items()):
+        importable_lines.append(f"{word} {variant}")
+    (args.output_dir / "Book_Importable_Stress_Overrides.txt").write_text(
+        "\n".join(importable_lines) + "\n", encoding="utf-8"
+    )
 
     (args.output_dir / "WholeBook_RuVoice_Quality_Summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
