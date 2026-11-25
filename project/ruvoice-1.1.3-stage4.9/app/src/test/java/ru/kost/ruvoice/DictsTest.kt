@@ -24,6 +24,25 @@ class DictsTest {
         assertEquals("", root.resolve("dicts/replace/Основной.txt").readText())
     }
 
+    @Test fun importsBookStressDeltaAsASeparateRuVoiceList() {
+        val text = "# Дополнение книги A\nмолоко мол+око\nтворог твор+ог\n"
+        val imported = Dicts.importText(text, Dicts.Kind.STRESS)
+        val rows = imported.lineSequence().mapNotNull { DictLines.parseStress(it) }.toMap()
+        assertEquals("мол+око", rows["молоко"])
+        assertEquals("твор+ог", rows["творог"])
+        val listName = "Моя книга_New_Stress_Delta"
+        assertTrue(Dicts.validName(listName))
+        assertEquals(listName, Dicts.freeName(tmp.root, Dicts.Kind.STRESS, listName))
+    }
+
+    @Test fun importsBookReplacementTxtInNativeRuVoiceFormat() {
+        val text = "# Только для книги B\nшелка и = шелк+а и\n"
+        val imported = Dicts.importText(text, Dicts.Kind.REPLACE)
+        val rule = imported.lineSequence().first { it.isNotBlank() && !it.startsWith("#") }
+        assertEquals(Triple("шелка и", "шелк+а и", false), DictLines.parseReplace(rule))
+        assertEquals("шелк+а и платья", Replacements.parse(imported.lines()).apply("шелка и платья"))
+    }
+
     @Test fun installSystemWritesAssetAndRefreshesItAfterUpdate() {
         val root = tmp.root
         var asset = "# v1\nтворог твор+ог\n"
