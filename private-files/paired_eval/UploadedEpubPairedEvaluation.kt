@@ -683,7 +683,10 @@ class UploadedEpubPairedEvaluationTest {
             "Missing pre-override Silero phrase data: $baselineJsonFile"
         }
         val baselineJson = baselineJsonFile.readText(Charsets.UTF_8)
-        val yoAsset = File(projectDir, "app/src/main/assets/eyo_safe.txt")
+        val yoAsset = File(checkNotNull(System.getenv("RUVOICE_OFFICIAL_EYO_ASSET"))).canonicalFile
+        check(yoAsset.isFile && pairedSha256(yoAsset) == "7d36a88a29cae298ad4507d4ec1f87e19d826d51") {
+            "The baseline must use the exact official RuVoice 1.1.3 eyo_safe.txt asset"
+        }
         val baselineData = SileroData(StressBin.File(ByteBuffer.wrap(
             StressBin.write(baselineJson, yoAsset.readLines(Charsets.UTF_8).asSequence())
         )))
@@ -713,8 +716,8 @@ class UploadedEpubPairedEvaluationTest {
             val (word, variant) = DictLines.parseStress(line) ?: continue
             systemStressDict[word.lowercase(Locale.ROOT)] = variant.lowercase(Locale.ROOT)
         }
-        check(systemStressDict["снято"] == "сн+ято") {
-            "System stress dictionary does not contain the normative сня́то entry"
+        check(systemStressDict["снято"] != "сн+ято") {
+            "Book-specific снято correction must not be injected into the original system dictionary"
         }
 
         // The Android service applies the installed system replacement table in Pipeline.plan
