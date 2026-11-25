@@ -151,9 +151,9 @@ class BookDictionaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             audit = Path(tmp) / "audit.tsv"
             audit.write_text(
-                "word\\tstress\\tsource\\n"
-                "берёг\\tбер+ёг\\taot_wiktionary_silero_consensus\\n"
-                "берег\\tб+ерег\\tstage49_existing\\n",
+                "word\tstress\tsource\n"
+                "берёг\tбер+ёг\taot_wiktionary_silero_consensus\n"
+                "берег\tб+ерег\tstage49_existing\n",
                 encoding="utf-8",
             )
             self.assertEqual(
@@ -172,13 +172,13 @@ class BookDictionaryTests(unittest.TestCase):
             out = root / "out"
 
             book.write_text("берег", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
-            approved.write_text("# empty\\n", encoding="utf-8")
-            pool.write_text("берёг бер+ёг\\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
+            approved.write_text("# empty\n", encoding="utf-8")
+            pool.write_text("берёг бер+ёг\n", encoding="utf-8")
             audit.write_text(
-                "word\\tstress\\tsource\\n"
-                "берёг\\tбер+ёг\\taot_wiktionary_silero_consensus\\n"
-                "берег\\tб+ерег\\tstage49_existing\\n",
+                "word\tstress\tsource\n"
+                "берёг\tбер+ёг\taot_wiktionary_silero_consensus\n"
+                "берег\tб+ерег\tstage49_existing\n",
                 encoding="utf-8",
             )
 
@@ -212,17 +212,17 @@ class BookDictionaryTests(unittest.TestCase):
             out = root / "out"
 
             book.write_text("берег", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
-            approved.write_text("# empty\\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
+            approved.write_text("# empty\n", encoding="utf-8")
             pool.write_text(
-                "берег б+ерег\\n"
-                "берёг бер+ёг\\n",
+                "берег б+ерег\n"
+                "берёг бер+ёг\n",
                 encoding="utf-8",
             )
             audit.write_text(
-                "word\\tstress\\tsource\\n"
-                "берег\\tб+ерег\\taot_wiktionary_silero_consensus\\n"
-                "берёг\\tбер+ёг\\tstage49_existing\\n",
+                "word\tstress\tsource\n"
+                "берег\tб+ерег\taot_wiktionary_silero_consensus\n"
+                "берёг\tбер+ёг\tstage49_existing\n",
                 encoding="utf-8",
             )
 
@@ -253,17 +253,17 @@ class BookDictionaryTests(unittest.TestCase):
             out = root / "out"
 
             book.write_text("холеной", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
-            approved.write_text("# empty\\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
+            approved.write_text("# empty\n", encoding="utf-8")
             pool.write_text(
-                "холеной хол+ёной\\n"
-                "холёной хол+ёной\\n",
+                "холеной хол+ёной\n"
+                "холёной хол+ёной\n",
                 encoding="utf-8",
             )
             audit.write_text(
-                "word\\tstress\\tsource\\n"
-                "холеной\\tхол+ёной\\taot_wiktionary_silero_consensus\\n"
-                "холёной\\tхол+ёной\\tstage49_existing\\n",
+                "word\tstress\tsource\n"
+                "холеной\tхол+ёной\taot_wiktionary_silero_consensus\n"
+                "холёной\tхол+ёной\tstage49_existing\n",
                 encoding="utf-8",
             )
 
