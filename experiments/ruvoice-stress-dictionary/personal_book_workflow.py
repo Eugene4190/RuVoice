@@ -321,7 +321,7 @@ def _build_book_replacements(
     add_lines(curated_lines, "curated_reviewed_phrase", auto_match=True)
     add_lines(user_lines, "user_supplied_for_this_book")
 
-    header = "# Контекстные замены только для этой книги. Не объединять с глобальным Системный.txt.\\n"
+    header = "# Контекстные замены только для этой книги. Не объединять с глобальным Системный.txt.\n"
     content = header + "".join(line + "\n" for line in selected)
     return content, review, auto_count
 
