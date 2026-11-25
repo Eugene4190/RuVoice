@@ -1164,6 +1164,7 @@ class UploadedEpubPairedEvaluationTest {
                         }
                         if (candidateType != null) {
                             reviewCandidates.put(JSONObject()
+                                .put("segment_index", segmentIndex)
                                 .put("type", candidateType)
                                 .put("chapter", segment.chapter)
                                 .put("paragraph", segment.paragraph)
