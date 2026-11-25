@@ -243,6 +243,7 @@ jobs:
             --auto-dictionary experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt \
             --provenance experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_accepted.tsv \
             --quality-occurrences private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv \
+            --reviewed-overrides private-files/paired_eval/book_reviewed_overrides.txt \
             --output-dir private-files/ruvoice-full-book-stress-audit
 
       - name: Upload the whole-book stress review with short text contexts
@@ -254,6 +255,9 @@ jobs:
             private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv
             private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Change_Pairs.tsv
             private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Summary.json
+            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides.txt
+            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Evidence.tsv
+            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Summary.json
           if-no-files-found: warn
           retention-days: 14
 
