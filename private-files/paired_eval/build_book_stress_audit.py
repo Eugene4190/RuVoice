@@ -161,6 +161,191 @@ def render_positions(positions: set[int]) -> str:
     return ",".join(str(x) for x in sorted(positions))
 
 
+AUTO_EXCLUDED_WORDS = {
+    "а", "и", "но", "да", "или", "ли", "не", "ни", "бы", "же", "в", "во",
+    "на", "над", "под", "с", "со", "к", "ко", "у", "о", "об", "от", "до",
+    "из", "за", "по", "при", "для", "без", "через", "перед", "после",
+    "между", "около", "вокруг", "как", "что", "чтобы", "если", "когда",
+    "где", "кто", "то", "это", "вот", "там", "тут", "уже", "лишь", "ведь",
+    "либо", "нибудь", "таки", "обо",
+}
+
+
+def marker_for_word(word: str, position: int) -> str | None:
+    """Convert a vowel index into the RuVoice user-dictionary +marker format."""
+    clean = word.lower().replace("+", "").replace(ACUTE, "")
+    vowel_chars = [index for index, char in enumerate(clean) if char in VOWELS]
+    if position < 0 or position >= len(vowel_chars):
+        return None
+    at = vowel_chars[position]
+    return clean[:at] + "+" + clean[at:]
+
+
+def build_consensus_auto_overrides(
+    paired: dict[str, Any],
+    quality_occurrences: dict[tuple[int, int], dict[str, str]],
+    existing_overrides: dict[str, set[int]] | None = None,
+) -> tuple[list[str], list[list[Any]], dict[str, Any]]:
+    """
+    Produce importable corrections only when every occurrence of a spelling in the
+    book has one unambiguous AOT position, one identical Wiktionary position, and
+    the merged production RUAccent output follows that position while baseline
+    RuVoice consistently does not. This is deliberately stricter than "models differ".
+    """
+    baseline_rows = paired.get("baseline_tokens", [])
+    combined_rows = paired.get("combined_tokens", [])
+    combined_by_key: dict[tuple[int, int], dict[str, Any]] = {}
+    for row in combined_rows:
+        if "segment_index" in row and "word_index" in row:
+            combined_by_key[(int(row["segment_index"]), int(row["word_index"]))] = row
+
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    skipped = Counter()
+    for token in baseline_rows:
+        source = token.get("source_word")
+        if source in (None, "null"):
+            source = token.get("ruvoice_output", "")
+        source_word = str(source).lower().replace("+", "").replace(ACUTE, "")
+        key = normalize(source_word)
+        if not re.fullmatch(r"[а-яё]+", key):
+            skipped["non_russian_or_non_word"] += 1
+            continue
+        if len([ch for ch in key if ch in VOWELS]) < 2:
+            skipped["monosyllable"] += 1
+            continue
+        if key in AUTO_EXCLUDED_WORDS:
+            skipped["function_word_or_clitic"] += 1
+            continue
+        # Ё is already a stress signal and must not be converted into a dictionary +
+        # marker; normalized e/ё homographs are also not safe for blind word-only rules.
+        if "ё" in source_word:
+            skipped["contains_yo"] += 1
+            continue
+
+        coord = (int(token.get("segment_index", -1)), int(token.get("word_index", -1)))
+        combined = combined_by_key.get(coord)
+        quality = quality_occurrences.get(coord)
+        if combined is None or quality is None:
+            skipped["missing_alignment_or_quality"] += 1
+            continue
+        if normalize(str(token.get("ruvoice_output", ""))) != key:
+            skipped["source_output_lexical_mismatch"] += 1
+            continue
+        combined_word = str(combined.get("ruaccent_merged_output", ""))
+        if normalize(combined_word) != key:
+            skipped["combined_output_lexical_mismatch"] += 1
+            continue
+        grouped[key].append({
+            "source_word": source_word,
+            "baseline_word": str(token.get("ruvoice_output", "")),
+            "baseline_position": token.get("ruvoice_stress_vowel_index"),
+            "combined_word": combined_word,
+            "combined_position": combined.get("ruaccent_stress_vowel_index"),
+            "aot": parse_positions(quality.get("aot_stress_positions")),
+            "wikt": parse_positions(quality.get("wiktionary_stress_positions")),
+            "quality_status": quality.get("baseline_status", ""),
+            "chapter": str(token.get("chapter", "")),
+            "paragraph": str(token.get("paragraph", "")),
+            "context": quality.get("context", ""),
+            "aot_details": quality.get("aot_source_details", ""),
+            "wikt_details": quality.get("wiktionary_source_details", ""),
+        })
+
+    existing_overrides = existing_overrides or {}
+    import_lines: list[str] = []
+    evidence_rows: list[list[Any]] = []
+    reasons = Counter()
+    eligible_occurrences = 0
+    for key, group in grouped.items():
+        if key in existing_overrides:
+            reasons["already_manually_reviewed"] += 1
+            continue
+        if not group:
+            continue
+        aot_sets = {tuple(sorted(row["aot"])) for row in group}
+        wikt_sets = {tuple(sorted(row["wikt"])) for row in group}
+        if len(aot_sets) != 1 or len(wikt_sets) != 1:
+            reasons["reference_variants_differ_between_occurrences"] += 1
+            continue
+        aot = set(next(iter(aot_sets)))
+        wikt = set(next(iter(wikt_sets)))
+        if len(aot) != 1 or len(wikt) != 1 or aot != wikt:
+            reasons["no_single_aot_wiktionary_consensus"] += 1
+            continue
+        expected = next(iter(aot))
+        if any(row["quality_status"] == "CONTEXTUAL_VARIANT_ACCEPTED" for row in group):
+            reasons["contextual_variant_exception"] += 1
+            continue
+        baseline_positions = {
+            None if row["baseline_position"] in (None, "", "null") else int(row["baseline_position"])
+            for row in group
+        }
+        combined_positions = {
+            None if row["combined_position"] in (None, "", "null") else int(row["combined_position"])
+            for row in group
+        }
+        # Every occurrence must be corrected to the single reference position. A
+        # mixture means a homograph, contextual stress, or unstable model output.
+        if combined_positions != {expected}:
+            reasons["ruaccent_not_consistent_with_reference_for_every_occurrence"] += 1
+            continue
+        if expected in baseline_positions:
+            reasons["ruvoice_already_correct_in_some_occurrences"] += 1
+            continue
+        if None in baseline_positions:
+            reasons["baseline_unmarked_occurrence"] += 1
+            continue
+        if len(baseline_positions) != 1:
+            reasons["baseline_has_multiple_wrong_positions"] += 1
+            continue
+
+        variants = {row["source_word"] for row in group}
+        if len(variants) != 1:
+            reasons["orthographic_variants_share_normalized_key"] += 1
+            continue
+        word = next(iter(variants))
+        marked = marker_for_word(word, expected)
+        if marked is None:
+            reasons["invalid_target_position"] += 1
+            continue
+        import_lines.append(f"{key} {marked}")
+        eligible_occurrences += len(group)
+        first = group[0]
+        chapters = sorted({row["chapter"] for row in group if row["chapter"]})
+        samples = []
+        for row in group:
+            context = row["context"]
+            if context and context not in samples and len(samples) < 5:
+                samples.append(context)
+        evidence_rows.append([
+            key, len(group), ",".join(str(x) for x in sorted(baseline_positions)),
+            expected, ",".join(str(x) for x in sorted(aot)),
+            ",".join(str(x) for x in sorted(wikt)), ";".join(chapters),
+            "; ".join(samples),
+            first["aot_details"], first["wikt_details"],
+        ])
+        reasons["auto_corrected_wordforms"] += 1
+
+    import_lines.sort()
+    evidence_rows.sort(key=lambda row: (-int(row[1]), row[0]))
+    summary = {
+        "automatic_override_wordforms": len(import_lines),
+        "automatic_override_occurrences": eligible_occurrences,
+        "candidate_wordforms_examined": len(grouped),
+        "excluded_wordforms_by_reason": dict(reasons),
+        "skipped_occurrences_by_reason": dict(skipped),
+        "policy": (
+            "A word is emitted only when every occurrence in the EPUB is aligned, "
+            "AOT and Wiktionary each expose exactly one identical stress position, "
+            "production RUAccent agrees with that position at every occurrence, "
+            "and baseline RuVoice is consistently different at every occurrence. "
+            "Words with ё, service words, contextual exceptions, and mixed variants are excluded."
+        ),
+    }
+    return import_lines, evidence_rows, summary
+
+
+def write_tsv(path: Path, headers: list[str], rows: list[list[Any]]) -> None:
 def write_tsv(path: Path, headers: list[str], rows: list[list[Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
