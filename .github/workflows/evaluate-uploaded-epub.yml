@@ -1,6 +1,16 @@
 name: Paired baseline vs RUAccent evaluation on uploaded EPUB
 
 on:
+  push:
+    branches:
+      - stress-dictionary-pipeline
+    paths:
+      - ".github/workflows/evaluate-uploaded-epub.yml"
+      - "private-files/paired_eval/UploadedEpubPairedEvaluation.kt"
+      - "private-files/paired_eval/RuAccentBridge.kt"
+      - "private-files/paired_eval/full_book_ruvoice_quality.py"
+      - "private-files/paired_eval/audit_book_third_model.py"
+      - "private-files/paired_eval/package_ruvoice_import.py"
   workflow_dispatch:
 
 
