@@ -27,7 +27,7 @@ python experiments/ruvoice-stress-dictionary/extract_ruwiktionary_forms.py \
 The default outputs are written under `.work/` (ignored by Git):
 
 - `ruwiktionary_forms.tsv` — compact surface forms with marked stress and source descriptors;
-- `ruwiktionary_forms_context.jsonl` — one JSON record per source form, retaining morphology, word tags, categories, glosses, etymology, IPA/audio and the original input line number. This separate stream preserves distinct senses even when two articles share the same surface, POS and stress;
+- `ruwiktionary_forms_context.jsonl.gz` — one compressed JSON record per source form, retaining morphology, word/raw tags, categories, glosses, etymology, IPA/audio and the original input line number. This separate stream is written during extraction and preserves distinct senses even when two articles share the same surface, POS and stress;
 - `ruwiktionary_forms_manifest.json` — dump date, input/output/context SHA-256 hashes, article/form/context counts and extractor provenance.
 
 The extractor is intentionally review-only. It does not merge the new edition into AOT/English-Wiktionary, resolve duplicate entries automatically, or write to the production/system/approved dictionaries. Compare exact surface forms, stress alternatives, parts of speech and tags first. Multisyllabic forms without explicit acute or `ё` are withheld rather than guessed.
