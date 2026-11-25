@@ -2,12 +2,6 @@ name: Build RuVoice Improved test APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - stress-dictionary-pipeline
-    paths:
-      - ".github/workflows/build-improved-test-apk.yml"
-      - "project/ruvoice-1.1.3-stage4.9/**"
 
 permissions:
   contents: read
