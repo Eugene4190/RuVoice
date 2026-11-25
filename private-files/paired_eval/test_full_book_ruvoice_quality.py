@@ -105,7 +105,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
             "издревле": "издр+евле",
             "утолщилась": "утолщ+илась",
             "арбайт": "+арбайт",
-            "маше": "маш+е",
+            "средами": "с+редами",
             "сапинс": "с+апинс",
             "взаимовымогательства": "взаимовымог+ательства",
             "взаимовымогающим": "взаимовымог+ающим",
@@ -119,7 +119,7 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         expected_positions = {
             "несчастлив": 2, "отнята": 2, "шумы": 0, "двадцать": 0,
             "десять": 0, "издревле": 1, "утолщилась": 2,
-            "арбайт": 0, "маше": 1, "сапинс": 0,
+            "арбайт": 0, "средами": 0, "сапинс": 0,
             "взаимовымогательства": 5, "взаимовымогающим": 5,
             "внутриличностных": 2, "неприспособление": 4,
             "нетелесного": 2, "религиообразовании": 7,
@@ -182,6 +182,22 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         negative, _ = quality.verdict(
             "своему", 0, 0, {2: {"свой:dative"}}, {2: {"свой:dative"}}, set(),
             "Он следовал по своему желанию.", rules
+        )
+        self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
+
+
+    def test_sredami_in_substances_context_uses_root_stress(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        status, _ = quality.verdict(
+            "средами", 0, 0, {0: {"среда:environment"}, 1: {"среда:weekday"}},
+            {0: {"среда:environment"}, 1: {"среда:weekday"}}, set(),
+            "Эволюция означает взаимодействие с другими веществами и средами.", rules
+        )
+        self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+        negative, _ = quality.verdict(
+            "средами", 1, 1, {0: {"среда:environment"}, 1: {"среда:weekday"}},
+            {0: {"среда:environment"}, 1: {"среда:weekday"}}, set(),
+            "Мы встречаемся по средам.", rules
         )
         self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
 

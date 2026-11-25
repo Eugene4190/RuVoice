@@ -33,12 +33,16 @@ A separate phrase-level correction is applied through the production homograph p
 
 The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the seventeen-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
 
+
+
+The form `маше` is intentionally not a word-level overlay entry: the production system replacement `папье-маше = папье-маш+е` already supplies the correct stress in the book context. The redundant per-word override was replaced by `средами`.
+
 ## Ten additional corrections from the full-book disagreement review
 
 | Book form | Previous output | Reviewed output | Evidence |
 |---|---|---|---|
 | арбайт | арба́йт | а́рбайт | German *Arbeit* has first-syllable stress; the book quotes “Arbeit macht frei” |
-| маше | ма́ше | маше́ | The full phrase is `папье́-маше́`; Russian academic orthographic commentary marks final stress |
+| средами | среда́ми | сре́дами | Instrumental plural of `среда` in the sense of substance/environment; the normative stress is on the root vowel е |
 | сапинс | сапи́нс | са́пинс | The phrase is *Homo sapiens*; Russian Wiktionary marks `са́пиенс` |
 | взаимовымогательства | взаимовымо́гательства | взаимовымога́тельства | Compound based on `вымога́тельство` |
 | взаимовымогающим | взаимовымо́гающим | взаимовымога́ющим | Compound participle based on `вымога́ющий` / `вымога́ть` |
@@ -48,6 +52,6 @@ The whole-book runner keeps an untouched Silero phrase table for the baseline pa
 | религиообразовании | религиообразо́вании | религиообразова́нии | Compound with `образова́ние` |
 | самосуществования | самосущество́вания | самосуществова́ния | Compound with `существова́ние` |
 
-Reference lexemes: [гомо сапиенс](https://ru.wiktionary.org/wiki/гомо_сапиенс), [вымогательство](https://ru.wiktionary.org/wiki/вымогательство), [вымогать](https://ru.wiktionary.org/wiki/вымогать), [личностный](https://ru.wiktionary.org/wiki/личностный), [приспособление](https://ru.wiktionary.org/wiki/приспособление), [телесный](https://ru.wiktionary.org/wiki/телесный), [образование](https://ru.wiktionary.org/wiki/образование), [существование](https://ru.wiktionary.org/wiki/существование), [папье-маше́](https://oross.ruslang.ru/orthogr/formula?id=9), and [German Arbeit](https://www.duden.de/rechtschreibung/Arbeit).
+Reference lexemes: [гомо сапиенс](https://ru.wiktionary.org/wiki/гомо_сапиенс), [вымогательство](https://ru.wiktionary.org/wiki/вымогательство), [вымогать](https://ru.wiktionary.org/wiki/вымогать), [личностный](https://ru.wiktionary.org/wiki/личностный), [приспособление](https://ru.wiktionary.org/wiki/приспособление), [телесный](https://ru.wiktionary.org/wiki/телесный), [образование](https://ru.wiktionary.org/wiki/образование), [существование](https://ru.wiktionary.org/wiki/существование), [среда (Грамота)](https://gramota.ru/meta/sreda), and [German Arbeit](https://www.duden.de/rechtschreibung/Arbeit).
 
 The remaining author-specific neologisms and disputed proper-name pronunciations are not auto-corrected; the RUAccent difference alone is not evidence.
