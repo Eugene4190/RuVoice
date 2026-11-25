@@ -46,7 +46,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         )
         self.assertEqual(
             result.forms["четырёхбедрумная"]["четырёхб+едрумная"],
-            {"четырёхбедрумный:adj:feminine,lemma,nominative,singular"},
+            {"четырёхбедрумный:adj:feminine,nominative,singular"},
         )
         self.assertNotIn("четырёх+бедрумный", result.forms["четырёхбедрумный"])
         self.assertEqual(
@@ -56,7 +56,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
 
     def test_multiple_acute_marks_use_last_as_primary(self):
         parsed = tool.stressed_form("четы\u0301рёхбе\u0301друмный")
-        self.assertEqual(parsed, ("четы́рёхбедрумный", "четы́рёхб+едрумный"))
+        self.assertEqual(parsed, ("четырёхбедрумный", "четырёхб+едрумный"))
 
     def test_fallback_for_yo_and_single_vowel(self):
         self.assertEqual(tool.stressed_form("жёлтый"), ("жёлтый", "ж+ёлтый"))
@@ -83,7 +83,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         result = tool.extract_jsonl(lines)
         self.assertEqual(result.russian_article_count, 1)
         self.assertEqual(
-            result.forms["пример"]["приме+р"],
+            result.forms["пример"]["прим+ер"],
             {"пример:noun:lemma,nominative"},
         )
         self.assertNotIn("romanized", result.forms)
