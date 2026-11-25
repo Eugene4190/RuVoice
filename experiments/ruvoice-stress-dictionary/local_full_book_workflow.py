@@ -88,6 +88,7 @@ def _require_runtime() -> dict[str, Path]:
         "project": ENGINE / "project",
         "silero": ENGINE / "silero-models",
         "eyo": ENGINE / "eyo_safe.txt",
+        "baseline_silero_json": ENGINE / "project" / "app" / "src" / "main" / "assets" / "silero" / "silero_ru.json",
         "torch_exe": ENGINE / "bridges" / "RuVoiceTorchBridge.exe",
         "torch_script": ENGINE / "bridges" / "torch_lite_bridge.py",
         "third_model": ENGINE / "bridges" / "RuVoiceThirdModel.exe",
@@ -101,7 +102,7 @@ def _require_runtime() -> dict[str, Path]:
         "reference_replacements": ENGINE / "reference" / "book_reviewed_replacements.txt",
         "audit_scripts": ENGINE / "audit-scripts",
     }
-    for key in ("java", "eyo", "torch_exe", "torch_script", "third_model", "system_stress", "system_replace", "hard_e"):
+    for key in ("java", "eyo", "baseline_silero_json", "torch_exe", "torch_script", "third_model", "system_stress", "system_replace", "hard_e"):
         if not paths[key].is_file():
             raise FileNotFoundError(f"Не найден компонент локального движка RuVoice: {paths[key].name}")
     for key in ("classes", "libs", "project", "silero", "native", "aot"):
@@ -145,6 +146,7 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
         "RUVOICE_REPORT_PATH": str(report.resolve()),
         "RUVOICE_SILERO_ASSETS": str(paths["silero"]),
         "RUVOICE_OFFICIAL_EYO_ASSET": str(paths["eyo"]),
+        "RUVOICE_BASELINE_SILERO_JSON": str(paths["baseline_silero_json"]),
         "RUVOICE_TORCH_BRIDGE": str(paths["torch_script"]),
         "RUVOICE_TORCH_BRIDGE_EXE": str(paths["torch_exe"]),
         "RUVOICE_BOOK_OVERRIDES": str(overrides),
