@@ -44,9 +44,9 @@ class AppendOnlyApprovalTests(unittest.TestCase):
             report = root / "report.json"
             before = "# keep exact spelling\nтворог твор+ог\n"
 
-            candidate.write_text("берёг бер+ёг\\n", encoding="utf-8")
-            selected.write_text("берег\\n", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
+            candidate.write_text("берёг бер+ёг\n", encoding="utf-8")
+            selected.write_text("берег\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
             master.write_text(before, encoding="utf-8")
 
             args = Namespace(
@@ -69,13 +69,13 @@ class AppendOnlyApprovalTests(unittest.TestCase):
             master = root / "approved.txt"
 
             candidate.write_text(
-                "холеной хол+еной\\n"
-                "холёной хол+ёной\\n",
+                "холеной хол+еной\n"
+                "холёной хол+ёной\n",
                 encoding="utf-8",
             )
-            selected.write_text("холеной\\nхолёной\\n", encoding="utf-8")
-            system.write_text("# empty\\n", encoding="utf-8")
-            master.write_text("# keep exact rows\\n", encoding="utf-8")
+            selected.write_text("холеной\nхолёной\n", encoding="utf-8")
+            system.write_text("# empty\n", encoding="utf-8")
+            master.write_text("# keep exact rows\n", encoding="utf-8")
 
             args = Namespace(
                 candidate_file=candidate,
@@ -96,13 +96,13 @@ class AppendOnlyApprovalTests(unittest.TestCase):
             selected = root / "approve.txt"
             system = root / "system.txt"
             master = root / "approved.txt"
-            before = "# keep exact rows\\n"
+            before = "# keep exact rows\n"
 
-            candidate.write_text("берег б+ерег\\n", encoding="utf-8")
-            selected.write_text("берег\\n", encoding="utf-8")
+            candidate.write_text("берег б+ерег\n", encoding="utf-8")
+            selected.write_text("берег\n", encoding="utf-8")
             system.write_text(
-                "берёг б+ерёг\\n"
-                "берёг бер+ёг\\n",
+                "берёг б+ерёг\n"
+                "берёг бер+ёг\n",
                 encoding="utf-8",
             )
             master.write_text(before, encoding="utf-8")
