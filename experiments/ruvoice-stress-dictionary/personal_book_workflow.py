@@ -339,6 +339,7 @@ def _write_import_guide(
     delta_filename: str,
     replacement_filename: str,
     has_replacements: bool,
+    already_processed: bool = False,
 ) -> None:
     replacement_text = (
         f"Импортируйте {replacement_filename} во вкладку «Замены» только если в файле есть правила. "
@@ -351,8 +352,13 @@ def _write_import_guide(
         (
             f"RuVoice — дополнение для книги: {book_name}\n\n"
             "1. Откройте RuVoice → «Ударения» → импорт TXT.\n"
-            f"2. Импортируйте {delta_filename} отдельным списком с названием этой книги. "
-            "Не удаляйте и не отключайте списки предыдущих книг. Если дельта пуста, новых слов для импорта нет.\n"
+            (
+                f"2. {delta_filename} — исходная дельта этой книги. Она повторно включена для восстановления пакета; "
+                "если такой список уже импортирован в RuVoice, не импортируйте его второй раз. "
+                if already_processed else
+                f"2. Импортируйте {delta_filename} отдельным списком с названием этой книги. "
+            )
+            + "Не удаляйте и не отключайте списки предыдущих книг. Если дельта пуста, новых слов для импорта нет.\n"
             f"3. {replacement_text}\n"
             "4. MyBooks_Cumulative.txt — полный резервный снимок вашего личного словаря. "
             "Это backup, а не команда заменить или удалить списки в RuVoice. Храните его отдельно.\n"
@@ -438,13 +444,21 @@ def process_book(
             }
             for word, marked in sorted(candidates.items())
         ]
-        delta_text = "".join(f"{row['word']} {row['stress']}\n" for row in new_entries)
-        if was_processed or not delta_text:
+        # A repeat never changes the append-only master, but retains the original
+        # book delta so a failed/lost ZIP can be regenerated without losing recovery data.
+        delta_entries = (
+            history.get("books", {}).get(digest, {}).get("new_entries", [])
+            if was_processed else new_entries
+        )
+        delta_text = "".join(f"{row['word']} {row['stress']}\n" for row in delta_entries)
+        if was_processed:
             delta_text = (
-                "# Повторная обработка: книга уже учтена; новых записей нет.\n"
-                if was_processed
-                else "# Для этой книги новых безопасных записей нет.\n"
+                "# Повторная сборка: это исходная дельта уже учтённой книги. "
+                "Не импортируйте её повторно, если список этой книги уже есть в RuVoice.\n"
+                + delta_text
             )
+        elif not delta_text:
+            delta_text = "# Для этой книги новых безопасных записей нет.\n"
 
         if not was_processed:
             selected_file = work_dir / "approve_words.txt"
@@ -551,6 +565,8 @@ def process_book(
             "already_processed_before_this_run": was_processed,
             "newly_approved_entries": new_entries,
             "newly_approved_count": len(new_entries),
+            "book_delta_entries": delta_entries,
+            "book_delta_entry_count": len(delta_entries),
             "cumulative_approved_count": len(parse_dictionary(master)[0]),
             "append_only": True,
             "private_storage": True,
@@ -562,7 +578,8 @@ def process_book(
 
         guide_path = builder_output / "IMPORT.txt"
         _write_import_guide(
-            guide_path, display_name, delta_filename, replacement_filename, has_replacements
+            guide_path, display_name, delta_filename, replacement_filename, has_replacements,
+            already_processed=was_processed,
         )
         history_snapshot = builder_output / "MyBooks_History.json"
         shutil.copyfile(history_path, history_snapshot)
