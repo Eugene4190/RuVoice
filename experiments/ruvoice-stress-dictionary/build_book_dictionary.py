@@ -51,7 +51,7 @@ def load_dictionary(path: Path) -> tuple[dict[str, str], set[str]]:
     for row in conflicts:
         match = re.search(r": ([а-яё]+):", row)
         if match:
-            conflict_keys.add(norm(match.group(1)))
+            conflict_keys.add(match.group(1))
     return entries, conflict_keys
 
 
@@ -62,7 +62,39 @@ def normalized_index(entries: dict[str, str]) -> dict[str, list[tuple[str, str]]
     return index
 
 
+def orthographic_alias_review_reason(
+    word: str, normalized_rows: list[tuple[str, str]]
+) -> str | None:
+    """Return a review reason when е/ё-only aliases could change the stress."""
+    exact_rows = [(form, marked) for form, marked in normalized_rows if form == word]
+    aliases = [(form, marked) for form, marked in normalized_rows if form != word]
+    if not aliases:
+        return None
+    if not exact_rows:
+        forms = ", ".join(sorted({form for form, _ in aliases}))
+        return (
+            f"найдено только написание е/ё-алиаса ({forms}); точная словоформа {word} "
+            "не подтверждена, автоматический перенос запрещён"
+        )
+
+    def stress_position(marked: str) -> int:
+        marker = marked.index("+")
+        return sum(char in VOWELS for char in marked[:marker])
+
+    exact_positions = {stress_position(marked) for _, marked in exact_rows}
+    alias_positions = {stress_position(marked) for _, marked in aliases}
+    differing = alias_positions - exact_positions
+    if differing:
+        forms = ", ".join(sorted({form for form, _ in aliases}))
+        return (
+            f"написание е/ё-алиаса ({forms}) имеет другое положение ударения "
+            f"({sorted(differing)}) чем точная форма ({sorted(exact_positions)})"
+        )
+    return None
+
+
 def load_provenance(path: Path) -> dict[str, str]:
+    """Keep provenance keyed by the exact written form, including е/ё."""
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
         data_lines = (line for line in stream if not line.lstrip().startswith("#"))
         reader = csv.DictReader(data_lines, delimiter="\t")
@@ -73,8 +105,14 @@ def load_provenance(path: Path) -> dict[str, str]:
         for row in reader:
             word = (row.get("word") or "").strip().lower()
             source = (row.get("source") or "").strip()
-            if word and source in ALLOWED_SOURCES:
-                result[norm(word)] = source
+            if not word or source not in ALLOWED_SOURCES:
+                continue
+            previous = result.get(word)
+            if previous is not None and previous != source:
+                raise ValueError(
+                    f"Несколько источников provenance для точной формы {word}: {previous} / {source}"
+                )
+            result[word] = source
     return result
 
 
@@ -94,9 +132,9 @@ def load_candidate_rules(path: Path) -> dict[str, tuple[str, str, str]]:
                 continue
             if action not in {"WITHHOLD_UNSTRESSED", "CONTEXT_REVIEW"}:
                 raise ValueError(f"Неизвестное действие для {word}: {action}")
-            if norm(word) in rules:
-                raise ValueError(f"Повторное правило для словоформы {word}")
-            rules[norm(word)] = (action, reason, source)
+            if word in rules:
+                raise ValueError(f"Повторное правило для точной словоформы {word}")
+            rules[word] = (action, reason, source)
     return rules
 
 
@@ -141,13 +179,18 @@ def build(args: argparse.Namespace) -> int:
     system_idx = normalized_index(system)
     approved_idx = normalized_index(approved)
     pool_idx = normalized_index(pool)
+    known_idx: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for entries in (system, approved, pool):
+        for known_word, marked in entries.items():
+            known_idx[norm(known_word)].append((known_word, marked))
 
-    # If an upstream audit row is absent or marked as an old Stage 4.9 entry,
-    # that row is not allowed to become a new book-specific supplement.
+    # Provenance is attached only to the exact spelling in the audit and pool.
+    # A normalized е/ё alias must never inherit another form's source label.
     eligible_pool: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
-    for norm_word, source in provenance.items():
-        for word, marked in pool_idx.get(norm_word, []):
-            eligible_pool[norm_word].append((word, marked, source))
+    for word, source in provenance.items():
+        marked = pool.get(word)
+        if marked is not None:
+            eligible_pool[word].append((word, marked, source))
 
     candidates: list[Entry] = []
     review_rows: list[list[object]] = []
@@ -169,11 +212,21 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         key = norm(word)
-        base_rows = system_idx.get(key, [])
-        approved_rows = approved_idx.get(key, [])
-        pool_rows = eligible_pool.get(key, [])
+        alias_reason = orthographic_alias_review_reason(word, known_idx.get(key, []))
+        if alias_reason:
+            aliases = sorted({form for form, _ in known_idx.get(key, []) if form != word})
+            review_rows.append([
+                word, frequency, " / ".join(aliases), "ORTHOGRAPHY_ALIAS_REVIEW", alias_reason
+            ])
+            conflict_tokens += frequency
+            conflict_forms += 1
+            continue
 
-        if key in system_conflicts:
+        base_rows = [(word, system[word])] if word in system else []
+        approved_rows = [(word, approved[word])] if word in approved else []
+        pool_rows = eligible_pool.get(word, [])
+
+        if word in system_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "во встроенном словаре несколько вариантов"])
             conflict_tokens += frequency
             conflict_forms += 1
@@ -189,7 +242,7 @@ def build(args: argparse.Namespace) -> int:
             already_system_tokens += frequency
             continue
 
-        if key in approved_conflicts:
+        if word in approved_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "в накопительном словаре несколько вариантов"])
             conflict_tokens += frequency
             conflict_forms += 1
@@ -211,13 +264,13 @@ def build(args: argparse.Namespace) -> int:
             book_approved_entries.append(Entry(word, approved_marked, "accumulated_approved", f"book_frequency={frequency}"))
             continue
 
-        if key in pool_conflicts:
+        if word in pool_conflicts:
             review_rows.append([word, frequency, "", "CONFLICT", "пул кандидатов содержит несколько вариантов"])
             conflict_tokens += frequency
             conflict_forms += 1
             continue
 
-        rule = candidate_rules.get(key)
+        rule = candidate_rules.get(word)
         if rule:
             action, reason, source_url = rule
             review_rows.append([word, frequency, "", action, reason + (f" Source: {source_url}" if source_url else "")])
