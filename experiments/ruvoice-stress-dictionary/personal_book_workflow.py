@@ -351,21 +351,16 @@ def _build_reviewed_stress_overrides(
 ) -> tuple[str, int]:
     """Return the human-reviewed overlay for its exact reference EPUB only."""
     header = (
-        "# Проверенные вручную исправления только для книги «Искусство».
-"
-        "# Импортировать отдельным списком RuVoice; НЕ добавлять в глобальный Системный.txt
-"
-        "# или личный накопительный мастер: некоторые формы зависят от контекста книги.
-"
+        "# Проверенные вручную исправления только для книги «Искусство».\n"
+        "# Импортировать отдельным списком RuVoice; НЕ добавлять в глобальный Системный.txt\n"
+        "# или личный накопительный мастер: некоторые формы зависят от контекста книги.\n"
     )
     if book_sha256 != REFERENCE_BOOK_SHA256:
-        return header + "# Для этой книги проверенный книжный overlay не найден.
-", 0
+        return header + "# Для этой книги проверенный книжный overlay не найден.\n", 0
 
     path = Path(source_path) if source_path is not None else BOOK_REVIEWED_OVERRIDES_PATH
     if not path.is_file():
-        return header + "# Файл проверенных книжных исправлений отсутствует в поставке инструмента.
-", 0
+        return header + "# Файл проверенных книжных исправлений отсутствует в поставке инструмента.\n", 0
 
     book_text = extract_text(book)
     selected: dict[str, str] = {}
