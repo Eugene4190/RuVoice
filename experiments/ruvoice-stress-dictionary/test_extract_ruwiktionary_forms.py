@@ -90,6 +90,20 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         self.assertNotIn("romanized", result.forms)
         self.assertGreaterEqual(result.skipped_form_count, 1)
 
+    def test_canonical_headword_form_is_preserved(self):
+        # Wiktextract's "canonical" tag can represent the stressed headword
+        # form when it differs from the page title; it is not a non-lexical tag.
+        line = article(
+            "словарь",
+            "noun",
+            [{"form": "слова\\u0301рь", "tags": ["canonical"]}],
+        )
+        result = tool.extract_jsonl([line])
+        self.assertEqual(
+            result.forms["словарь"]["слов+арь"],
+            {"словарь:noun:canonical,lemma"},
+        )
+
     def test_homographic_stress_variants_are_not_collapsed(self):
         lines = [
             article("мука", "noun", [{"form": "му\u0301ка", "tags": ["food"]}]),
