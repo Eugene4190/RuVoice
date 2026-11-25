@@ -307,6 +307,10 @@ fun main(args: Array<String>) {
     require(args.size >= 1) { "Usage: <book.epub> [report.json]" }
     val epub = File(args[0]).absoluteFile
     require(epub.isFile && epub.length() > 0) { "EPUB не найден или пуст: " + epub }
+    // This standalone entry point shares the paired-report schema with the JUnit runner.
+    // Keep book identity in this scope too, so both launch paths compile independently.
+    val bookSha256 = pairedSha256(epub)
+    val isReferenceBook = bookSha256 == REFERENCE_BOOK_SHA256
     val reportFile = args.getOrNull(1)?.let { File(it).absoluteFile }
     val modelRoot = Files.createTempDirectory("ruvoice-real-book-ruaccent").toFile()
     val downloader = RuAccentHttpDownloader(connectTimeoutMillis = 30_000, readTimeoutMillis = 120_000)
