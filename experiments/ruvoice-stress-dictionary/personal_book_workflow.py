@@ -306,6 +306,7 @@ def process_book(
         snapshot_path = builder_output / "MyBooks_Cumulative.txt"
         shutil.copyfile(master, snapshot_path)
 
+        replacement_path = builder_output / "Book_Replacements.txt"
         replacements_dir = private_root / "replacements"
         _private_dir(replacements_dir)
         replacement_store = replacements_dir / f"{digest}.txt"
