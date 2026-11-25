@@ -91,6 +91,17 @@ jobs:
           set -euo pipefail
           gradle --no-daemon --stacktrace :app:assembleDesktopAuditRuntime
           test -s app/build/desktop-audit/classes/ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class
+      - name: Diagnose mockable Android JAR output
+        if: always()
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          echo "MOCKABLE_ANDROID_FILES_BEGIN"
+          find app/build -type f -iname '*mockable*.jar' -print 2>/dev/null || true
+          echo "DESKTOP_RUNTIME_JARS_BEGIN"
+          find app/build/desktop-audit/lib -maxdepth 1 -type f -name '*.jar' -printf '%f\\n' 2>/dev/null || true
+          echo "MOCKABLE_ANDROID_FILES_END"
+
       - name: Run focused Full and Lite JVM tests (no APK build)
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
