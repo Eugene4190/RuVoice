@@ -121,14 +121,14 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             article(
                 "замок",
                 "noun",
-                [{"form": "за\\u0301мок", "tags": tags}],
+                [{"form": "за\u0301мок", "tags": tags}],
                 tags=["masculine"],
                 senses=[{"glosses": ["укреплённое жилище"], "tags": ["masculine"]}],
             ),
             article(
                 "замок",
                 "noun",
-                [{"form": "за\\u0301мок", "tags": tags}],
+                [{"form": "за\u0301мок", "tags": tags}],
                 tags=["masculine"],
                 senses=[{"glosses": ["устройство для запирания"], "tags": ["masculine"]}],
             ),
@@ -136,7 +136,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "contexts.jsonl"
-            with output.open("w", encoding="utf-8", newline="\\n") as stream:
+            with output.open("w", encoding="utf-8", newline="\n") as stream:
                 result = tool.extract_jsonl(lines, stream)
             records = [
                 json.loads(line)
