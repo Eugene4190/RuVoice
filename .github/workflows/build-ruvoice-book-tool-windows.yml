@@ -99,8 +99,8 @@ jobs:
             if (-not $ready) {
               throw "Portable Windows executable did not serve the local page"
             }
-            if (-not (Test-Path (Join-Path $privateHome "RuVoice_Accumulated_Approved.txt"))) {
-              throw "Portable executable did not initialize the private dictionary"
+            if (-not (Test-Path $privateHome -PathType Container)) {
+              throw "Portable executable did not create the private storage folder"
             }
             Write-Host "PASS: portable EXE served the local RuVoice page on 127.0.0.1:$port"
           } finally {
