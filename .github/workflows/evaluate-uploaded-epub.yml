@@ -178,6 +178,7 @@ jobs:
           echo "RUVOICE_SILERO_ASSETS=$PROJECT/app/src/full/assets/silero" >> "$GITHUB_ENV"
           echo "RUVOICE_TORCH_BRIDGE=$GITHUB_WORKSPACE/private-files/paired_eval/torch_lite_bridge.py" >> "$GITHUB_ENV"
           echo "RUVOICE_BOOK_OVERRIDES=$GITHUB_WORKSPACE/private-files/paired_eval/book_reviewed_overrides.txt" >> "$GITHUB_ENV"
+          echo "RUVOICE_BOOK_REPLACEMENTS=$GITHUB_WORKSPACE/private-files/paired_eval/book_reviewed_replacements.txt" >> "$GITHUB_ENV"
 
       - name: Run the real baseline and merged pipelines over every EPUB fragment
         working-directory: project/ruvoice-1.1.3-stage4.9
