@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Loopback-only private EPUB upload page; no cloud upload or book text logging."""
 from __future__ import annotations
-import argparse, html, os, secrets, tempfile
+import argparse, html, os, secrets, sys, tempfile, zipfile
 from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -171,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
             if result["already_processed"]:
                 note += " (повторная книга, дубликаты не добавлены)"
             self.send_page(200, note, download_href=f"/download/{key}")
-        except (ValueError, OSError, RuntimeError, KeyError) as exc:
+        except (ValueError, OSError, RuntimeError, KeyError, zipfile.BadZipFile, EOFError) as exc:
             self.send_page(400, str(exc))
         finally:
             if upload is not None:
@@ -207,4 +207,4 @@ def main():
         server.server_close()
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
