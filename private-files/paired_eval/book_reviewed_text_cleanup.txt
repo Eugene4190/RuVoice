@@ -1,0 +1,3 @@
+# Book-only text corrections that fix fused tokens. Keep separate from stress/phrase overlay.
+дальнейшиекаскады = дальнейшие каскады
+совершитьлогический = совершить логический
