@@ -93,7 +93,9 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             replacements = archive.read("B_Replacements.txt").decode("utf-8")
             history = json.loads(archive.read("MyBooks_History.json"))
             report = json.loads(archive.read("Book_Report.json"))
-            self.assertIn("повторная обработка", delta.lower())
+            self.assertIn("повторная сборка", delta.lower())
+            self.assertIn("творог твор+ог", delta)
+            self.assertIn("молоко мол+око", delta)
             self.assertIn("молоко мол+око", snapshot)
             self.assertIn("творог твор+ог", snapshot)
             self.assertIn("шелка и = шелк+а и", replacements)
@@ -113,6 +115,8 @@ class PersonalBookWorkflowTests(unittest.TestCase):
                 {"молоко", "творог"},
             )
             self.assertTrue(report["workflow"]["append_only"])
+            self.assertEqual(report["workflow"]["newly_approved_count"], 0)
+            self.assertEqual(report["workflow"]["book_delta_entry_count"], 1)
             self.assertFalse(report["workflow"]["book_text_included_in_package"])
             self.assertNotIn("A.epub", names)
             self.assertNotIn("B.epub", names)
@@ -120,6 +124,7 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             guide = archive.read("IMPORT.txt").decode("utf-8")
             self.assertIn("B_New_Stress_Delta.txt", guide)
             self.assertIn("B_Replacements.txt", guide)
+            self.assertIn("не импортируйте его второй раз", guide.lower())
 
     def test_reviewed_phrase_rule_is_selected_only_when_exact_phrase_occurs(self):
         contains_phrase = self.root / "contains-phrase.epub"
