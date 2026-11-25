@@ -1,6 +1,6 @@
 # Book-specific reviewed stress overlay
 
-This file contains seventeen book-specific corrections selected after a full production
+This file contains twenty-one book-specific corrections selected after a full production
 RuVoice pass over `8.Iskusstvo..epub`.
 
 | Book form | Previous RuVoice output | Reviewed output | Reason |
@@ -31,7 +31,7 @@ A separate phrase-level correction is applied through the production homograph p
 |---|---|---|---|
 | Сети значений | Сети́ значений | Се́ти значений | Nominative plural in this phrase; the prepositional form сети́ remains valid elsewhere |
 
-The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the seventeen-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
+The whole-book runner keeps an untouched Silero phrase table for the baseline pass, then compares it with the reviewed phrase table and the twenty-one-word overlay. The comparison therefore isolates the effect of these RuVoice-specific changes from the independent RUAccent pass.
 
 
 
@@ -70,3 +70,13 @@ Additional book-only text normalizations are kept in the phrase replacement list
 - совершитьлогический → совершить логический
 
 These decisions are scoped to the exact reference EPUB and are not added to the global system dictionary or personal cumulative master.
+
+
+## Four further context-checked corrections from the full-book audit
+
+| Book form | Previous output | Reviewed output | Reason |
+|---|---|---|---|
+| биополя | биопо́ля | биополя́ | Nominative plural in the exact sentence; the word's paradigm has `биополя́` for nominative plural and genitive singular `биопо́ля`. |
+| призывного | призывно́го | призы́вного | The phrase “призывного очарования” means attractive/calling, from `призы́вный`, not military `призывно́й`. |
+| челюстей | челюсте́й | че́люстей | Genitive plural of `че́люсть`; the accepted literary stress remains on the first syllable. |
+| рефлекторное | рефлекто́рное | рефле́кторное | In “рефлекторное отторжение” the intended meaning is reflex/involuntary, not a device made with a reflector. Gramota distinguishes `рефле́кторный` (from рефлекс) from `рефлекто́рный` (from рефлектор). |
