@@ -89,6 +89,19 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         )
         self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
 
+    def test_non_russian_tokens_remain_in_full_occurrence_ledger(self) -> None:
+        row = quality.non_russian_occurrence_row(
+            {
+                "segment_index": 4, "word_index": 2, "chapter": "Chapter",
+                "paragraph": 9, "ruvoice_stress_vowel_index": None,
+            },
+            "coffee", "coffee", "coffee", "coffee", "Он заказал coffee после ужина."
+        )
+        self.assertEqual(row[0], "NON_RUSSIAN_OR_SPECIAL")
+        self.assertEqual(row[2], "coffee")
+        self.assertEqual(row[14:18], [4, 2, "Chapter", 9])
+        self.assertEqual(len(row), 21)
+
     def test_yo_counts_as_stressed_without_combining_acute(self) -> None:
         self.assertEqual(quality.acute_position("далёко"), 1)
         self.assertEqual(quality.acute_position("поздне́е"), 1)
