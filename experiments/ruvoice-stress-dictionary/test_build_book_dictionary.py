@@ -99,7 +99,7 @@ class BookDictionaryTests(unittest.TestCase):
             review = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
             self.assertNotIn("берег б+ерег", candidates)
             self.assertIn("CONFLICT", review)
-            self.assertIn("отсутствует поле ударения", review)
+            self.assertIn("некорректная запись", review)
 
     def test_system_dictionary_conflict_is_not_auto_overridden(self):
         with tempfile.TemporaryDirectory() as tmp:

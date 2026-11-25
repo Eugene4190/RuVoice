@@ -113,7 +113,7 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         if requested in system_conflicts:
-            errors.append(f"{requested}: конфликт уже есть во встроенном системном словаре")
+            errors.append(f"{requested}: во встроенном системном словаре есть конфликтующая или некорректная запись")
             continue
         existing_system = system.get(requested)
         if existing_system is not None:
@@ -124,7 +124,7 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         if requested in approved_conflicts:
-            errors.append(f"{requested}: конфликт уже есть в накопительном словаре")
+            errors.append(f"{requested}: в накопительном словаре есть конфликтующая или некорректная запись")
             continue
         existing_approved = approved.get(requested)
         if existing_approved is not None:

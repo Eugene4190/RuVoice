@@ -267,7 +267,7 @@ def build(args: argparse.Namespace) -> int:
         pool_rows = eligible_pool.get(word, [])
 
         if word in system_conflicts:
-            review_rows.append([word, frequency, "", "CONFLICT", "во встроенном словаре несколько вариантов"])
+            review_rows.append([word, frequency, "", "CONFLICT", "во встроенном словаре есть конфликтующая или некорректная запись"])
             conflict_tokens += frequency
             conflict_forms += 1
             continue
@@ -283,7 +283,7 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         if word in approved_conflicts:
-            review_rows.append([word, frequency, "", "CONFLICT", "в накопительном словаре несколько вариантов"])
+            review_rows.append([word, frequency, "", "CONFLICT", "в накопительном словаре есть конфликтующая или некорректная запись"])
             conflict_tokens += frequency
             conflict_forms += 1
             continue
@@ -305,7 +305,7 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         if word in pool_conflicts:
-            review_rows.append([word, frequency, "", "CONFLICT", "пул кандидатов содержит несколько вариантов"])
+            review_rows.append([word, frequency, "", "CONFLICT", "пул кандидатов содержит конфликтующую или некорректную запись"])
             conflict_tokens += frequency
             conflict_forms += 1
             continue
