@@ -95,7 +95,7 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             report = json.loads(archive.read("Book_Report.json"))
             self.assertIn("повторная сборка", delta.lower())
             self.assertIn("творог твор+ог", delta)
-            self.assertIn("молоко мол+око", delta)
+            self.assertNotIn("молоко мол+око", delta)
             self.assertIn("молоко мол+око", snapshot)
             self.assertIn("творог твор+ог", snapshot)
             self.assertIn("шелка и = шелк+а и", replacements)
