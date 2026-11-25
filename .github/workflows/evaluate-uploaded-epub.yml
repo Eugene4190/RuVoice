@@ -186,11 +186,8 @@ jobs:
           BASELINE_JSON="$RUNNER_TEMP/ruvoice_silero_ru_baseline.json"
           cp app/src/main/assets/silero/silero_ru.json "$BASELINE_JSON"
           echo "RUVOICE_BASELINE_SILERO_JSON=$BASELINE_JSON" >> "$GITHUB_ENV"
-          # Apply only the single book-reviewed phrase hint. Do not apply the
-          # experimental phrases_extra.txt collection to the production book run.
-          python "$GITHUB_WORKSPACE/private-files/paired_eval/apply_book_phrase_override.py" \
-            app/src/main/assets/silero/silero_ru.json
-          # The original system stress dictionary is immutable in this audit.\n          # Book corrections are loaded only through the separate reviewed user-list overlay.
+          # Keep the official Silero model data and both system dictionaries untouched.
+          # Every book-only change is supplied separately through RuVoice's native user lists.
 
       - name: Build the production RUAccent server for paired JVM inference
         shell: bash
@@ -259,8 +256,6 @@ jobs:
           name: ruvoice-full-book-quality-assessment
           path: |
             private-files/ruvoice-full-book-quality/WholeBook_RuVoice_Quality_Summary.json
-            private-files/ruvoice-full-book-quality/WholeBook_RuVoice_UniqueWords.tsv
-            private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv
           if-no-files-found: warn
           retention-days: 14
 
@@ -318,11 +313,8 @@ jobs:
           name: ruvoice-third-model-whole-book-audit
           path: |
             private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json
-            private-files/ruvoice-third-model-audit/Book_Third_Model_AllOccurrences.tsv
-            private-files/ruvoice-third-model-audit/Book_Third_Model_Disagreements.tsv
             private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt
             private-files/ruvoice-third-model-audit/Book_Three_Model_OOV_Review.txt
-            private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Evidence.tsv
             private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Summary.json
           if-no-files-found: warn
           retention-days: 14
@@ -335,7 +327,9 @@ jobs:
           set -euo pipefail
           test -n "${RUVOICE_AUTO_BOOK_OVERRIDES:-}"
           test -f "$RUVOICE_AUTO_BOOK_OVERRIDES"
-          gradle --no-daemon --stacktrace \
+          # This is a second full-book inference with different user lists. Force execution;
+          # Gradle must not reuse the baseline test result as up-to-date.
+          gradle --no-daemon --stacktrace --rerun-tasks \
             :app:testFullDebugUnitTest \
             --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
 
@@ -379,8 +373,6 @@ jobs:
             private-files/ruvoice-final-book-quality/Book_Importable_Replacements.txt
             private-files/ruvoice-final-book-quality/Book_Unresolved_OOV_Review.txt
             private-files/ruvoice-final-book-quality/WholeBook_RuVoice_Quality_Summary.json
-            private-files/ruvoice-final-book-quality/WholeBook_RuVoice_AllOccurrences.tsv
-            private-files/ruvoice-final-book-quality/WholeBook_RuVoice_UniqueWords.tsv
           if-no-files-found: error
           retention-days: 30
 
@@ -390,11 +382,8 @@ jobs:
         with:
           name: ruvoice-whole-book-stress-review
           path: |
-            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv
-            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Change_Pairs.tsv
             private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Summary.json
             private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides.txt
-            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Evidence.tsv
             private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Summary.json
           if-no-files-found: warn
           retention-days: 14
@@ -429,11 +418,5 @@ jobs:
                       print("PAIRED_TEST_FAILURE=" + name + " :: " + str(message).replace("\\n", " ")[:700])
           PY
 
-      - name: Upload the private paired comparison report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ruvoice-paired-whole-book-comparison
-          path: private-files/ruvoice-paired-book-analysis.json
-          if-no-files-found: warn
-          retention-days: 14
+      # The full paired JSON and occurrence ledgers stay in the ephemeral runner workspace.
+      # Only the importable lists and aggregate coverage report are uploaded.
