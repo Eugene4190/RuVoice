@@ -94,6 +94,21 @@ def orthographic_alias_review_reason(
     return None
 
 
+def orthographic_alias_conflict_reason(word: str, conflict_forms: set[str]) -> str | None:
+    """Hold a form when an е/ё alias was removed from a source due to conflict."""
+    aliases = sorted(
+        form for form in conflict_forms
+        if form != word and norm(form) == norm(word)
+    )
+    if not aliases:
+        return None
+    return (
+        "у е/ё-алиаса есть конфликтующие записи ("
+        + ", ".join(aliases)
+        + "); автоматический перенос запрещён"
+    )
+
+
 def load_provenance(path: Path) -> dict[str, tuple[str, str]]:
     """Keep exact spelling, marked form and source together for every candidate."""
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
@@ -225,9 +240,21 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         key = norm(word)
-        alias_reason = orthographic_alias_review_reason(word, known_idx.get(key, []))
+        conflicted_alias_reason = orthographic_alias_conflict_reason(
+            word, system_conflicts | approved_conflicts | pool_conflicts
+        )
+        alias_reason = (
+            conflicted_alias_reason
+            or orthographic_alias_review_reason(word, known_idx.get(key, []))
+        )
         if alias_reason:
-            aliases = sorted({form for form, _ in known_idx.get(key, []) if form != word})
+            aliases = sorted(
+                {form for form, _ in known_idx.get(key, []) if form != word}
+                | {
+                    form for form in system_conflicts | approved_conflicts | pool_conflicts
+                    if form != word and norm(form) == key
+                }
+            )
             review_rows.append([
                 word, frequency, " / ".join(aliases), "ORTHOGRAPHY_ALIAS_REVIEW", alias_reason
             ])

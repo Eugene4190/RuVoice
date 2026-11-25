@@ -15,7 +15,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from analyze_book import parse_dictionary
-from build_book_dictionary import DEFAULT_APPROVED, DEFAULT_SYSTEM, load_dictionary, norm
+from build_book_dictionary import (
+    DEFAULT_APPROVED,
+    DEFAULT_SYSTEM,
+    load_dictionary,
+    norm,
+    orthographic_alias_conflict_reason,
+    orthographic_alias_review_reason,
+)
 from build_dictionary import validate_entry
 
 
@@ -27,8 +34,8 @@ def read_selected_words(path: Path) -> list[str]:
             if not re.fullmatch(r"[а-яё]+", value):
                 raise ValueError(f"Некорректное слово в списке утверждения: {value!r}")
             rows.append(value)
-    if len({norm(word) for word in rows}) != len(rows):
-        raise ValueError("В списке утверждения есть повторяющиеся слова с учётом е/ё")
+    if len(set(rows)) != len(rows):
+        raise ValueError("В списке утверждения есть повторяющиеся точные словоформы")
     return rows
 
 
@@ -42,7 +49,7 @@ def build(args: argparse.Namespace) -> int:
     approved, approved_conflicts = load_dictionary(args.approved_dictionary)
 
     bad_candidate_keys = {
-        norm(match.group(1))
+        match.group(1)
         for row in candidate_conflicts
         if (match := re.search(r": ([а-яё]+):", row))
     }
@@ -63,43 +70,71 @@ def build(args: argparse.Namespace) -> int:
 
     for requested in selected:
         key = norm(requested)
-        if key in bad_candidate_keys:
+        if requested in bad_candidate_keys:
             errors.append(f"{requested}: в файле кандидатов конфликтующие варианты")
             continue
-        matches = candidate_idx.get(key, [])
-        if len(matches) != 1:
-            errors.append(f"{requested}: кандидат не найден однозначно в файле конкретной книги")
+
+        # Normalized е/ё matches are collision signals, never proof that the
+        # requested exact spelling exists in a dictionary source.
+        alias_issues: list[str] = []
+        for source_name, index, conflicts in (
+            ("файле кандидатов", candidate_idx, bad_candidate_keys),
+            ("системном словаре", system_idx, system_conflicts),
+            ("накопительном словаре", approved_idx, approved_conflicts),
+        ):
+            rows = index.get(key, [])
+            reason = orthographic_alias_review_reason(requested, rows)
+            if reason:
+                alias_issues.append(f"{source_name}: {reason}")
+            conflict_reason = orthographic_alias_conflict_reason(requested, conflicts)
+            if conflict_reason:
+                alias_issues.append(f"{source_name}: {conflict_reason}")
+        if alias_issues:
+            errors.append(
+                f"{requested}: е/ё-совпадение требует отдельной проверки: "
+                + "; ".join(alias_issues)
+            )
             continue
-        candidate_word, marked = matches[0]
+
+        exact_matches = [
+            (word, marked) for word, marked in candidate_idx.get(key, [])
+            if word == requested
+        ]
+        if len(exact_matches) != 1:
+            errors.append(
+                f"{requested}: точная словоформа не найдена однозначно "
+                "в файле кандидатов; е/ё-алиас не считается совпадением"
+            )
+            continue
+        candidate_word, marked = exact_matches[0]
         reason = validate_entry(candidate_word, marked)
         if reason:
             errors.append(f"{requested}: некорректная запись: {reason}")
             continue
 
-        if key in system_conflicts:
+        if requested in system_conflicts:
             errors.append(f"{requested}: конфликт уже есть во встроенном системном словаре")
             continue
-        base_rows = system_idx.get(key, [])
-        if base_rows:
-            if any(norm(existing_marked) != norm(marked) for _, existing_marked in base_rows):
+        existing_system = system.get(requested)
+        if existing_system is not None:
+            if norm(existing_system) != norm(marked):
                 errors.append(f"{requested}: ударение расходится со встроенным словарём")
             else:
                 already_present.append(requested)
             continue
 
-        if key in approved_conflicts:
+        if requested in approved_conflicts:
             errors.append(f"{requested}: конфликт уже есть в накопительном словаре")
             continue
-        known_rows = approved_idx.get(key, [])
-        if known_rows:
-            if any(norm(existing_marked) != norm(marked) for _, existing_marked in known_rows):
+        existing_approved = approved.get(requested)
+        if existing_approved is not None:
+            if norm(existing_approved) != norm(marked):
                 errors.append(f"{requested}: ударение расходится с накопительным словарём")
             else:
                 already_present.append(requested)
             continue
 
         additions.append((candidate_word, marked))
-
     if errors:
         raise ValueError("Ничего не добавлено. Исправьте список утверждения:\n- " + "\n- ".join(errors))
 
