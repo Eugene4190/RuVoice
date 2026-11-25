@@ -422,3 +422,18 @@ Branch HEAD при проверке: f49541cd9d1c9bdb60fd9dd78622881d74bd7725. P
 **Kotlin CI:** последний подтверждённый успешный focused Full/Lite прогон — [run #45631171926](https://github.com/Eugene4190/RuVoice/actions/runs/45631171926), HEAD `35baebf`; на HEAD `ce95060` новый Kotlin workflow [run #45631810907](https://github.com/Eugene4190/RuVoice/actions/runs/45631810907) ещё выполняется (Gradle focused Full/Lite JVM tests, без APK build).
 
 **Границы:** `main` остаётся на `e0f89575d872461282f719f3a04709d5436f4b45`; PR #1 открыт Draft, не слит. Production `Системный.txt`, global/approved dictionaries, APK assets и runtime code не изменялись.
+
+
+### 2026-11-25 — Улучшен отдельный extractor ru.wiktionary: canonical, контекст омографов и потоковый gzip
+
+**Что исправлено в источнике:** удалён ошибочный фильтр тега `canonical`. В Wiktextract он может обозначать каноническую форму из строки заголовка, включая форму с явным ударением, которая отличается от заголовка страницы; такую форму нельзя отбрасывать как служебную. Ссылка на документацию: https://github.com/tatuylonen/wiktextract/blob/master/docs/new_extractor_guide.md (раздел о `canonical`). Добавлен регрессионный тест `test_canonical_headword_form_is_preserved`.
+
+**Контекст для омографов:** extractor теперь формирует второй поток JSONL с полями исходной строки, точной поверхности, ударной формы, леммы, части речи, грамматических и raw-тегов формы/статьи, категорий, topics, glosses/raw_glosses, sense tags/raw_tags, примеров, этимологии, `sounds`, IPA и source для IPA. Это не схлопывает две одинаковые словоформы с одинаковой частью речи и местом ударения, если у них разные значения/этимологии/произносительные сведения. Контекст сериализуется сразу при чтении строки, без хранения всего контекстного корпуса в RAM.
+
+**Объём промежуточных файлов:** контекстный поток по умолчанию теперь пишется в gzip ` .work/ruwiktionary_forms_context.jsonl.gz`; обычный TSV остаётся компактным и индексируемым. Manifest включает SHA-256, размер gzip-контекста, количество context records, дату дампа и provenance. README описывает оба выходных файла и лицензирование/атрибуцию исходных данных.
+
+**Проверка:** словарный CI [#45635680007](https://github.com/Eugene4190/RuVoice/actions/runs/45635680007) на HEAD `7d01280df6591ee41d9724c7b3dfee971409fe64` завершился **success**: 48 unit tests (включая canonical, разные значения `замок`, raw-tags и compressed context writer), 26 private paired-evaluation тестов, gold seed validation, EPUB supplement, snapshot/override проверки и оба book scans прошли. Kotlin Full/Lite на этом HEAD [#45635679669](https://github.com/Eugene4190/RuVoice/actions/runs/45635679669) на момент этой записи ещё выполняется; тот же workflow успешно завершился на более раннем HEAD `46ee6bb` — [#45635045635](https://github.com/Eugene4190/RuVoice/actions/runs/45635045635).
+
+**Ограничение полного корпуса:** официальный raw dump `ruwiktionary` от 2026-11-01 (272.5 MB gzip) пока не скачан в этой среде из-за недоступного DNS для `kaikki.org`; полный корпус не прогонялся. Два unit/regression test потока и формат manifest проверены на контролируемых фикстурах, что не подменяет измерение на полном дампе. После получения raw dump нужно выполнить extractor и проверить статистику пропусков/вариантов/контекстных дублей перед любым импортом.
+
+**Неизменённые границы:** `main` остаётся `e0f89575d872461282f719f3a04709d5436f4b45`; PR #1 открыт Draft и не слит. Все 16 форм `четырёхбедрум…` остаются `WITHHELD_PENDING_HUMAN_PRONUNCIATION_REVIEW`; P001–P010 по-прежнему ждут независимого второго лингвиста. `Системный.txt`, global/approved dictionaries, APK assets и runtime не изменялись.
