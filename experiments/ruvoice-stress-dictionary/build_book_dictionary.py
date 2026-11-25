@@ -31,6 +31,7 @@ DEFAULT_AUDIT = HERE / "reports/RuVoice_AutoStress_accepted.tsv"
 DEFAULT_RULES = HERE / "data/curated/book_candidate_review_rules.tsv"
 ALLOWED_SOURCES = {"aot_wiktionary_silero_consensus", "curated_manual_reviewed"}
 WORD_ONLY_RE = re.compile(r"[а-яё]+")
+VOWELS = set("аеёиоуыэюя")
 
 
 def sha256(path: Path) -> str:
