@@ -705,13 +705,12 @@ class UploadedEpubPairedEvaluationTest {
             StressBin.write(baselineJson, yoAsset.readLines(Charsets.UTF_8).asSequence())
         )))
         // The current JSON has exactly one book-reviewed phrase hint applied by the isolated helper.
-        val data = SileroData(StressBin.File(ByteBuffer.wrap(
-            StressBin.write(json, yoAsset.readLines(Charsets.UTF_8).asSequence())
-        )))
-        val reviewedPhraseEntries = data.phrases["сети"].orEmpty()
-        check(reviewedPhraseEntries.any { it.first == "сети значений" && it.second == "с+ети" }) {
-            "Reviewed phrase override 'сети значений = с+ети' is missing from production Stress data"
-        }
+        val data = baselineData
+        // The Silero phrase table remains byte-for-byte original. Book-specific phrase stress is
+        // expressed through the native user replacement list and verified below.
+        check(baselineData.phrases["сети"].orEmpty().none {
+            it.first == "сети значений" && it.second == "с+ети"
+        }) { "A book-only phrase rule leaked into the baseline Silero phrase table" }
         val morph = Morph.open(File(projectDir, "app/src/main/assets/morph.bin"))
         val yo = YoDict(baselineData.yo)
         val hardE = HardE(File(projectDir, "app/src/main/assets/hard_e.txt").readLines(Charsets.UTF_8))
@@ -1445,13 +1444,10 @@ class UploadedEpubPairedEvaluationTest {
                         put(JSONObject().put("word", word).put("variant", variant))
                     }
                 })
-                .put("book_reviewed_phrase_overrides", JSONArray()
-                    .put(JSONObject().put("word", "сети")
-                        .put("phrase", "сети значений").put("variant", "с+ети"))
-                    .put(JSONObject().put("word", "шелка")
-                        .put("phrase", "шелка и").put("variant", "шелк+а"))
-                )
-                .put("book_replacement_overlay_entries", bookReplacementLines.size)
+                .put("book_reviewed_phrase_overrides", JSONArray())
+                .put("book_replacement_overlay_entries", bookReplacementLines.count {
+                    it.isNotBlank() && !it.trimStart().startsWith("#")
+                })
                 .put("baseline_tokens", baselineTokens)
                 .put("reviewed_tokens", reviewedTokens)
                 .put("combined_tokens", combinedTokens)
