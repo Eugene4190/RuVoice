@@ -55,3 +55,18 @@ The form `маше` is intentionally not a word-level overlay entry: the product
 Reference lexemes: [гомо сапиенс](https://ru.wiktionary.org/wiki/гомо_сапиенс), [вымогательство](https://ru.wiktionary.org/wiki/вымогательство), [вымогать](https://ru.wiktionary.org/wiki/вымогать), [личностный](https://ru.wiktionary.org/wiki/личностный), [приспособление](https://ru.wiktionary.org/wiki/приспособление), [телесный](https://ru.wiktionary.org/wiki/телесный), [образование](https://ru.wiktionary.org/wiki/образование), [существование](https://ru.wiktionary.org/wiki/существование), [среда (Грамота)](https://gramota.ru/meta/sreda), and [German Arbeit](https://www.duden.de/rechtschreibung/Arbeit).
 
 The remaining author-specific neologisms and disputed proper-name pronunciations are not auto-corrected; the RUAccent difference alone is not evidence.
+
+
+## Three further context-checked corrections from the full-book review
+
+| Book form | Previous output | Reviewed output | Reason |
+|---|---|---|---|
+| биополя | биопо́ля | биополя́ | In the sentence “поля («биополя», как его не слишком правильно называют…)” this is nominative plural, not genitive singular. The plural form selects final stress; Wiktionary records both morphological stress positions, so context decides. |
+| призывного | призывно́го | призы́вного | “Призывного очарования” means beckoning/attractive, from adjective призы́вный; it is not the military adjective призывно́й. |
+| челюстей | челюсте́й | че́люстей | Genitive plural of че́люсть; standard stress remains on the first syllable in this form. |
+
+Additional book-only text normalizations are kept in the phrase replacement list rather than the stress dictionary:
+- дальнейшиекаскады → дальнейшие каскады
+- совершитьлогический → совершить логический
+
+These decisions are scoped to the exact reference EPUB and are not added to the global system dictionary or personal cumulative master.
