@@ -161,7 +161,15 @@ def parse_dictionary(path: Path) -> tuple[dict[str, str], list[str]]:
             continue
 
         if word in entries and entries[word] != marked:
-            conflicts.append(f"строка {number}: {word}: {entries[word]} / {marked}")
+            previous = entries[word]
+            kind = (
+                "SAME_STRESS_POSITION_PHONETIC_VARIANT"
+                if previous.index("+") == marked.index("+")
+                else "DIFFERENT_STRESS_POSITION"
+            )
+            conflicts.append(
+                f"строка {number}: {word}: [{kind}] {previous} / {marked}"
+            )
             entries.pop(word, None)
             continue
         if word not in entries and not any(f": {word}:" in row for row in conflicts):

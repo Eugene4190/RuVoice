@@ -42,6 +42,7 @@ class BookAnalyzerTests(unittest.TestCase):
             dictionary, conflicts = tool.parse_dictionary(path)
             self.assertNotIn("замок", dictionary)
             self.assertEqual(len(conflicts), 1)
+            self.assertIn("DIFFERENT_STRESS_POSITION", conflicts[0])
             self.assertIn("замок", conflicts[0])
 
     def test_missing_stress_field_is_reported_as_a_conflict(self):
@@ -60,6 +61,20 @@ class BookAnalyzerTests(unittest.TestCase):
             dictionary, conflicts = tool.parse_dictionary(path)
             self.assertNotIn("замок", dictionary)
             self.assertEqual(len(conflicts), 1)
+
+    def test_same_stress_position_phonetic_variant_is_classified_separately(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stress.txt"
+            path.write_text(
+                "модель м+одель\n"
+                "модель м+одэль\n",
+                encoding="utf-8",
+            )
+            dictionary, conflicts = tool.parse_dictionary(path)
+            self.assertNotIn("модель", dictionary)
+            self.assertEqual(len(conflicts), 1)
+            self.assertIn("SAME_STRESS_POSITION_PHONETIC_VARIANT", conflicts[0])
+            self.assertNotIn("DIFFERENT_STRESS_POSITION", conflicts[0])
 
     def test_extract_epub_and_ignore_navigation(self):
         with tempfile.TemporaryDirectory() as tmp:
