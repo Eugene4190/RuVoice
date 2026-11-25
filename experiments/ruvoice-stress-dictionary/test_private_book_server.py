@@ -79,13 +79,13 @@ class PrivateUploadFormTests(unittest.TestCase):
                 token = re.search(r'name="token" value="([^"]+)"', html_page).group(1)
                 boundary = "ruvoice-invalid-epub"
                 body = (
-                    f"--{boundary}\\r\\n"
-                    'Content-Disposition: form-data; name="token"\\r\\n\\r\\n'
-                    f"{token}\\r\\n"
-                    f"--{boundary}\\r\\n"
-                    'Content-Disposition: form-data; name="book"; filename="broken.epub"\\r\\n'
-                    "Content-Type: application/epub+zip\\r\\n\\r\\n"
-                ).encode() + b"not-a-valid-zip" + f"\\r\\n--{boundary}--\\r\\n".encode()
+                    f"--{boundary}\r\n"
+                    'Content-Disposition: form-data; name="token"\r\n\r\n'
+                    f"{token}\r\n"
+                    f"--{boundary}\r\n"
+                    'Content-Disposition: form-data; name="book"; filename="broken.epub"\r\n'
+                    "Content-Type: application/epub+zip\r\n\r\n"
+                ).encode() + b"not-a-valid-zip" + f"\r\n--{boundary}--\r\n".encode()
                 with patch(
                     "private_book_server.process_book",
                     side_effect=zipfile.BadZipFile("Invalid EPUB archive"),
