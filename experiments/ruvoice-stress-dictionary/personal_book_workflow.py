@@ -9,6 +9,7 @@ filters are appended. Every book gets a ZIP with its new delta and full snapshot
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -55,6 +56,10 @@ def _atomic_text(path: Path, value: str) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
     except Exception:
         try:
             os.unlink(temp_name)
@@ -63,17 +68,25 @@ def _atomic_text(path: Path, value: str) -> None:
         raise
 
 
+def _private_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+
+
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     _atomic_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
 def _ensure_private_store(root: Path) -> tuple[Path, Path, Path]:
-    root.mkdir(parents=True, exist_ok=True)
+    _private_dir(root)
     state_dir = root / "state"
     work_dir = root / "work"
     package_dir = root / "packages"
     for folder in (state_dir, work_dir, package_dir):
-        folder.mkdir(parents=True, exist_ok=True)
+        _private_dir(folder)
     master = root / MASTER_NAME
     if not master.exists():
         _atomic_text(
@@ -191,9 +204,11 @@ def process_book(
     candidate_audit: Path = build_book_dictionary.DEFAULT_AUDIT,
     candidate_rules: Path = build_book_dictionary.DEFAULT_RULES,
     replacements: Path | None = None,
+    book_name: str | None = None,
 ) -> dict[str, Any]:
     """Process one book privately and return a ZIP bundle plus a safe summary."""
     book = Path(book)
+    display_name = Path(book_name).name if book_name else book.name
     if not book.is_file():
         raise FileNotFoundError(f"Книга не найдена: {book}")
     if book.suffix.lower() not in {".epub", ".txt", ".html", ".htm"}:
@@ -206,18 +221,23 @@ def process_book(
 
     import hashlib
 
-    digest = hashlib.sha256(book.read_bytes()).hexdigest()
+    digest_builder = hashlib.sha256()
+    with book.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest_builder.update(chunk)
+    digest = digest_builder.hexdigest()
+    private_root = Path(private_home).expanduser().resolve()
     with _LOCK:
-        master, state_dir, package_dir = _ensure_private_store(Path(private_home))
-        _recover_pending(Path(private_home), master, Path(system_dictionary))
+        master, state_dir, package_dir = _ensure_private_store(private_root)
+        _recover_pending(private_root, master, Path(system_dictionary))
         history_path = state_dir / STATE_NAME
         history = _load_json(history_path, {"schema_version": 1, "books": {}})
         was_processed = digest in history.get("books", {})
 
-        work_dir = Path(private_home) / "work" / digest
-        work_dir.mkdir(parents=True, exist_ok=True)
+        work_dir = private_root / "work" / digest
+        _private_dir(work_dir)
         builder_output = work_dir / "builder"
-        builder_output.mkdir(parents=True, exist_ok=True)
+        _private_dir(builder_output)
         args = SimpleNamespace(
             book=book,
             system_dictionary=Path(system_dictionary),
@@ -233,8 +253,18 @@ def process_book(
         candidates, candidate_conflicts = parse_dictionary(candidate_file)
         if candidate_conflicts:
             raise ValueError("Сборщик создал неоднозначный файл кандидатов: " + "; ".join(candidate_conflicts))
+        candidate_meta: dict[str, dict[str, str]] = {}
+        review_path = builder_output / "Book_AutoStress_Candidate_Review.tsv"
+        with review_path.open("r", encoding="utf-8-sig", newline="") as stream:
+            for row in csv.DictReader(stream, delimiter="\t"):
+                candidate_meta[row["word"]] = row
         new_entries = [] if was_processed else [
-            {"word": word, "stress": marked}
+            {
+                "word": word,
+                "stress": marked,
+                "source": candidate_meta.get(word, {}).get("source", "source-provenance-not-recorded"),
+                "frequency_in_book": int(candidate_meta.get(word, {}).get("frequency_in_book") or 0),
+            }
             for word, marked in sorted(candidates.items())
         ]
         delta_text = "".join(f"{row['word']} {row['stress']}\n" for row in new_entries)
@@ -250,7 +280,7 @@ def process_book(
             _atomic_text(selected_file, "".join(row["word"] + "\n" for row in new_entries))
             pending = {
                 "book_sha256": digest,
-                "book_name": book.name,
+                "book_name": display_name,
                 "created_utc": _utc_now(),
                 "new_entries": new_entries,
                 "work_dir": str(work_dir),
@@ -295,6 +325,7 @@ def process_book(
         # Never put local home paths into a distributable report.
         for key in ("system_dictionary", "approved_dictionary"):
             report.pop(key, None)
+        report["book"] = display_name
         report["workflow"] = {
             "book_sha256": digest,
             "already_processed_before_this_run": was_processed,
@@ -308,11 +339,13 @@ def process_book(
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         guide_path = builder_output / "IMPORT.txt"
-        _write_import_guide(guide_path, book.name, has_replacements)
+        _write_import_guide(guide_path, display_name, has_replacements)
+        history_snapshot = builder_output / "MyBooks_History.json"
+        shutil.copyfile(history_path, history_snapshot)
 
-        archive_path = package_dir / f"{_safe_stem(book.stem)}-{digest[:10]}.zip"
+        archive_path = package_dir / f"{_safe_stem(Path(display_name).stem)}-{digest[:10]}.zip"
         include = [
-            delta_path, snapshot_path, replacement_path, guide_path, report_path,
+            delta_path, snapshot_path, history_snapshot, replacement_path, guide_path, report_path,
             builder_output / "Book_AutoStress_Review.tsv",
             builder_output / "Book_Unresolved_Words.tsv",
         ]
@@ -320,6 +353,12 @@ def process_book(
             for file_path in include:
                 if file_path.is_file():
                     archive.write(file_path, arcname=file_path.name)
+        try:
+            os.chmod(archive_path, 0o600)
+            os.chmod(snapshot_path, 0o600)
+            os.chmod(history_snapshot, 0o600)
+        except OSError:
+            pass
 
         return {
             "archive": str(archive_path),
@@ -328,7 +367,8 @@ def process_book(
             "new_entries": new_entries,
             "new_entry_count": len(new_entries),
             "cumulative_entry_count": len(parse_dictionary(master)[0]),
-            "private_home": str(private_home),
+            "private_home": str(private_root),
+            "book_name": display_name,
         }
 
 
