@@ -2,7 +2,7 @@
 
 **Назначение:** единая точка правды о ходе работ в PR #1. Здесь фиксируются не обещания, а проверяемые изменения, контрольные запуски, их результаты и следующие действия.
 
-**Последнее обновление:** 2026-11-25 — полный EPUB audit #45591455745 прошёл; идёт контекстная ручная вычитка  
+**Последнее обновление:** 2026-11-25 — полный контекстный EPUB audit #45594859810 прошёл; Android Full/Lite workflow восстановлен, повторная сборка запущена  
 **Рабочая ветка:** `stress-dictionary-pipeline`  
 **PR:** [#1 — Draft, не слит](https://github.com/Eugene4190/RuVoice/pull/1)  
 **Базовая ветка:** `main` (не изменяем в рамках этой работы).
@@ -13,7 +13,7 @@
 - Для каждого изменения писать: что изменено, зачем, чем проверено и что получилось.
 - Не называть совпадение двух моделей «точностью» без независимого эталона.
 - Не добавлять книжные формы в глобальный словарь: книжные исключения остаются в отдельных overlay-файлах.
-- Не менять `main`, `Системный.txt`, накопительный утверждённый словарь или APK без отдельного разрешения.
+- Не менять `main`, `Системный.txt`, накопительный утверждённый словарь или APK assets в рамках текущего аудита.
 - Не считать шаг успешным только потому, что компиляция прошла: полный EPUB-прогон и словарная оценка — отдельные контрольные этапы.
 
 ## Текущий статус
@@ -26,8 +26,8 @@
 | D. Расширение книжного overlay до 17 форм | **Подтверждено** | Все 17 записей прошли production-reviewed прогон в Action #45591455745 |
 | E. Сопоставление по точному production pipeline | **Готово** | Системные замены применяются до акцентуации в baseline/reviewed/RUAccent потоках |
 | F. Полная оценка 17 исправлений по AOT/Wiktionary/RUAccent | **Подтверждено** | Action #45591455745: 64 559 токенов, 14 199 словоформ, 0 строгих подозрительных расхождений в reviewed-потоке; это не gold accuracy |
-| G. Контекстная ручная вычитка остаточных кандидатов | **В работе** | 5 групп контекстных вариантов разобраны и закрепляются acceptance rules с позитивными/негативными тестами; остаточные омографы/неологизмы остаются только для review |
-| H. Проверка Android-сборки и APK на устройстве | **Не начата** | APK не объявлять готовым |
+| G. Контекстная ручная вычитка остаточных кандидатов | **Основной аудит завершён; residual review продолжается** | Пять групп контекстных вариантов подтверждены повторным audit #45594859810; 26 paired-evaluation unit tests прошли в #45596312709; неоднозначные остаточные омографы и неологизмы не добавлены автоматически |
+| H. Проверка Android-сборки и APK на устройстве | **Сборка повторяется** | #45595630192 выявил устаревшее ожидание маркера в `YoDictTest`; ожидание исправлено коммитом `7c7dd3d`; Full/Lite workflow восстановлен и повторно запущен. Физическая проверка на устройстве не начата |
 | I. Финальное решение о релизе | **Не начато** | PR остаётся Draft |
 
 ## Записи о выполнении
@@ -169,3 +169,37 @@
 **Ссылки на лексикографические основания:** [Грамота — маркировать](https://gramota.ru/poisk?mode=all&query=маркировать); [Русская грамматика (Шведова), §1641](https://rkiff.philol.msu.ru/wp-content/uploads/2020/05/Русская%20грамматика.%20Шведова.%20Том%201.pdf); [академическое исследование вариантности ударения](https://ruslang.ru/sites/default/files/doc/books/2021-norma_proiznoshenija.pdf); [Викисловарь — раздробленный](https://ru.wiktionary.org/wiki/раздробленный).
 
 **Следующий шаг:** выполнить static/unit workflow на новом коммите и повторить paired quality audit, чтобы acceptance statuses были пересчитаны в свежих artifacts. После этого — Android Full/Lite build tests; APK пока не объявлять релизным и не изменять APK asset.
+
+
+### 2026-11-25 — Повторный полный audit с контекстными правилами завершён
+
+**Запуск:** [Action #45594859810, attempt 2](https://github.com/Eugene4190/RuVoice/actions/runs/45594859810) завершился **success**, все 27 шагов прошли. Run использовал paired evaluator и context acceptance rules из `8fb2f0e`; после него менялись только workflow, test expectation и журнал.
+
+**Результаты:** 2 472 абзаца, 4 850 сегментов, 64 559 токенов, 64 551 русское словоупотребление, 14 199 уникальных словоформ. 17 word-level и 2 phrase-level book-only overrides применены; изменены 23 вхождения в 18 словоформах; alignment errors = 0. `reviewed_ruvoice_suspected_mismatches = 0`; это словарно-модельная классификация, а не измеренная gold accuracy.
+
+**Новые artifacts:**
+- [Paired whole-book comparison](https://github.com/Eugene4190/RuVoice/actions/runs/45594859810/artifacts/15012573861).
+- [Full-book quality assessment](https://github.com/Eugene4190/RuVoice/actions/runs/45594859810/artifacts/15013017207).
+- [Whole-book stress review](https://github.com/Eugene4190/RuVoice/actions/runs/45594859810/artifacts/15013751655).
+
+Пять контекстных групп (`блохами`, `маркирована`, `маркированных`, `раздроблен`, `создана`) получили `CONTEXTUAL_VARIANT_ACCEPTED` в полном quality audit. Остальные одиночные словарные сигналы, расхождения AOT/Wiktionary и авторские неологизмы остаются в residual review; автоматически в overlay не добавлялись.
+
+### 2026-11-25 — Отдельный быстрый CI для Python paired-evaluation
+
+[Action #45596312709](https://github.com/Eugene4190/RuVoice/actions/runs/45596312709) завершился **success**: 18 тестов основного dictionary pipeline и 26 тестов `private-files/paired_eval` прошли; все paired-evaluation Python tools скомпилированы. Этот workflow должен включать `private-files/paired_eval/**` в path filter и продолжать запускать paired unit tests независимо от Maven/ONNX JVM bridge.
+
+### 2026-11-25 — Исправлено устаревшее ожидание в Android-тесте
+
+[Action #45595630192](https://github.com/Eugene4190/RuVoice/actions/runs/45595630192) прошёл setup SDK/NDK, загрузку runtime assets и ARM64 tokenizer build, но упал на одном из 950 Full unit tests: `YoDictTest.accentorPassUsesDict` ожидал `об+ъём`, фактический результат — `объ+ём`. Это stale assertion: `Stress.accentorPass` восстанавливает `ё` из safe dictionary и ставит `+` непосредственно перед ударной гласной `ё`; тот же формат подтверждён примером `+ёжик`. Production code не менялся.
+
+**Исправление:** `YoDictTest.kt` теперь ожидает `объ+ём`; отдельная проверка `yo.restore("объем") == "объём"` сохранена. Коммит: [7c7dd3d](https://github.com/Eugene4190/RuVoice/commit/7c7dd3d40614104f20141116df6034c7d993d8ab).
+
+### 2026-11-25 — Восстановлены CI workflow после расхождения снимков дерева
+
+Проверка HEAD выявила, что один из предыдущих journal commits был собран от устаревшего дерева и вернул старые версии двух workflow. Это было исправлено через последовательные file commits поверх текущего branch HEAD:
+- `3c2de6d`: Android workflow снова запускается на push в `stress-dictionary-pipeline`, собирает Full и Lite, проверяет package/ARM64 assets, использует `contents: read`, загружает только Actions artifact; GitHub Release и push в `main` отсутствуют.
+- `740b48f`: быстрый unit workflow снова включает path filter `private-files/paired_eval/**`, `py_compile` и запуск 26 paired-evaluation тестов.
+
+**Текущий контроль:** коммит `7c7dd3d` исправляет тест; Android build должен автоматически запускаться благодаря восстановленному push trigger. Не объявлять APK готовыми до успешного завершения Full/Lite unit tests, assemble и проверки APK contents. Физическая установка/проверка на устройстве остаётся отдельным этапом.
+
+**Публичность:** репозиторий, EPUB в истории и Actions artifacts публичны намеренно. `main`, production `Системный.txt`, глобальные фразовые замены и cumulative approved dictionary не изменялись.
