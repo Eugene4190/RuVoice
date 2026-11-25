@@ -121,6 +121,30 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             self.assertIn("B_New_Stress_Delta.txt", guide)
             self.assertIn("B_Replacements.txt", guide)
 
+    def test_reviewed_phrase_rule_is_selected_only_when_exact_phrase_occurs(self):
+        contains_phrase = self.root / "contains-phrase.epub"
+        unrelated = self.root / "unrelated.epub"
+        self.make_epub(contains_phrase, "шелка и платья")
+        self.make_epub(unrelated, "платья и шарфы")
+
+        result = self.run_book(contains_phrase)
+        with zipfile.ZipFile(result["archive"]) as archive:
+            replacement_name = "contains-phrase_Replacements.txt"
+            replacements = archive.read(replacement_name).decode("utf-8")
+            report = json.loads(archive.read("Book_Report.json"))
+            review = archive.read("Book_Replacements_Review.tsv").decode("utf-8-sig")
+            self.assertIn("шелка и = шелк+а и", replacements)
+            self.assertEqual(report["workflow"]["auto_selected_reviewed_phrase_rules"], 1)
+            self.assertIn("curated_reviewed_phrase", review)
+            self.assertIn("INCLUDED", review)
+
+        unrelated_result = self.run_book(unrelated)
+        with zipfile.ZipFile(unrelated_result["archive"]) as archive:
+            replacements = archive.read("unrelated_Replacements.txt").decode("utf-8")
+            report = json.loads(archive.read("Book_Report.json"))
+            self.assertNotIn("шелка и = шелк+а и", replacements)
+            self.assertEqual(report["workflow"]["auto_selected_reviewed_phrase_rules"], 0)
+
     def test_different_book_with_same_word_does_not_duplicate_master_rows(self):
         book_a = self.root / "same-content-a.epub"
         book_b = self.root / "same-content-b.epub"
