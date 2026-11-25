@@ -80,6 +80,7 @@ jobs:
           TARGET="project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text"
           mkdir -p "$TARGET"
           cp "$GITHUB_WORKSPACE/private-files/paired_eval/UploadedEpubPairedEvaluation.kt" "$TARGET/UploadedEpubPairedEvaluation.kt"
+          cp "$GITHUB_WORKSPACE/private-files/paired_eval/RuAccentBridge.kt" "$TARGET/RuAccentBridge.kt"
           gradle --no-daemon --stacktrace \
             :app:compileFullDebugUnitTestKotlin
 
