@@ -307,8 +307,12 @@ jobs:
           set -euo pipefail
           AUTO="$GITHUB_WORKSPACE/private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt"
           test -f "$AUTO"
+          COUNT=$(grep -E '^[[:space:]]*[а-яё]+[[:space:]]+[а-яё+]+[[:space:]]*$' "$AUTO" | wc -l | tr -d ' ')
           echo "RUVOICE_AUTO_BOOK_OVERRIDES=$AUTO" >> "$GITHUB_ENV"
-          echo "AUTO_BOOK_OVERRIDE_LINES=$(grep -Ec '^[а-яё]+[[:space:]]+[а-яё+]+        if: always() && hashFiles('private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json') != ''
+          echo "AUTO_BOOK_OVERRIDE_LINES=$COUNT" >> "$GITHUB_ENV"
+
+      - name: Upload independent third-model whole-book audit
+        if: always() && hashFiles('private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ruvoice-third-model-whole-book-audit
@@ -322,61 +326,6 @@ jobs:
             private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Summary.json
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Upload the whole-book stress review with short text contexts
-        if: always() && hashFiles('private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ruvoice-whole-book-stress-review
-          path: |
-            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv
-            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Change_Pairs.tsv
-            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Summary.json
-            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides.txt
-            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Evidence.tsv
-            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Summary.json
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Print concise paired test diagnostics
-        if: always()
-        shell: bash
-        working-directory: project/ruvoice-1.1.3-stage4.9
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-          reports = sorted(Path("app/build/test-results/testFullDebugUnitTest").glob("*.xml"))
-          if not reports:
-              print("PAIRED_JUNIT_XML=NOT_FOUND")
-          for path in reports:
-              try:
-                  root = ET.parse(path).getroot()
-              except ET.ParseError as error:
-                  print("PAIRED_JUNIT_XML_PARSE_ERROR=" + str(error))
-                  continue
-              for case in root.findall(".//testcase"):
-                  name = case.attrib.get("name", "unknown")
-                  for stream in case.findall("system-out"):
-                      for line in (stream.text or "").splitlines():
-                          if "STRESS_PRECHECK" in line or "YO_REGRESSION_CASE=" in line:
-                              print("PAIRED_TEST_TRACE=" + line.strip())
-                  for failure in case.findall("failure") + case.findall("error"):
-                      message = failure.attrib.get("message", "") or (failure.text or "").splitlines()[0:1]
-                      if isinstance(message, list):
-                          message = message[0] if message else ""
-                      print("PAIRED_TEST_FAILURE=" + name + " :: " + str(message).replace("\\n", " ")[:700])
-          PY
-
-      - name: Upload the private paired comparison report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ruvoice-paired-whole-book-comparison
-          path: private-files/ruvoice-paired-book-analysis.json
-          if-no-files-found: warn
-          retention-days: 14
- "$AUTO" || true)" >> "$GITHUB_ENV"
 
       - name: Re-run the entire EPUB through original RuVoice with confirmed book overrides
         if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
@@ -435,23 +384,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload independent third-model whole-book audit
-        if: always() && hashFiles('private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ruvoice-third-model-whole-book-audit
-          path: |
-            private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json
-            private-files/ruvoice-third-model-audit/Book_Third_Model_AllOccurrences.tsv
-            private-files/ruvoice-third-model-audit/Book_Third_Model_Disagreements.tsv
-            private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt
-            private-files/ruvoice-third-model-audit/Book_Three_Model_OOV_Review.txt
-            private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Evidence.tsv
-            private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Summary.json
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Upload the whole-book stress review with short text contexts
+- name: Upload the whole-book stress review with short text contexts
         if: always() && hashFiles('private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv') != ''
         uses: actions/upload-artifact@v4
         with:
