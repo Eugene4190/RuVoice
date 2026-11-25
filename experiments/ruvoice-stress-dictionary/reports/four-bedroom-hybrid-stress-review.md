@@ -81,3 +81,38 @@ For the three same-position spellings, Wiktionary uses `е` (`бедрум`), no
 ### Provenance discrepancy
 
 The header in `tools/lib_names.txt` describes its candidates as absent from AOT/Wiktionary. Yet a Russian Wiktionary article for the exact lemma has existed since 2016. This indicates a coverage/provenance gap in the source-scan or candidate-generation process. Do not treat the header's “not in Wiktionary” statement as proven for this lemma; record the direct article URL whenever this family is reviewed.
+
+
+## Provenance scope correction (2026-11-25)
+
+The earlier note described the direct Russian Wiktionary article as a likely extraction/provenance bug. That was too broad and is corrected here:
+
+- The tracked parser `project/ruvoice-1.1.3-stage4.9/tools/wikt_forms.py` explicitly says it ingests **English Wiktionary's Russian-language entries**, extracted via Kaikki, not the Russian-language Wiktionary edition.
+- Kaikki's [Russian machine-readable dictionary](https://kaikki.org/dictionary/Russian/) states that its data were extracted from the **enwiktionary** dump dated 2026-10-01. Thus the configured pipeline's claim that this article is not present in its AOT + enwiktionary-derived inventory is not contradicted merely by the existence of a page on ru.wiktionary.org.
+- The Russian-language Wiktionary edition is a separate corpus. Kaikki publishes separate [raw data for the Russian-language edition](https://kaikki.org/ruwiktionary/rawdata.html), extracted from the ruwiktionary dump dated 2026-11-01. This separate dataset is not named as an input in the current `wikt_forms.py` pipeline.
+- Therefore, there is **no proven extraction bug** in the current configured English-Wiktionary/Kaikki input. There is instead an opportunity to add a second, explicitly separate Russian-Wiktionary source stream, subject to provenance, licensing, format, maintenance, and quality review.
+
+### Explicit provisional paradigm from ru.wiktionary.org
+
+The current Russian Wiktionary article lists the following inflectional forms with stress on `бе́д-`. They are evidence-backed candidates only, not approved runtime entries:
+
+| Exact form | Provisional marked form |
+|---|---|
+| четырёхбедрумна | четырёхб+едрумна |
+| четырёхбедрумная | четырёхб+едрумная |
+| четырёхбедрумно | четырёхб+едрумно |
+| четырёхбедрумного | четырёхб+едрумного |
+| четырёхбедрумное | четырёхб+едрумное |
+| четырёхбедрумной | четырёхб+едрумной |
+| четырёхбедрумном | четырёхб+едрумном |
+| четырёхбедрумному | четырёхб+едрумному |
+| четырёхбедрумною | четырёхб+едрумною |
+| четырёхбедрумную | четырёхб+едрумную |
+| четырёхбедрумны | четырёхб+едрумны |
+| четырёхбедрумные | четырёхб+едрумные |
+| четырёхбедрумный | четырёхб+едрумный |
+| четырёхбедрумным | четырёхб+едрумным |
+| четырёхбедрумными | четырёхб+едрумными |
+| четырёхбедрумных | четырёхб+едрумных |
+
+The Russian Wiktionary table supports these forms directly, but the page itself still labels the lemma as a jargon neologism and lacks an example, bibliography and audio. Keep the 16 system conflicts blocked pending a human pronunciation check in a real usage context. Source: https://ru.wiktionary.org/wiki/четырёхбедрумный
