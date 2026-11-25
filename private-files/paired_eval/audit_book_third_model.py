@@ -253,6 +253,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--paired-json", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--quality-occurrences", type=Path, required=True)
+    parser.add_argument("--reviewed-overrides", type=Path)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--max-chars", type=int, default=220)
     args = parser.parse_args()
@@ -263,6 +265,8 @@ def main() -> int:
         raise SystemExit("--max-chars must be between 100 and 250")
 
     paired = json.loads(args.paired_json.read_text(encoding="utf-8"))
+    quality = read_quality(args.quality_occurrences)
+    existing_overrides = read_overrides(args.reviewed_overrides)
     segment_rows = paired.get("segment_contexts", [])
     baseline_rows = paired.get("baseline_tokens", [])
     combined_rows = paired.get("combined_tokens", [])
@@ -401,6 +405,39 @@ def main() -> int:
         writer.writerow(["word", "ruvoice_position", "ruaccent_position", "third_model_position", "occurrences", "sample_contexts"])
         writer.writerows(pair_rows)
 
+    confirmed_lines, oov_lines, evidence_rows, auto_summary = build_three_model_overrides(
+        out_rows, quality, existing_overrides
+    )
+    confirmed_path = args.output_dir / "Book_Three_Model_Confirmed_Overrides.txt"
+    confirmed_path.write_text(
+        "# Подтверждённые книжные исправления: RUAccent и независимая модель согласны, "
+        "и ударение поддержано хотя бы одним словарём.\n"
+        "# Только отдельный словарь для этой книги; не добавлять в глобальный Системный.txt.\n"
+        + ("\\n".join(confirmed_lines) + "\\n" if confirmed_lines else ""),
+        encoding="utf-8",
+    )
+    oov_path = args.output_dir / "Book_Three_Model_OOV_Review.txt"
+    oov_path.write_text(
+        "# Повторяющиеся авторские/редкие формы: две модели согласны минимум в трёх вхождениях, "
+        "но независимой словарной статьи нет.\n"
+        "# ЭТО НЕ ГОТОВЫЙ ИМПОРТ: отдельная очередь проверки.\n"
+        + ("\\n".join(oov_lines) + "\\n" if oov_lines else ""),
+        encoding="utf-8",
+    )
+    evidence_path = args.output_dir / "Book_Three_Model_Override_Evidence.tsv"
+    with evidence_path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.writer(stream, delimiter="\\t")
+        writer.writerow([
+            "tier", "word", "book_frequency", "ruvoice_position", "consensus_position",
+            "aot_positions", "wiktionary_positions", "chapters", "sample_contexts",
+            "aot_details", "wiktionary_details",
+        ])
+        writer.writerows(evidence_rows)
+    auto_summary_path = args.output_dir / "Book_Three_Model_Override_Summary.json"
+    auto_summary_path.write_text(
+        json.dumps(auto_summary, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8"
+    )
+
     summary = {
         "book": paired.get("book_file"),
         "segments": len(segments),
@@ -413,14 +450,18 @@ def main() -> int:
         "model": "ruaccent-predictor 1.2.0",
         "model_note": (
             "Independent character-level seq2seq model. Its self-reported validation metric is not "
-            "treated as a gold score; use this output only as a third opinion. No word is auto-corrected "
-            "by this script."
+            "treated as a gold score; use this output only as a third opinion."
         ),
+        "auto_override_summary": auto_summary,
+        "confirmed_override_file": str(confirmed_path),
+        "oov_review_file_not_for_import": str(oov_path),
     }
     (args.output_dir / "Book_Third_Model_Summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     print("THIRD_MODEL_SUMMARY=" + json.dumps(summary, ensure_ascii=False, sort_keys=True), flush=True)
+    print("THIRD_MODEL_CONFIRMED_OVERRIDES=" + str(confirmed_path) + " WORDS=" + str(len(confirmed_lines)), flush=True)
+    print("THIRD_MODEL_OOV_REVIEW=" + str(oov_path) + " WORDS=" + str(len(oov_lines)), flush=True)
     return 0
 
 
