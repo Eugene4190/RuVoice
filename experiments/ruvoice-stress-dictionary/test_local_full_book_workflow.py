@@ -13,7 +13,7 @@ from local_full_book_workflow import _jar_contains
 
 
 class DesktopRuntimeJarValidationTests(unittest.TestCase):
-    def test_local_runner_invokes_the_original_ruvoice_junit_test(self):
+    def test_local_runner_invokes_the_junit_wrapping_desktop_main(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             book = root / "book.epub"
@@ -45,8 +45,11 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
                 )
 
             command = run.call_args.args[0]
-            self.assertEqual(command[-2], workflow.JVM_JUNIT_LAUNCHER)
-            self.assertEqual(command[-1], workflow.JVM_PAIRED_TEST_CLASS)
+            self.assertEqual(command[-1], workflow.JVM_ENTRYPOINT)
+            self.assertEqual(
+                workflow.JVM_ENTRYPOINT,
+                "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationMain",
+            )
 
     def test_third_model_worker_receives_mode_flag(self):
         completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
