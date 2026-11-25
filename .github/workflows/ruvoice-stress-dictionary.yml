@@ -35,7 +35,9 @@ jobs:
             experiments/ruvoice-stress-dictionary/test_build_book_dictionary.py \
             experiments/ruvoice-stress-dictionary/test_approve_book_entries.py \
             experiments/ruvoice-stress-dictionary/evaluate_gold_set.py \
-            experiments/ruvoice-stress-dictionary/test_evaluate_gold_set.py
+            experiments/ruvoice-stress-dictionary/test_evaluate_gold_set.py \
+            experiments/ruvoice-stress-dictionary/extract_ruwiktionary_forms.py \
+            experiments/ruvoice-stress-dictionary/test_extract_ruwiktionary_forms.py
 
       - name: Run unit tests
         run: |
