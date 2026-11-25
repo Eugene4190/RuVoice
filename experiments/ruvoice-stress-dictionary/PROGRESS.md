@@ -407,3 +407,18 @@ Branch HEAD при проверке: f49541cd9d1c9bdb60fd9dd78622881d74bd7725. P
 **Последние CI на HEAD `38c2e6a904d7f8573bd26ccf4e82c888880f4550`:** словарный workflow [#45629614057](https://github.com/Eugene4190/RuVoice/actions/runs/45629614057) завершился `failure`; Kotlin Full/Lite workflow [#45629613896](https://github.com/Eugene4190/RuVoice/actions/runs/45629613896) на момент фиксации выполнялся. Причина Python CI failure пока не исследована в рамках запрошенной остановки; нужно открыть лог и устранить/объяснить до следующего этапа. Более ранний dictionary CI на коммите `4b1b2ac` прошёл, но он не содержал тестового файла extractor.
 
 **Остановка:** по просьбе пользователя дальнейшая диагностика, исправления и изменения файлов прекращены до нового сообщения пользователя после завершения Actions. Не менять `main`, не сливать PR, не экспортировать provisional формы в global/approved/system dictionary, не собирать APK.
+
+
+### 2026-11-25 — Исправлен Python CI, добавлен проверяемый provisional output для 16 форм
+
+**CI failure устранён:** в новых тестах экстрактора были три неверных ожидания о нормализации ударения/тегах, затем в guard-тесте TSV — неверно заданный разделитель. Исправлены тестовые ожидания и разделитель; сам формат экстрактора сохранён. Последний словарный CI на HEAD `ce95060a09d0fa477b968b85f5f8880e880de9c1` — [run #45631811226](https://github.com/Eugene4190/RuVoice/actions/runs/45631811226), **success**: 46 словарных тестов, 26 private paired-evaluation тестов, compile, independent gold seed validation, book-specific supplement, shell syntax, dictionary snapshot, curated overrides и оба reference EPUB scan прошли. Новый тест проверяет ровно 16 четырёхбедрумных форм, уникальность ID, provisional `четырёхб+едрум…` и обязательный `WITHHELD_PENDING_HUMAN_PRONUNCIATION_REVIEW` для каждой строки.
+
+**Новый машинно-читаемый результат:** `reports/ruwiktionary-four-bedroom-provisional.tsv` содержит 16 точных словоформ со ссылкой на статью Русского Викисловаря, предварительной marked-формой и status hold. Ни одна запись не переводится в global/approved/system dictionary. Подробное лингвистическое обоснование и ограничения — `reports/four-bedroom-hybrid-stress-review.md`.
+
+**Экстрактор отдельного корпуса:** `extract_ruwiktionary_forms.py` и `test_extract_ruwiktionary_forms.py` включены в `py_compile` и unittest workflow. `data/raw/README.md` содержит точную команду воспроизводимого запуска и описывает manifest с SHA-256. Полный официальный dump от 2026-11-01 (272.5 MB gzip) в этой среде скачать не удалось из-за DNS/network failure; поэтому полный корпус пока не извлекался. Это явно не считается выполненным full-source run.
+
+**Gold review P001–P010:** дополнен source recheck для `договор` и `балуется`: `до́говор` остаётся допустимым, но менее желательным разговорным вариантом; `балУется` подтверждается для формы 3sg, а вариант `бАловаться` относится к инфинитиву и не переносится автоматически на личную форму. Все десять строк по-прежнему ожидают внешнего независимого человеческого лингвиста, `seed.tsv` не менялся.
+
+**Kotlin CI:** последний подтверждённый успешный focused Full/Lite прогон — [run #45631171926](https://github.com/Eugene4190/RuVoice/actions/runs/45631171926), HEAD `35baebf`; на HEAD `ce95060` новый Kotlin workflow [run #45631810907](https://github.com/Eugene4190/RuVoice/actions/runs/45631810907) ещё выполняется (Gradle focused Full/Lite JVM tests, без APK build).
+
+**Границы:** `main` остаётся на `e0f89575d872461282f719f3a04709d5436f4b45`; PR #1 открыт Draft, не слит. Production `Системный.txt`, global/approved dictionaries, APK assets и runtime code не изменялись.
