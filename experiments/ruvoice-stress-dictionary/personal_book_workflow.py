@@ -306,19 +306,40 @@ def process_book(
         snapshot_path = builder_output / "MyBooks_Cumulative.txt"
         shutil.copyfile(master, snapshot_path)
 
-        replacement_path = builder_output / "Book_Replacements.txt"
+        replacements_dir = private_root / "replacements"
+        _private_dir(replacements_dir)
+        replacement_store = replacements_dir / f"{digest}.txt"
         if replacements is not None:
-            shutil.copyfile(Path(replacements), replacement_path)
-            has_replacements = bool(
-                [line for line in replacement_path.read_text(encoding="utf-8-sig").splitlines()
-                 if line.strip() and not line.lstrip().startswith("#")]
-            )
-        else:
+            replacements = Path(replacements)
+            if replacements.suffix.lower() != ".txt":
+                raise ValueError("Файл контекстных замен должен иметь расширение .txt")
             _atomic_text(
-                replacement_path,
-                "# Для этой книги отдельные контекстные/фразовые замены не переданы.\n",
+                replacement_store,
+                replacements.read_text(encoding="utf-8-sig"),
             )
-            has_replacements = False
+        elif not replacement_store.exists():
+            _atomic_text(
+                replacement_store,
+                "# Для этой книги отдельные контекстные/фразовые замены не заданы.\n",
+            )
+        shutil.copyfile(replacement_store, replacement_path)
+        try:
+            os.chmod(replacement_path, 0o600)
+        except OSError:
+            pass
+        replacement_lines = [
+            line for line in replacement_path.read_text(encoding="utf-8-sig").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        has_replacements = bool(replacement_lines)
+        history = _load_json(history_path, {"schema_version": 1, "books": {}})
+        book_record = history.setdefault("books", {}).setdefault(digest, {})
+        book_record["replacements"] = {
+            "private_file": replacement_store.name,
+            "sha256": hashlib.sha256(replacement_store.read_bytes()).hexdigest(),
+            "has_rules": has_replacements,
+        }
+        _atomic_json(history_path, history)
 
         report_path = builder_output / "Book_Report.json"
         report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -326,6 +347,12 @@ def process_book(
         for key in ("system_dictionary", "approved_dictionary"):
             report.pop(key, None)
         report["book"] = display_name
+        report["warning"] = (
+            "Automatically appended entries passed the configured exact-form, source-provenance, "
+            "context-rule and conflict filters. The source policy is conservative but is not a guarantee "
+            "of perfect pronunciation; inspect playback for unusual names and ambiguous forms. "
+            "Conflicts with an existing approved master entry are held and never overwrite it."
+        )
         report["workflow"] = {
             "book_sha256": digest,
             "already_processed_before_this_run": was_processed,
@@ -334,6 +361,7 @@ def process_book(
             "cumulative_approved_count": len(parse_dictionary(master)[0]),
             "append_only": True,
             "private_storage": True,
+            "per_book_replacements_persisted": True,
             "book_text_included_in_package": False,
         }
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
