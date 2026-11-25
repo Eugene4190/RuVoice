@@ -394,3 +394,16 @@ Branch HEAD при проверке: f49541cd9d1c9bdb60fd9dd78622881d74bd7725. P
 ### 2026-11-25 — Уточнение области охвата источника Wiktionary
 
 Проверен код `tools/wikt_forms.py`: он явно читает **английский Wiktionary с русскими статьями** через Kaikki; страница Kaikki подтверждает extraction от enwiktionary. У `ru.wiktionary.org` есть отдельная выгрузка/edition и отдельный raw-data stream, который текущий скрипт не читает. Поэтому прежняя формулировка о вероятной ошибке извлечения для `четырёхбедрумный` скорректирована: наличия статьи в русском Викисловаре недостаточно, чтобы объявить баг в существующем источнике. Это возможный новый source stream, а не доказанный дефект. Текущий отчет содержит 16 provisional marked-форм из русской парадигмы, но ни одна не утверждается в production без отдельного произносительного review.
+
+
+### 2026-11-25 — Промежуточная фиксация и остановка по запросу пользователя
+
+**Зафиксировано в ветке `stress-dictionary-pipeline`:**
+- Отчёт второй AI-переоценки gold review queue P001–P010 (`reports/gold-review-queue-ai-second-pass.md`); очередь и gold seed не менялись, человеческая независимая разметка всё ещё требуется.
+- Разбор конфликтов системного словаря и семейства `четырёхбедрум…` (`reports/system-dictionary-conflict-review.md`, `reports/four-bedroom-hybrid-stress-review.md`): 2 формы `трёхгорке/трёхгорку` имеют отдельные overrides; 16 форм `четырёхбедрум…` остаются заблокированными. Русская парадигма ru.wiktionary поддерживает provisional `четырёхб+едрум…`, но её жаргонная статья без аудио/примеров недостаточна для production promotion.
+- Уточнён provenance: текущий `tools/wikt_forms.py` извлекает русские записи из английского Wiktionary через Kaikki; русский Wiktionary — отдельная source edition.
+- Добавлен экспериментальный extractor `extract_ruwiktionary_forms.py` и тесты `test_extract_ruwiktionary_forms.py`. Они работают с raw dump из `data/raw/`, формируют отдельный review TSV и manifest; данные/production assets не изменяют. Raw dump в Git не добавлялся и реальный полный прогон экстрактора ещё не выполнялся.
+
+**Последние CI на HEAD `38c2e6a904d7f8573bd26ccf4e82c888880f4550`:** словарный workflow [#45629614057](https://github.com/Eugene4190/RuVoice/actions/runs/45629614057) завершился `failure`; Kotlin Full/Lite workflow [#45629613896](https://github.com/Eugene4190/RuVoice/actions/runs/45629613896) на момент фиксации выполнялся. Причина Python CI failure пока не исследована в рамках запрошенной остановки; нужно открыть лог и устранить/объяснить до следующего этапа. Более ранний dictionary CI на коммите `4b1b2ac` прошёл, но он не содержал тестового файла extractor.
+
+**Остановка:** по просьбе пользователя дальнейшая диагностика, исправления и изменения файлов прекращены до нового сообщения пользователя после завершения Actions. Не менять `main`, не сливать PR, не экспортировать provisional формы в global/approved/system dictionary, не собирать APK.
