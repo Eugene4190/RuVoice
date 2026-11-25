@@ -759,11 +759,20 @@ class UploadedEpubPairedEvaluationTest {
             "Missing book-only replacement overlay: $bookReplacementFile"
         }
         val bookReplacementLines = bookReplacementFile.readLines(Charsets.UTF_8)
-        val requiredBookReplacement = "шелка и = шелк+а и"
-        check(bookReplacementLines.map { it.trim() }.contains(requiredBookReplacement)) {
-            "Book-only replacement overlay must preserve plural stress in 'шелка и'"
+        val requiredBookReplacements = setOf(
+            "шелка и = шелк+а и",
+            "сети значений = с+ети значений",
+        )
+        check(bookReplacementLines.map { it.trim() }.toSet().containsAll(requiredBookReplacements)) {
+            "Book-only replacement overlay must contain the reviewed plural/phrase stress rules"
         }
         val bookReplacements = Replacements.parse(systemReplacementFile.readLines(Charsets.UTF_8) + bookReplacementLines)
+        check(bookReplacements.apply("шелка и") == "шелк+а и") {
+            "The supported RuVoice replacement parser did not apply the book-only шелка rule"
+        }
+        check(bookReplacements.apply("сети значений") == "с+ети значений") {
+            "The supported RuVoice replacement parser did not apply the book-only сети значений rule"
+        }
 
         // Book-reviewed overlay is kept separate from the installed system dictionary.
         // Conflicting or duplicate entries fail closed; the overlay is used only by this
