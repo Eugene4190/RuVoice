@@ -57,7 +57,9 @@ class PersonalBookWorkflowTests(unittest.TestCase):
         book_a = self.root / "A.epub"
         book_b = self.root / "B.epub"
         self.make_epub(book_a, "молоко")
-        self.make_epub(book_b, "творог")
+        # B also contains A's already-approved word; it must not enter B's delta,
+        # but provenance should record that the word appeared in both books.
+        self.make_epub(book_b, "творог молоко")
         replacement_file = self.root / "B_replacements.txt"
         replacement_file.write_text("# Правила только для B\nшелка и = шелк+а и\n", encoding="utf-8")
 
@@ -100,6 +102,16 @@ class PersonalBookWorkflowTests(unittest.TestCase):
             b_record = history["books"][result_b["book_sha256"]]
             self.assertEqual(b_record["new_entries"][0]["source"], "aot_wiktionary_silero_consensus")
             self.assertTrue(b_record["replacements"]["has_rules"])
+            milk_history = history["entries"]["молоко"]
+            self.assertEqual(milk_history["first_added_in"], "A.epub")
+            self.assertEqual(
+                {item["book_name"] for item in milk_history["books_seen_in"]},
+                {"A.epub", "B.epub"},
+            )
+            self.assertEqual(
+                {row["word"] for row in b_record["encountered_master_entries"]},
+                {"молоко", "творог"},
+            )
             self.assertTrue(report["workflow"]["append_only"])
             self.assertFalse(report["workflow"]["book_text_included_in_package"])
             self.assertNotIn("A.epub", names)
