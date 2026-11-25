@@ -232,9 +232,15 @@ def _recover_pending(root: Path, master: Path, system_dictionary: Path) -> None:
     pending_path.unlink(missing_ok=True)
 
 
-def _write_import_guide(path: Path, book_name: str, has_replacements: bool) -> None:
+def _write_import_guide(
+    path: Path,
+    book_name: str,
+    delta_filename: str,
+    replacement_filename: str,
+    has_replacements: bool,
+) -> None:
     replacement_text = (
-        "Импортируйте Book_Replacements.txt во вкладку «Замены» только если в файле есть правила. "
+        f"Импортируйте {replacement_filename} во вкладку «Замены» только если в файле есть правила. "
         "Правила остаются привязанными к этой книге."
         if has_replacements
         else "Для этой книги отдельные контекстные замены не переданы; файл Book_Replacements.txt содержит только комментарий."
@@ -244,7 +250,7 @@ def _write_import_guide(path: Path, book_name: str, has_replacements: bool) -> N
         (
             f"RuVoice — дополнение для книги: {book_name}\n\n"
             "1. Откройте RuVoice → «Ударения» → импорт TXT.\n"
-            "2. Импортируйте Book_New_Stress_Delta.txt отдельным списком с названием этой книги. "
+            f"2. Импортируйте {delta_filename} отдельным списком с названием этой книги. "
             "Не удаляйте и не отключайте списки предыдущих книг. Если дельта пуста, новых слов для импорта нет.\n"
             f"3. {replacement_text}\n"
             "4. MyBooks_Cumulative.txt — полный резервный снимок вашего личного словаря. "
@@ -386,12 +392,15 @@ def process_book(
             ],
         )
         _atomic_json(history_path, current_history)
-        delta_path = builder_output / "Book_New_Stress_Delta.txt"
+        book_stem = _safe_stem(Path(display_name).stem)
+        delta_filename = f"{book_stem}_New_Stress_Delta.txt"
+        delta_path = builder_output / delta_filename
         _atomic_text(delta_path, delta_text)
         snapshot_path = builder_output / "MyBooks_Cumulative.txt"
         shutil.copyfile(master, snapshot_path)
 
-        replacement_path = builder_output / "Book_Replacements.txt"
+        replacement_filename = f"{book_stem}_Replacements.txt"
+        replacement_path = builder_output / replacement_filename
         replacements_dir = private_root / "replacements"
         _private_dir(replacements_dir)
         replacement_store = replacements_dir / f"{digest}.txt"
@@ -453,7 +462,9 @@ def process_book(
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         guide_path = builder_output / "IMPORT.txt"
-        _write_import_guide(guide_path, display_name, has_replacements)
+        _write_import_guide(
+            guide_path, display_name, delta_filename, replacement_filename, has_replacements
+        )
         history_snapshot = builder_output / "MyBooks_History.json"
         shutil.copyfile(history_path, history_snapshot)
 
