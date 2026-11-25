@@ -63,6 +63,180 @@ def split_context(text: str, max_chars: int) -> list[str]:
     return result
 
 
+def read_quality(path: Path) -> dict[tuple[int, int], dict[str, str]]:
+    result: dict[tuple[int, int], dict[str, str]] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as stream:
+        for row in csv.DictReader(stream, delimiter="\t"):
+            key = (int(row["segment_index"]), int(row["word_index"]))
+            result[key] = row
+    return result
+
+
+def read_overrides(path: Path | None) -> set[str]:
+    result: set[str] = set()
+    if path is None or not path.is_file():
+        return result
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.replace("=", " ", 1).split()
+        if parts:
+            result.add(norm(parts[0]))
+    return result
+
+
+def to_plus(word: str, position: int) -> str | None:
+    clean = word.lower().replace("+", "").replace("'", "").replace("’", "")
+    vowels = [index for index, char in enumerate(clean) if char in VOWELS]
+    if position < 0 or position >= len(vowels):
+        return None
+    at = vowels[position]
+    return clean[:at] + "+" + clean[at:]
+
+
+def build_three_model_overrides(
+    rows: list[list[Any]],
+    quality: dict[tuple[int, int], dict[str, str]],
+    existing: set[str],
+) -> tuple[list[str], list[str], list[list[Any]], dict[str, Any]]:
+    """
+    Group every token occurrence by exact spelling. Confirmed output requires two
+    model votes (RUAccent + character Transformer) and at least one unambiguous
+    dictionary source. Repeated OOV consensus is kept in a separate review file.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    excluded = Counter()
+    for row in rows:
+        segment = int(row[0])
+        word_index = int(row[1])
+        raw_word = str(row[4]).lower()
+        key = norm(raw_word)
+        if not CYR_RE.fullmatch(key) or len(word_vowels(key)) < 2:
+            continue
+        if key in {"а", "и", "но", "да", "или", "ли", "не", "ни", "бы", "же", "в", "во",
+                   "на", "над", "под", "с", "со", "к", "ко", "у", "о", "об", "от", "до",
+                   "из", "за", "по", "при", "для", "без", "через", "перед", "после",
+                   "между", "около", "вокруг", "как", "что", "чтобы", "если", "когда",
+                   "где", "кто", "то", "это", "вот", "там", "тут", "уже", "лишь", "ведь",
+                   "либо", "нибудь", "таки", "обо"}:
+            excluded["function_word"] += 1
+            continue
+        if "ё" in raw_word:
+            excluded["contains_yo"] += 1
+            continue
+        if key in existing:
+            excluded["already_in_reviewed_overlay"] += 1
+            continue
+        quality_row = quality.get((segment, word_index), {})
+        grouped.setdefault(key, []).append({
+            "word": raw_word,
+            "base": None if row[6] == "" else int(row[6]),
+            "ruaccent": None if row[8] == "" else int(row[8]),
+            "third": None if row[10] == "" else int(row[10]),
+            "aot": {int(x) for x in re.split(r"[,;]", quality_row.get("aot_stress_positions", "")) if x},
+            "wikt": {int(x) for x in re.split(r"[,;]", quality_row.get("wiktionary_stress_positions", "")) if x},
+            "quality_status": quality_row.get("baseline_status", ""),
+            "chapter": str(row[2]),
+            "context": str(row[11]),
+            "aot_details": quality_row.get("aot_source_details", ""),
+            "wikt_details": quality_row.get("wiktionary_source_details", ""),
+        })
+
+    confirmed: list[str] = []
+    oov_review: list[str] = []
+    evidence: list[list[Any]] = []
+    tiers = Counter()
+    for key, group in grouped.items():
+        if len({row["word"] for row in group}) != 1:
+            excluded["orthographic_variants_share_key"] += 1
+            continue
+        aot_sets = {tuple(sorted(row["aot"])) for row in group}
+        wikt_sets = {tuple(sorted(row["wikt"])) for row in group}
+        if len(aot_sets) != 1 or len(wikt_sets) != 1:
+            excluded["dictionary_evidence_varies_by_occurrence"] += 1
+            continue
+        aot = set(next(iter(aot_sets)))
+        wikt = set(next(iter(wikt_sets)))
+        if any(row["quality_status"] == "CONTEXTUAL_VARIANT_ACCEPTED" for row in group):
+            excluded["contextual_exception"] += 1
+            continue
+
+        third_positions = {row["third"] for row in group}
+        ruaccent_positions = {row["ruaccent"] for row in group}
+        baseline_positions = {row["base"] for row in group}
+        if len(third_positions) != 1 or len(ruaccent_positions) != 1 or None in third_positions or None in ruaccent_positions:
+            excluded["model_outputs_not_uniform"] += 1
+            continue
+        target = next(iter(third_positions))
+        if next(iter(ruaccent_positions)) != target:
+            excluded["two_independent_models_disagree"] += 1
+            continue
+        if target in baseline_positions or None in baseline_positions or len(baseline_positions) != 1:
+            excluded["baseline_is_mixed_or_already_correct"] += 1
+            continue
+
+        # A source that explicitly records another stress position is a contradiction,
+        # not "missing evidence". Do not turn dictionary variants into a single rule.
+        if any(position != target for position in aot | wikt):
+            excluded["dictionary_records_alternative_or_conflict"] += 1
+            continue
+
+        tier = None
+        if aot == {target} and wikt == {target}:
+            tier = "AOT_AND_WIKTIONARY_PLUS_TWO_MODELS"
+        elif (aot == {target} and not wikt) or (wikt == {target} and not aot):
+            tier = "ONE_DICTIONARY_PLUS_TWO_MODELS"
+        elif not aot and not wikt and len(group) >= 3:
+            tier = "REPEATED_OOV_TWO_MODEL_CONSENSUS"
+
+        if tier is None:
+            excluded["insufficient_reference_or_repetition"] += 1
+            continue
+        word = group[0]["word"]
+        marked = to_plus(word, target)
+        if marked is None:
+            excluded["invalid_stress_position"] += 1
+            continue
+        line = f"{key} {marked}"
+        chapters = sorted({row["chapter"] for row in group if row["chapter"]})
+        contexts = []
+        for row in group:
+            if row["context"] and row["context"] not in contexts and len(contexts) < 5:
+                contexts.append(row["context"])
+        evidence.append([
+            tier, key, len(group), next(iter(baseline_positions)), target,
+            ",".join(map(str, sorted(aot))), ",".join(map(str, sorted(wikt))),
+            ";".join(chapters), " || ".join(contexts),
+            group[0]["aot_details"], group[0]["wikt_details"],
+        ])
+        if tier == "REPEATED_OOV_TWO_MODEL_CONSENSUS":
+            oov_review.append(line)
+        else:
+            confirmed.append(line)
+        tiers[tier] += 1
+
+    confirmed.sort()
+    oov_review.sort()
+    evidence.sort(key=lambda row: (-int(row[2]), row[1]))
+    summary = {
+        "confirmed_wordforms": len(confirmed),
+        "confirmed_occurrences": sum(int(row[2]) for row in evidence if row[0] != "REPEATED_OOV_TWO_MODEL_CONSENSUS"),
+        "repeated_oov_review_wordforms": len(oov_review),
+        "repeated_oov_review_occurrences": sum(int(row[2]) for row in evidence if row[0] == "REPEATED_OOV_TWO_MODEL_CONSENSUS"),
+        "candidate_wordforms_examined": len(grouped),
+        "tiers": dict(tiers),
+        "excluded_by_reason": dict(excluded),
+        "policy": (
+            "Confirmed word rules require RUAccent and the independent character model to agree "
+            "on every occurrence, baseline RuVoice to use one different stress throughout, and "
+            "one unambiguous AOT or Wiktionary source to support the target. Repeated OOVs with "
+            "three or more matching occurrences are emitted separately for review, not import."
+        ),
+    }
+    return confirmed, oov_review, evidence, summary
+
+
 def write_tsv(path: Path, rows: list[list[Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
