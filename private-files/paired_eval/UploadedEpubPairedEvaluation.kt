@@ -632,6 +632,19 @@ private class PairedRemoteRuAccentCorrector(
 }
 
 
+private fun pairedSha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
 private fun pairedGitBlobSha(file: File): String {
     val digest = MessageDigest.getInstance("SHA-1")
     digest.update(("blob " + file.length() + "\u0000").toByteArray(Charsets.UTF_8))
