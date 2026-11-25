@@ -98,21 +98,43 @@ def extract_text(path: Path) -> str:
 def parse_dictionary(path: Path) -> tuple[dict[str, str], list[str]]:
     entries: dict[str, str] = {}
     conflicts: list[str] = []
+
+    def add_invalid(number: int, word: str, reason: str) -> None:
+        key = word.lower()
+        if re.fullmatch(r"[а-яё]+", key):
+            entries.pop(key, None)
+            if not any(f": {key}:" in row for row in conflicts):
+                conflicts.append(f"строка {number}: {key}: {reason}")
+        else:
+            conflicts.append(
+                f"строка {number}: некорректный ключ {word!r}: {reason}"
+            )
+
     for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
+
         if "=" in stripped:
-            word, marked = (part.strip() for part in stripped.split("=", 1))
-            marked = marked.split("#", 1)[0].strip().split()[0] if marked else ""
+            word, value = (part.strip() for part in stripped.split("=", 1))
+            values = value.split("#", 1)[0].strip().split()
+            marked = values[0].lower() if values else ""
         else:
             parts = stripped.split()
             if len(parts) < 2:
+                word = parts[0].lower() if parts else ""
+                add_invalid(number, word, "отсутствует поле ударения")
                 continue
             word, marked = parts[0].lower(), parts[1].lower()
+
         word, marked = word.lower(), marked.lower()
-        if not re.fullmatch(r"[а-яё]+", word) or marked.count("+") != 1:
+        if not re.fullmatch(r"[а-яё]+", word):
+            add_invalid(number, word, "ключ должен быть одним русским словом")
             continue
+        if marked.count("+") != 1:
+            add_invalid(number, word, "нужно ровно одно обозначение ударения +")
+            continue
+
         pos = marked.index("+")
         bare = marked.replace("+", "")
         if (
@@ -120,15 +142,17 @@ def parse_dictionary(path: Path) -> tuple[dict[str, str], list[str]]:
             or pos >= len(bare)
             or bare[pos] not in VOWELS
         ):
+            add_invalid(number, word, "ударная форма не соответствует ключу или + стоит не перед гласной")
             continue
+
         if word in entries and entries[word] != marked:
             conflicts.append(f"строка {number}: {word}: {entries[word]} / {marked}")
             entries.pop(word, None)
             continue
-        if word not in entries and not any(x.startswith(f"строка ") and f": {word}:" in x for x in conflicts):
+        if word not in entries and not any(f": {word}:" in row for row in conflicts):
             entries[word] = marked
-    return entries, conflicts
 
+    return entries, conflicts
 
 def make_context(words: list[str], index: int, radius: int) -> str:
     start = max(0, index - radius)

@@ -14,7 +14,7 @@ class BookAnalyzerTests(unittest.TestCase):
                 "# comment\n"
                 "творог твор+ог\n"
                 "холеной = хол+ёной # е/ё alias\n"
-                "broken not-a-word\n"
+                "берег без_ударения\n"
                 "дом д+ом\n",
                 encoding="utf-8",
             )
@@ -22,7 +22,19 @@ class BookAnalyzerTests(unittest.TestCase):
             self.assertEqual(dictionary["творог"], "твор+ог")
             self.assertEqual(dictionary["холеной"], "хол+ёной")
             self.assertEqual(dictionary["дом"], "д+ом")  # lookup coverage keeps valid imported rows, even if one syllable
-            self.assertEqual(conflicts, [])
+            self.assertNotIn("берег", dictionary)
+            self.assertEqual(len(conflicts), 1)
+            self.assertIn("берег", conflicts[0])
+            self.assertIn("ударения", conflicts[0])
+
+    def test_missing_stress_field_is_reported_as_a_conflict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "stress.txt"
+            path.write_text("берег\n", encoding="utf-8")
+            dictionary, conflicts = tool.parse_dictionary(path)
+            self.assertNotIn("берег", dictionary)
+            self.assertEqual(len(conflicts), 1)
+            self.assertIn("берег", conflicts[0])
 
     def test_conflicting_dictionary_entry_is_removed(self):
         with tempfile.TemporaryDirectory() as tmp:

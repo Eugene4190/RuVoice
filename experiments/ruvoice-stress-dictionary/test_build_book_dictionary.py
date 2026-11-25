@@ -66,6 +66,41 @@ class BookDictionaryTests(unittest.TestCase):
             cumulative = (out / "RuVoice_Accumulated_Approved.txt").read_text(encoding="utf-8")
             self.assertIn("творог твор+ог", cumulative)
 
+    def test_malformed_system_dictionary_row_blocks_candidate_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            book = root / "book.txt"
+            system = root / "system.txt"
+            approved = root / "approved.txt"
+            pool = root / "pool.txt"
+            audit = root / "audit.tsv"
+            out = root / "out"
+
+            book.write_text("берег", encoding="utf-8")
+            system.write_text("берег\n", encoding="utf-8")
+            approved.write_text("# empty\n", encoding="utf-8")
+            pool.write_text("берег б+ерег\n", encoding="utf-8")
+            audit.write_text(
+                "word\tstress\tsource\n"
+                "берег\tб+ерег\taot_wiktionary_silero_consensus\n",
+                encoding="utf-8",
+            )
+
+            args = Namespace(
+                book=book,
+                system_dictionary=system,
+                approved_dictionary=approved,
+                candidate_dictionary=pool,
+                candidate_audit=audit,
+                output_dir=out,
+            )
+            self.assertEqual(tool.build(args), 0)
+            candidates = (out / "Book_AutoStress_Candidates.txt").read_text(encoding="utf-8")
+            review = (out / "Book_AutoStress_Review.tsv").read_text(encoding="utf-8-sig")
+            self.assertNotIn("берег б+ерег", candidates)
+            self.assertIn("CONFLICT", review)
+            self.assertIn("отсутствует поле ударения", review)
+
     def test_system_dictionary_conflict_is_not_auto_overridden(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
