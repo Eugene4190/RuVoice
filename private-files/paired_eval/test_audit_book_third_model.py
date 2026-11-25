@@ -18,7 +18,7 @@ class ThirdModelAuditParsingTests(unittest.TestCase):
         self.assertEqual(module.accent_position("моло'ко"), 1)
 
     def test_yo_is_intrinsically_stressed(self):
-        self.assertEqual(module.accent_position("всё"), 1)
+        self.assertEqual(module.accent_position("всё"), 0)
         self.assertEqual(module.accent_position("ёлка"), 0)
 
     def test_multiple_apostrophes_are_not_silently_accepted(self):
