@@ -90,7 +90,7 @@ class ThreeModelOverrideTests(unittest.TestCase):
         confirmed, oov, _, summary = module.build_three_model_overrides(rows, quality, set())
         self.assertEqual(confirmed, [])
         self.assertEqual(oov, [])
-        self.assertEqual(summary["excluded_by_reason"]["two_independent_models_disagree"], 1)
+        self.assertEqual(summary["excluded_by_reason"]["model_outputs_not_uniform"], 1)
 
     def test_baseline_must_be_consistently_wrong(self):
         rows = [self.row(segment=0, index=0), self.row(segment=1, index=0, base=1)]
