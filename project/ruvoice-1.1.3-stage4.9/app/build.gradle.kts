@@ -82,6 +82,48 @@ val stressBin = tasks.register<StressBinTask>("stressBin") {
 }
 androidComponents { onVariants { it.sources.assets?.addGeneratedSourceDirectory(stressBin, StressBinTask::outDir) } }
 
+/**
+ * Desktop runtime for the full-book audit. It uses the same production app classes and
+ * the JUnit test entry point as CI, plus the resolved JVM dependencies. The Windows
+ * package adds its own JRE, model workers, official Silero assets and native tokenizer.
+ */
+val desktopAuditRuntimeClasspath = configurations.named("fullDebugUnitTestRuntimeClasspath")
+val desktopAuditCompileClasspath = configurations.named("fullDebugUnitTestCompileClasspath")
+
+tasks.register<Sync>("assembleDesktopAuditRuntime") {
+    dependsOn(
+        "compileFullDebugKotlin",
+        "compileFullDebugJavaWithJavac",
+        "compileFullDebugUnitTestKotlin",
+        "compileFullDebugUnitTestJavaWithJavac",
+    )
+    into(layout.buildDirectory.dir("desktop-audit"))
+    from(layout.buildDirectory.dir("tmp/kotlin-classes/fullDebug")) { into("classes") }
+    from(layout.buildDirectory.dir("intermediates/javac/fullDebug/compileFullDebugJavaWithJavac/classes")) { into("classes") }
+    from(layout.buildDirectory.dir("tmp/kotlin-classes/fullDebugUnitTest")) { into("classes") }
+    from(layout.buildDirectory.dir("intermediates/javac/fullDebugUnitTest/compileFullDebugUnitTestJavaWithJavac/classes")) { into("classes") }
+    from(desktopAuditRuntimeClasspath) { into("lib") }
+    from(desktopAuditCompileClasspath) { into("lib") }
+    // AGP's mockable android.jar is needed when production classes touch Android APIs on the desktop JVM.
+    from(fileTree(layout.buildDirectory).matching { include("**/mockable-android*.jar") }) { into("lib") }
+    duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
+    doLast {
+        val root = layout.buildDirectory.dir("desktop-audit/classes").get().asFile
+        check(root.resolve("ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class").isFile) {
+            "Desktop whole-book JUnit test class was not compiled"
+        }
+        val lib = layout.buildDirectory.dir("desktop-audit/lib").get().asFile
+        val jars = lib.listFiles()?.filter { it.extension == "jar" }.orEmpty()
+        check(jars.isNotEmpty()) { "Desktop whole-book audit dependencies were not packaged" }
+        fun contains(entry: String) = jars.any { jar ->
+            runCatching { java.util.zip.ZipFile(jar).use { it.getEntry(entry) != null } }.getOrDefault(false)
+        }
+        check(contains("org/junit/runner/JUnitCore.class")) { "JUnit runtime was not packaged" }
+        check(contains("org/json/JSONObject.class")) { "JSON runtime was not packaged" }
+        check(contains("android/util/Log.class")) { "Mockable Android API classes were not packaged" }
+    }
+}
+
 dependencies {
     implementation("org.pytorch:pytorch_android_lite:2.1.0")
     // ExecuTorch 1.5.0 + XNNPACK для бэкбона вокодера (backbone.pte): в Maven Central только 0.6.0. AAR собран
