@@ -60,7 +60,7 @@ class PersonalBookWorkflowTests(unittest.TestCase):
         self.make_epub(book_a, "молоко")
         # B also contains A's already-approved word; it must not enter B's delta,
         # but provenance should record that the word appeared in both books.
-        self.make_epub(book_b, "творог молоко")
+        self.make_epub(book_b, "творог молоко PRIVATE_BOOK_SENTINEL_DO_NOT_EXPORT")
         replacement_file = self.root / "B_replacements.txt"
         replacement_file.write_text("# Правила только для B\nшелка и = шелк+а и\n", encoding="utf-8")
 
@@ -89,6 +89,8 @@ class PersonalBookWorkflowTests(unittest.TestCase):
 
         with zipfile.ZipFile(result_b_repeat["archive"]) as archive:
             names = archive.namelist()
+            exported_bytes = b"".join(archive.read(name) for name in names)
+            self.assertNotIn(b"PRIVATE_BOOK_SENTINEL_DO_NOT_EXPORT", exported_bytes)
             delta = archive.read("B_New_Stress_Delta.txt").decode("utf-8")
             snapshot = archive.read("MyBooks_Cumulative.txt").decode("utf-8")
             replacements = archive.read("B_Replacements.txt").decode("utf-8")
