@@ -1,4 +1,5 @@
 import http.client
+import os
 import re
 import tempfile
 import threading
@@ -7,7 +8,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from private_book_server import Server, Handler, page, parse_multipart
+from private_book_server import Server, Handler, page, parse_multipart, validate_setup
 
 
 class PrivateUploadFormTests(unittest.TestCase):
@@ -28,6 +29,21 @@ class PrivateUploadFormTests(unittest.TestCase):
         self.assertEqual(fields["token"], (None, b"secret-token"))
         self.assertEqual(fields["book"], ("my-book.epub", b"fake-epub-bytes"))
         self.assertEqual(fields["replacements"], ("rules.txt", b"word = w+ord"))
+
+    def test_startup_preflight_checks_required_files_and_private_writability(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            required = root / "pipeline.txt"
+            required.write_text("ready", encoding="utf-8")
+            private = root / "private"
+            result = validate_setup(private, required_paths=[required])
+            self.assertEqual(result, private.resolve())
+            self.assertTrue(private.is_dir())
+            self.assertFalse(list(private.glob(".ruvoice-write-check-*")))
+            if os.name == "posix":
+                self.assertEqual(private.stat().st_mode & 0o777, 0o700)
+            with self.assertRaises(FileNotFoundError):
+                validate_setup(root / "bad-private", required_paths=[root / "missing.txt"])
 
     def test_page_escapes_token_and_shows_download_link(self):
         rendered = page('"><script>alert(1)</script>', "ZIP готов", "/download/key").decode()
