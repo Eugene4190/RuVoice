@@ -25,7 +25,7 @@
 - В основном наборе прошли 61 тест; в private paired-evaluation — ещё 26 тестов.
 - Новые регрессии проверяют обработку отсутствующих файлов при запуске и ошибку повреждённой EPUB с удалением временного upload-файла.
 - Проверяются synthetic EPUB A → B → повтор B, append-only мастер, запрет конфликтной перезаписи, provenance, recovery незавершённой транзакции, OPF spine, per-book replacements, ZIP и localhost upload/download.
-- [Kotlin Full/Lite, run 45677808802](https://github.com/Eugene4190/RuVoice/actions/runs/45677808802) — выполняется на этой же версии кода на момент записи. Workflow запускает JVM-тесты, но не собирает APK.
+- [Kotlin Full/Lite, run 45677808802](https://github.com/Eugene4190/RuVoice/actions/runs/45677808802) — **success** на этой же версии кода. Workflow запускает JVM-тесты, но не собирает APK.
 
 Эти тесты не заменяют запуск на компьютере с настоящей EPUB и ручную проверку на телефоне.
 
