@@ -60,3 +60,24 @@ This supports the original English stress pattern but does not determine how the
 - It does not clear the 16-key conflict or change any dictionary data.
 
 **Disposition:** all 16 remain withheld pending exact-context review and an independent Russian pronunciation judgement. The audit now has a supported reason for withholding them rather than an unresolved raw duplicate alone.
+
+
+## Additional direct Wiktionary evidence found (2026-11-25)
+
+A direct Russian Wiktionary article for [`четырёхбедрумный`](https://ru.wiktionary.org/wiki/четырёхбедрумный) changes the evidence balance and should be considered alongside the academic usage studies above:
+
+- The article's full declension table marks the family consistently as `четырёхбе́друмный`, `четырёхбе́друмная`, `четырёхбе́друмно`, etc. Its IPA gives primary stress on `бед-`: `[t͡ɕɪtɨˌrʲɵɣˈbɛdrʊmnɨɪ̯]`.
+- The page history shows the form with stress on `бе́д-` already in the original entry dated 2016-07-11; the current version was last edited 2024-11-02. The stress placement is therefore not a one-day or recent edit.
+- The entry explicitly labels the word `неол.`, `жарг.`; it has no usage example, no bibliography, and is flagged as needing work on pronunciation and related information. It is a direct lexicographic attestation, but not a fully sourced normative pronunciation authority.
+
+### Revised assessment
+
+There is now a **best-supported provisional candidate** for the exact hybrid: stress the first syllable of the borrowed base, `четырёхбе́друм-` (project notation `четырёхб+едрум-`). This agrees with the Wiktionary paradigm and with the English source `bedroom` primary stress. It does not support the competing `четырёхбедр+ум-` pattern in the 13 forms.
+
+For the three same-position spellings, Wiktionary uses `е` (`бедрум`), not hard `э`; this is the spelling to prefer in a provisional candidate. The exact sound is transcribed with /ɛ/ in the current IPA, which is not itself a reason to respell the word with `э` in Russian.
+
+**Disposition remains WITHHOLD from the global/approved dictionary pending a human Russian pronunciation review.** The new Wiktionary evidence is strong enough to nominate `четырёхб+едрум…` as the provisional stress pattern for a book-specific candidate, but the article's own quality flags and lack of example/audio prevent calling the norm independently verified. Do not silently export it. Obtain an independent reading of the exact book sentence or a recording before promotion.
+
+### Provenance discrepancy
+
+The header in `tools/lib_names.txt` describes its candidates as absent from AOT/Wiktionary. Yet a Russian Wiktionary article for the exact lemma has existed since 2016. This indicates a coverage/provenance gap in the source-scan or candidate-generation process. Do not treat the header's “not in Wiktionary” statement as proven for this lemma; record the direct article URL whenever this family is reviewed.
