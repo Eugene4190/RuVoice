@@ -34,6 +34,37 @@ class StressDictionaryTests(unittest.TestCase):
             self.assertEqual([row.word for row in rows], ["творог"])
             self.assertEqual(len(rejected), 2)
 
+    def test_malformed_source_rows_are_reported_instead_of_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.txt"
+            source.write_text(
+                "# header\\n"
+                "замок = з+амок\\n"
+                "строка без разделителя\\n"
+                "молоко = мол+око лишний_текст\\n",
+                encoding="utf-8",
+            )
+            accepted, rejected = tool.read_source_list(source, "test-source")
+            self.assertEqual([row.word for row in accepted], ["замок"])
+            self.assertEqual(len(rejected), 2)
+            self.assertIn("строка 3", rejected[0].reason)
+            self.assertIn("строка 4", rejected[1].reason)
+            self.assertIn("лишний_текст", rejected[1].note)
+
+    def test_malformed_candidate_rows_are_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "stress_candidates.txt"
+            source.write_text(
+                "творог = твор+ог  # 5, v5: тв+орог\\n"
+                "битая строка\\n",
+                encoding="utf-8",
+            )
+            accepted, rejected = tool.read_consensus_candidates(source, 3)
+            self.assertEqual([row.word for row in accepted], ["творог"])
+            self.assertEqual(len(rejected), 1)
+            self.assertEqual(rejected[0].source, "stress_candidates")
+            self.assertIn("строка 2", rejected[0].reason)
+
     def test_first_source_wins_over_later_source(self):
         first = [tool.Entry("замок", "з+амок", "stage4.9")]
         later = [tool.Entry("замок", "зам+ок", "upstream")]

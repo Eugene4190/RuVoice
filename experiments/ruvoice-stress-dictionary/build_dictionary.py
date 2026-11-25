@@ -76,6 +76,25 @@ def parse_assignment(line: str) -> tuple[str, str, str] | None:
     return word.strip().lower(), marked.strip().lower(), (note or "").strip()
 
 
+def malformed_assignment_rejection(line: str, number: int, label: str) -> Rejected:
+    """Preserve malformed non-comment source rows in the review report."""
+    raw = line.strip()
+    if "=" in raw:
+        word, value = raw.split("=", 1)
+        word = word.strip().lower()
+        value = value.split("#", 1)[0].strip()
+        marked = value.split()[0].lower() if value else ""
+    else:
+        word, marked = raw, ""
+    return Rejected(
+        word,
+        marked,
+        label,
+        f"строка {number}: некорректный формат; ожидалось «слово = ударение»",
+        raw,
+    )
+
+
 def read_source_list(path: Path, label: str) -> tuple[list[Entry], list[Rejected]]:
     accepted: list[Entry] = []
     rejected: list[Rejected] = []
@@ -84,8 +103,11 @@ def read_source_list(path: Path, label: str) -> tuple[list[Entry], list[Rejected
     except UnicodeDecodeError as exc:
         raise ValueError(f"{path}: ожидается UTF-8: {exc}") from exc
     for number, line in enumerate(lines, 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
         parsed = parse_assignment(line)
         if not parsed:
+            rejected.append(malformed_assignment_rejection(line, number, label))
             continue
         word, marked, note = parsed
         reason = validate_entry(word, marked)
@@ -104,8 +126,11 @@ def read_consensus_candidates(path: Path, minimum: int) -> tuple[list[Entry], li
     except UnicodeDecodeError as exc:
         raise ValueError(f"{path}: ожидается UTF-8: {exc}") from exc
     for number, line in enumerate(lines, 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
         parsed = parse_assignment(line)
         if not parsed:
+            rejected.append(malformed_assignment_rejection(line, number, "stress_candidates"))
             continue
         word, marked, note = parsed
         count = COUNT_RE.match(note)
