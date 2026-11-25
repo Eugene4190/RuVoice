@@ -110,7 +110,7 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
         root = Path(__file__).resolve().parent
         review_file = root / "reports" / "ruwiktionary-four-bedroom-provisional.tsv"
         with review_file.open(encoding="utf-8", newline="") as stream:
-            rows = list(csv.DictReader(stream, delimiter="\\t"))
+            rows = list(csv.DictReader(stream, delimiter="\t"))
 
         expected_surfaces = {
             "четырёхбедрумна",
