@@ -63,6 +63,16 @@ jobs:
           print("TORCH_LITE_LOADER=AVAILABLE")
           PY
 
+      - name: Install independent character-level stress model
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir numpy==1.26.4 pandas==2.2.3 tqdm==4.67.1 ruaccent-predictor==1.2.0
+          python - <<'PY'
+          from ruaccent import load_accentor
+          print("THIRD_STRESS_MODEL_IMPORT=OK")
+          PY
+
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -245,6 +255,29 @@ jobs:
             --quality-occurrences private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv \
             --reviewed-overrides private-files/paired_eval/book_reviewed_overrides.txt \
             --output-dir private-files/ruvoice-full-book-stress-audit
+
+      - name: Run independent character-level stress model over every book segment
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/audit_book_third_model.py
+          python private-files/paired_eval/audit_book_third_model.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --output-dir private-files/ruvoice-third-model-audit \
+            --batch-size 8 --max-chars 220
+
+      - name: Upload independent third-model whole-book audit
+        if: always() && hashFiles('private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-third-model-whole-book-audit
+          path: |
+            private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json
+            private-files/ruvoice-third-model-audit/Book_Third_Model_AllOccurrences.tsv
+            private-files/ruvoice-third-model-audit/Book_Third_Model_Disagreements.tsv
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload the whole-book stress review with short text contexts
         if: always() && hashFiles('private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv') != ''
