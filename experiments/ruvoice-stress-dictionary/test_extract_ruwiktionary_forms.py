@@ -121,35 +121,35 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             article(
                 "замок",
                 "noun",
-                [{"form": "за\u0301мок", "tags": tags}],
+                [{"form": "за\\u0301мок", "tags": tags}],
                 tags=["masculine"],
                 senses=[{"glosses": ["укреплённое жилище"], "tags": ["masculine"]}],
             ),
             article(
                 "замок",
                 "noun",
-                [{"form": "за\u0301мок", "tags": tags}],
+                [{"form": "за\\u0301мок", "tags": tags}],
                 tags=["masculine"],
                 senses=[{"glosses": ["устройство для запирания"], "tags": ["masculine"]}],
             ),
         ]
-        result = tool.extract_jsonl(lines)
-
-        # The compact stress TSV can merge identical lemma/POS/form-tag descriptors,
-        # but the context stream must keep both source senses.
-        self.assertEqual(
-            result.forms["замок"]["з+амок"],
-            {"замок:noun:nominative,singular"},
-        )
-        self.assertEqual(len(result.contexts["замок"]["з+амок"]), 2)
 
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "contexts.jsonl"
-            tool.write_context_jsonl(output, result)
+            with output.open("w", encoding="utf-8", newline="\\n") as stream:
+                result = tool.extract_jsonl(lines, stream)
             records = [
                 json.loads(line)
                 for line in output.read_text(encoding="utf-8").splitlines()
             ]
+
+        # The compact stress TSV may merge identical descriptors, but the streamed
+        # context data must keep both source senses without retaining them in memory.
+        self.assertEqual(
+            result.forms["замок"]["з+амок"],
+            {"замок:noun:nominative,singular"},
+        )
+        self.assertEqual(result.context_record_count, 2)
         self.assertEqual(len(records), 2)
         self.assertEqual(
             {record["senses"][0]["glosses"][0] for record in records},
@@ -219,10 +219,12 @@ class RussianWiktionaryExtractorTests(unittest.TestCase):
             with gzip.open(source, "wt", encoding="utf-8") as stream:
                 stream.write("\n".join(lines) + "\n")
 
-            with tool.open_jsonl(source) as stream:
-                result = tool.extract_jsonl(stream)
+            with (
+                tool.open_jsonl(source) as stream,
+                context_output.open("w", encoding="utf-8", newline="\\n") as context_stream,
+            ):
+                result = tool.extract_jsonl(stream, context_stream)
             tool.write_tsv(output, result)
-            tool.write_context_jsonl(context_output, result)
             metadata = tool.build_manifest(
                 source,
                 output,
