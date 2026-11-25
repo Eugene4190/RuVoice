@@ -131,13 +131,13 @@ class PersonalBookWorkflowTests(unittest.TestCase):
         private = self.root / "recovery-private"
         master, state_dir, _ = workflow._ensure_private_store(private)
         system = self.root / "system-recovery.txt"
-        system.write_text("# empty system dictionary\\n", encoding="utf-8")
+        system.write_text("# empty system dictionary\n", encoding="utf-8")
         work = private / "work" / ("a" * 64)
         work.mkdir(parents=True)
         candidate_file = work / "Book_AutoStress_Candidates.txt"
-        candidate_file.write_text("молоко мол+око\\n", encoding="utf-8")
+        candidate_file.write_text("молоко мол+око\n", encoding="utf-8")
         selected_file = work / "approve_words.txt"
-        selected_file.write_text("молоко\\n", encoding="utf-8")
+        selected_file.write_text("молоко\n", encoding="utf-8")
         pending_path = state_dir / workflow.PENDING_NAME
         workflow._atomic_json(pending_path, {
             "book_sha256": "a" * 64,
