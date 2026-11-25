@@ -362,6 +362,13 @@ jobs:
           print("FINAL_MANUAL_OVERRIDES=" + str(summary.get("manual_book_override_count", 0)))
           print("FINAL_AUTO_OVERRIDES=" + str(summary.get("automatic_book_override_count", 0)))
           PY
+          python -m py_compile private-files/paired_eval/package_ruvoice_import.py private-files/paired_eval/test_package_ruvoice_import.py
+          python private-files/paired_eval/package_ruvoice_import.py \
+            --book private-files/8.Iskusstvo..epub \
+            --quality-dir private-files/ruvoice-final-book-quality \
+            --replacements private-files/ruvoice-final-book-quality/Book_Importable_Replacements.txt \
+            --output private-files/ruvoice-final-book-quality/RuVoice_Book_Import.zip
+
 
       - name: Upload final whole-book result and import dictionaries
         if: always() && hashFiles('private-files/ruvoice-final-book-quality/WholeBook_RuVoice_Quality_Summary.json') != ''
@@ -369,9 +376,7 @@ jobs:
         with:
           name: ruvoice-final-book-import-package
           path: |
-            private-files/ruvoice-final-book-quality/Book_Importable_Stress_Overrides.txt
-            private-files/ruvoice-final-book-quality/Book_Importable_Replacements.txt
-            private-files/ruvoice-final-book-quality/Book_Unresolved_OOV_Review.txt
+            private-files/ruvoice-final-book-quality/RuVoice_Book_Import.zip
             private-files/ruvoice-final-book-quality/WholeBook_RuVoice_Quality_Summary.json
           if-no-files-found: error
           retention-days: 30
