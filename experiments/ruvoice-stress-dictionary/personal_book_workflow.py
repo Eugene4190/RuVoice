@@ -250,7 +250,7 @@ def _literal_phrase_pattern(key: str) -> re.Pattern[str] | None:
     if not all(re.fullmatch(r"[A-Za-zА-Яа-яЁё-]+", word) for word in words):
         return None
     return re.compile(
-        r"(?<![\\w])" + r"\\s+".join(re.escape(word) for word in words) + r"(?![\\w])",
+        r"(?<![\w])" + r"\s+".join(re.escape(word) for word in words) + r"(?![\w])",
         re.IGNORECASE | re.UNICODE,
     )
 
@@ -297,7 +297,7 @@ def _build_book_replacements(
                 pattern = _literal_phrase_pattern(key)
                 if pattern is None or not pattern.search(book_text):
                     continue
-            normalized_key = re.sub(r"\\s+", " ", key.lower())
+            normalized_key = re.sub(r"\s+", " ", key.lower())
             previous = by_key.get(normalized_key)
             if previous is not None:
                 if previous[0] != value:
@@ -322,13 +322,13 @@ def _build_book_replacements(
     add_lines(user_lines, "user_supplied_for_this_book")
 
     header = "# Контекстные замены только для этой книги. Не объединять с глобальным Системный.txt.\\n"
-    content = header + "".join(line + "\\n" for line in selected)
+    content = header + "".join(line + "\n" for line in selected)
     return content, review, auto_count
 
 
 def _write_replacement_review(path: Path, rows: list[list[str]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.writer(stream, delimiter="\\t")
+        writer = csv.writer(stream, delimiter="\t")
         writer.writerow(["key", "replacement_or_conflict", "source", "status", "reason"])
         writer.writerows(rows)
 
