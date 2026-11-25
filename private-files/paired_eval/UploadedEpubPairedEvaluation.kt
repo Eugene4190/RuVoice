@@ -65,10 +65,16 @@ private fun parseBookPhraseTargets(lines: List<String>): List<BookPhraseTarget> 
     return result.distinct()
 }
 
-private fun phraseOccurs(phrase: String, text: String): Boolean {
+private fun phraseOccurrenceCount(phrase: String, text: String): Int {
     val whitespaceFlexible = Regex.escape(phrase).replace(" ", "\\s+")
-    return Regex("(?i)(?<![а-яё])$whitespaceFlexible(?![а-яё])").containsMatchIn(text)
+    return Regex("(?i)(?<![а-яё])$whitespaceFlexible(?![а-яё])").findAll(text).count()
 }
+
+private fun wholeWordOccurrenceCount(word: String, text: String): Int =
+    Regex("(?i)(?<![а-яё])${Regex.escape(word)}(?![а-яё])").findAll(text).count()
+
+private fun phraseOccurs(phrase: String, text: String): Boolean =
+    phraseOccurrenceCount(phrase, text) > 0
 
 
 private fun localName(node: Node): String =
@@ -1272,8 +1278,14 @@ class UploadedEpubPairedEvaluationTest {
                     val beforePosition = stressPosition(beforeWord)
                     val reviewedPosition = stressPosition(reviewedWord)
                     val expectedVariant = allBookOverrides[beforeKey]
+                    // segment.text is already transformed by the production planner; a phrase
+                    // replacement can therefore make the original key impossible to find there.
+                    // Match against the original paragraph and require every occurrence of this
+                    // source word in that paragraph to belong to this exact reviewed phrase.
                     val phraseTarget = bookPhraseTargets.firstOrNull { target ->
-                        target.sourceWord == beforeKey && phraseOccurs(target.phrase, segment.text)
+                        val phraseCount = phraseOccurrenceCount(target.phrase, segment.sourceContext)
+                        target.sourceWord == beforeKey && phraseCount > 0 &&
+                            phraseCount == wholeWordOccurrenceCount(target.sourceWord, segment.sourceContext)
                     }
                     if (expectedVariant != null) {
                         val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
