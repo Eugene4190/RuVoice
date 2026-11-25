@@ -43,12 +43,22 @@ SKIP_TAGS = {
 class Extraction:
     # surface -> marked form -> source descriptors
     forms: dict[str, dict[str, set[str]]]
+    # surface -> marked form -> JSON-encoded source-context records
+    contexts: dict[str, dict[str, set[str]]]
     russian_article_count: int
     skipped_form_count: int
 
     @property
     def multi_variant_surface_count(self) -> int:
         return sum(1 for variants in self.forms.values() if len(variants) > 1)
+
+    @property
+    def context_record_count(self) -> int:
+        return sum(
+            len(records)
+            for variants in self.contexts.values()
+            for records in variants.values()
+        )
 
 
 def strip_stress_marks(value: str) -> str:
@@ -99,6 +109,7 @@ def _normalised_form(value: str) -> str:
 def extract_jsonl(lines: Iterable[str]) -> Extraction:
     """Parse Wiktextract JSONL without retaining raw article objects."""
     table: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    contexts: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     russian_article_count = 0
     skipped_form_count = 0
 
@@ -165,8 +176,59 @@ def extract_jsonl(lines: Iterable[str]) -> Extraction:
             descriptor = f"{lemma}:{pos}:{','.join(tags)}"
             table[surface][marked].add(descriptor)
 
+            # Keep the lexicographic context alongside the compact form TSV.
+            # Two homographic entries may share a surface, POS and form tags
+            # while having different senses, etymologies or pronunciation data.
+            entry_tags = article.get("tags")
+            categories = article.get("categories")
+            topics = article.get("topics")
+            raw_senses = article.get("senses")
+            sense_context = []
+            if isinstance(raw_senses, list):
+                for sense in raw_senses:
+                    if not isinstance(sense, dict):
+                        continue
+                    selected = {
+                        key: sense[key]
+                        for key in (
+                            "glosses", "raw_glosses", "tags", "topics",
+                            "categories", "examples", "senseid", "wikidata",
+                        )
+                        if key in sense
+                    }
+                    if selected:
+                        sense_context.append(selected)
+
+            context_record = {
+                "source_line": line_number,
+                "surface": surface,
+                "marked": marked,
+                "source_form": raw_form,
+                "lemma": lemma,
+                "part_of_speech": pos,
+                "form_tags": list(tags),
+                "entry_tags": entry_tags if isinstance(entry_tags, list) else [],
+                "categories": categories if isinstance(categories, list) else [],
+                "topics": topics if isinstance(topics, list) else [],
+                "senses": sense_context,
+                "etymology_number": article.get("etymology_number"),
+                "etymology_text": article.get("etymology_text"),
+                "sounds": article.get("sounds") if isinstance(article.get("sounds"), list) else [],
+                "form_ipa": item.get("ipa"),
+                "form_source": item.get("source"),
+            }
+            contexts[surface][marked].add(
+                json.dumps(
+                    context_record,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+
     return Extraction(
         forms={word: dict(variants) for word, variants in table.items()},
+        contexts={word: dict(variants) for word, variants in contexts.items()},
         russian_article_count=russian_article_count,
         skipped_form_count=skipped_form_count,
     )
@@ -198,14 +260,25 @@ def write_tsv(path: Path, extraction: Extraction) -> None:
             output.write(surface + "\t" + "\t".join(columns) + "\n")
 
 
+def write_context_jsonl(path: Path, extraction: Extraction) -> None:
+    """Write one row per source context, retaining senses and pronunciation evidence."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\\n") as output:
+        for surface in sorted(extraction.contexts):
+            for marked in sorted(extraction.contexts[surface]):
+                for context_json in sorted(extraction.contexts[surface][marked]):
+                    output.write(context_json + "\\n")
+
+
 def build_manifest(
     input_path: Path,
     output_path: Path,
     dump_date: str,
     input_sha256: str,
     extraction: Extraction,
+    context_path: Path | None = None,
 ) -> dict[str, object]:
-    return {
+    metadata: dict[str, object] = {
         "schema_version": 1,
         "source_edition": "Russian-language Wiktionary (ru.wiktionary.org)",
         "source_dump_date": dump_date,
@@ -221,8 +294,15 @@ def build_manifest(
         "surface_forms_with_multiple_stress_variants": extraction.multi_variant_surface_count,
         "skipped_form_count": extraction.skipped_form_count,
         "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "context_record_count": extraction.context_record_count,
         "review_policy": "separate source stream; do not auto-merge or export to production",
     }
+    if context_path is not None:
+        metadata.update({
+            "context_output_file": context_path.name,
+            "context_output_sha256": hashlib.sha256(context_path.read_bytes()).hexdigest(),
+        })
+    return metadata
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -234,6 +314,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Date of the source ruwiktionary dump, YYYY-MM-DD (for example 2026-11-01)",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--context-output",
+        type=Path,
+        default=ROOT / ".work" / "ruwiktionary_forms_context.jsonl",
+    )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     return parser.parse_args(argv)
 
@@ -248,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         with open_jsonl(args.input) as source:
             extraction = extract_jsonl(source)
         write_tsv(args.output, extraction)
+        write_context_jsonl(args.context_output, extraction)
 
         manifest = build_manifest(
             args.input,
@@ -255,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             args.dump_date,
             input_sha256,
             extraction,
+            args.context_output,
         )
         args.manifest.parent.mkdir(parents=True, exist_ok=True)
         args.manifest.write_text(
