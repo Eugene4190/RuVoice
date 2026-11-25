@@ -182,7 +182,7 @@ def extract_jsonl(lines: Iterable[str], context_writer: TextIO | None = None) ->
                     selected = {
                         key: sense[key]
                         for key in (
-                            "glosses", "raw_glosses", "tags", "topics",
+                            "glosses", "raw_glosses", "tags", "raw_tags", "topics",
                             "categories", "examples", "senseid", "wikidata",
                         )
                         if key in sense
@@ -198,7 +198,9 @@ def extract_jsonl(lines: Iterable[str], context_writer: TextIO | None = None) ->
                 "lemma": lemma,
                 "part_of_speech": pos,
                 "form_tags": list(tags),
+                "form_raw_tags": item.get("raw_tags") if isinstance(item.get("raw_tags"), list) else [],
                 "entry_tags": entry_tags if isinstance(entry_tags, list) else [],
+                "entry_raw_tags": article.get("raw_tags") if isinstance(article.get("raw_tags"), list) else [],
                 "categories": categories if isinstance(categories, list) else [],
                 "topics": topics if isinstance(topics, list) else [],
                 "senses": sense_context,
