@@ -158,13 +158,13 @@ class AutomaticBookOverrideTests(unittest.TestCase):
 
     def test_excludes_function_words_and_yo_spellings(self):
         tokens = [
-            {"segment_index": 0, "word_index": 0, "source_word": "слово", "ruvoice_output": "сло+во",
+            {"segment_index": 0, "word_index": 0, "source_word": "когда", "ruvoice_output": "ко+гда",
              "ruvoice_stress_vowel_index": 0, "chapter": "Г", "paragraph": 1},
             {"segment_index": 0, "word_index": 1, "source_word": "всё", "ruvoice_output": "всё",
              "ruvoice_stress_vowel_index": 0, "chapter": "Г", "paragraph": 1},
         ]
         combined = [
-            {"segment_index": 0, "word_index": 0, "ruaccent_merged_output": "сло́во", "ruaccent_stress_vowel_index": 1},
+            {"segment_index": 0, "word_index": 0, "ruaccent_merged_output": "когда́", "ruaccent_stress_vowel_index": 1},
             {"segment_index": 0, "word_index": 1, "ruaccent_merged_output": "всё", "ruaccent_stress_vowel_index": 0},
         ]
         quality = {
