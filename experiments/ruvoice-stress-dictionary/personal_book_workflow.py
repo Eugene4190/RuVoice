@@ -42,6 +42,7 @@ PENDING_NAME = "pending_approval.json"
 # and reviewed. It must never leak into the global append-only master.
 REFERENCE_BOOK_SHA256 = "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
 BOOK_REVIEWED_OVERRIDES_PATH = REPO_ROOT / "private-files/paired_eval/book_reviewed_overrides.txt"
+BOOK_TEXT_CLEANUP_PATH = REPO_ROOT / "private-files/paired_eval/book_reviewed_text_cleanup.txt"
 BOOK_REFERENCE_AUDIT_FILES = (
     (REPO_ROOT / "private-files/paired_eval/book_context_acceptances.tsv", "Book_Context_Acceptances.tsv"),
     (REPO_ROOT / "private-files/paired_eval/BOOK_REVIEWED_OVERRIDES.md", "Book_Reviewed_Overrides_Notes.md"),
@@ -384,6 +385,31 @@ def _build_reviewed_stress_overrides(
     return content, len(selected)
 
 
+def _build_book_text_cleanup(book: Path, book_sha256: str) -> tuple[str, int]:
+    """Select token-boundary corrections for the exact reference EPUB; keep separate from stress rules."""
+    header = (
+        "# Необязательные текстовые исправления только для книги «Искусство».\n"
+        "# Это не словарь ударений: правила исправляют случайно склеенные слова.\n"
+        "# Импортируйте отдельно во вкладку «Замены» только если хотите исправить эти опечатки.\n"
+    )
+    if book_sha256 != REFERENCE_BOOK_SHA256 or not BOOK_TEXT_CLEANUP_PATH.is_file():
+        return header, 0
+    book_text = extract_text(book)
+    selected: list[str] = []
+    for raw in BOOK_TEXT_CLEANUP_PATH.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = _replacement_rule_parts(line)
+        if parts is None:
+            continue
+        key, _value = parts
+        pattern = _literal_phrase_pattern(key)
+        if pattern is not None and pattern.search(book_text):
+            selected.append(line)
+    return header + "".join(line + "\n" for line in selected), len(selected)
+
+
 def _copy_reference_audit_files(book_sha256: str, output_dir: Path) -> list[Path]:
     """Copy human review evidence only for the exact book hash it describes."""
     if book_sha256 != REFERENCE_BOOK_SHA256:
@@ -620,6 +646,10 @@ def process_book(
             if line.strip() and not line.lstrip().startswith("#")
         ]
         has_replacements = bool(replacement_lines)
+        text_cleanup_filename = f"{book_stem}_Text_Cleanup.txt"
+        text_cleanup_path = builder_output / text_cleanup_filename
+        text_cleanup_content, text_cleanup_count = _build_book_text_cleanup(book, digest)
+        _atomic_text(text_cleanup_path, text_cleanup_content)
         replacement_review_path = builder_output / "Book_Replacements_Review.tsv"
         _write_replacement_review(replacement_review_path, replacement_review_rows)
         history = _load_json(history_path, {"schema_version": 1, "books": {}})
@@ -657,6 +687,8 @@ def process_book(
             "auto_selected_reviewed_phrase_rules": auto_phrase_count,
             "book_reviewed_override_count": reviewed_override_count,
             "book_reviewed_override_is_separate_from_cumulative_master": True,
+            "book_text_cleanup_rule_count": text_cleanup_count,
+            "book_text_cleanup_is_separate_from_stress_dictionary": True,
             "book_reference_audit_files": [path.name for path in reference_audit_files],
             "book_text_included_in_package": False,
         }
@@ -674,6 +706,13 @@ def process_book(
                     "отдельным списком во вкладку «Ударения». Он подготовлен только для этой книги "
                     "и намеренно не включён в MyBooks_Cumulative.txt. Не переносите его в глобальный Системный.txt.\n"
                 )
+        if text_cleanup_count:
+            with guide_path.open("a", encoding="utf-8", newline="\n") as stream:
+                stream.write(
+                    f"\nТЕКСТОВЫЕ ОПЕЧАТКИ: {text_cleanup_filename} содержит {text_cleanup_count} "
+                    "правила восстановления пробела в случайно склеенных словах. Это не ударения; "
+                    "импортируйте файл отдельно во вкладку «Замены» только при необходимости.\n"
+                )
         if reference_audit_files:
             with guide_path.open("a", encoding="utf-8", newline="\n") as stream:
                 stream.write(
@@ -687,7 +726,7 @@ def process_book(
         archive_path = package_dir / f"{_safe_stem(Path(display_name).stem)}-{digest[:10]}.zip"
         include = [
             delta_path, snapshot_path, history_snapshot, replacement_path, replacement_review_path,
-            reviewed_override_path, *reference_audit_files,
+            reviewed_override_path, text_cleanup_path, *reference_audit_files,
             guide_path, report_path, builder_output / "Book_AutoStress_Review.tsv",
             builder_output / "Book_Unresolved_Words.tsv",
         ]
