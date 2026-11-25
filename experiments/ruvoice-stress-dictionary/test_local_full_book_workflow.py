@@ -13,6 +13,41 @@ from local_full_book_workflow import _jar_contains
 
 
 class DesktopRuntimeJarValidationTests(unittest.TestCase):
+    def test_local_runner_invokes_the_original_ruvoice_junit_test(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            book = root / "book.epub"
+            book.write_bytes(b"epub-stub")
+            work = root / "work"
+            work.mkdir()
+            report = root / "paired.json"
+            paths = {
+                "java": root / "java.exe",
+                "project": root / "project",
+                "classes": root / "classes",
+                "libs": root / "lib",
+                "silero": root / "silero",
+                "eyo": root / "eyo_safe.txt",
+                "baseline_silero_json": root / "silero_ru.json",
+                "torch_script": root / "torch_lite_bridge.py",
+                "torch_exe": root / "RuVoiceTorchBridge.exe",
+                "native": root / "native",
+            }
+
+            def run_junit(command, **kwargs):
+                report.write_text('{"book_sha256":"expected-book-sha"}', encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+            with patch.object(workflow.subprocess, "run", side_effect=run_junit) as run:
+                workflow._run_java(
+                    paths, book, report, work, root / "private-home",
+                    "expected-book-sha", root / "replacements.txt", root / "overrides.txt",
+                )
+
+            command = run.call_args.args[0]
+            self.assertEqual(command[-2], workflow.JVM_JUNIT_LAUNCHER)
+            self.assertEqual(command[-1], workflow.JVM_PAIRED_TEST_CLASS)
+
     def test_third_model_worker_receives_mode_flag(self):
         completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
         paths = {"third_model": Path("worker.exe")}
