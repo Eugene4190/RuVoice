@@ -33,13 +33,20 @@ jobs:
             experiments/ruvoice-stress-dictionary/test_build_dictionary.py \
             experiments/ruvoice-stress-dictionary/test_analyze_book.py \
             experiments/ruvoice-stress-dictionary/test_build_book_dictionary.py \
-            experiments/ruvoice-stress-dictionary/test_approve_book_entries.py
+            experiments/ruvoice-stress-dictionary/test_approve_book_entries.py \
+            experiments/ruvoice-stress-dictionary/evaluate_gold_set.py \
+            experiments/ruvoice-stress-dictionary/test_evaluate_gold_set.py
 
       - name: Run unit tests
         run: |
           python -m unittest discover \
             -s experiments/ruvoice-stress-dictionary \
             -p "test_*.py" -v
+
+      - name: Validate independent stress gold set
+        run: |
+          python experiments/ruvoice-stress-dictionary/evaluate_gold_set.py \
+            --json-out "$RUNNER_TEMP/ruvoice-gold-seed-validation.json"
 
       - name: Compile private paired-evaluation Python tools
         run: |
