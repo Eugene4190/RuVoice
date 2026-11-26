@@ -299,6 +299,22 @@ jobs:
           if ($missing.Count -gt 0) { throw ("Missing engine files: " + ($missing -join "; ")) }
           python -c "from pathlib import Path; from zipfile import ZipFile; p=Path(r'$lib'); j=list(p.glob('*.jar')); req={'org/junit/runner/JUnitCore.class','org/json/JSONObject.class','android/util/Log.class','ai/onnxruntime/OrtEnvironment.class'}; got=set(); [got.update(req.intersection(ZipFile(x).namelist())) for x in j]; assert not req-got, sorted(req-got); assert not any('onnxruntime-android' in x.name.lower() for x in j); print('DESKTOP_JARS='+str(len(j)))"
 
+      - name: Verify the portable audit preserves the first JUnit failure
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = Join-Path $env:GITHUB_WORKSPACE "experiments\ruvoice-stress-dictionary"
+          @'
+          from local_full_book_workflow import _java_failure_summary
+          log = "prefix\nRUVOICE_AUDIT_FAILURE=syntheticTest :: expected diagnostic\n" + "\n".join(
+              f"\tat synthetic.Frame({index})" for index in range(40)
+          )
+          summary = _java_failure_summary(log)
+          assert "RUVOICE_AUDIT_FAILURE=syntheticTest :: expected diagnostic" in summary, summary
+          assert "synthetic.Frame(39)" not in summary, summary
+          print("PORTABLE_JUNIT_FAILURE_DIAGNOSTIC=PASS")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "JUnit failure diagnostic test failed" }
+
       - name: Build the local browser application executable
         shell: pwsh
         run: |
@@ -326,7 +342,7 @@ jobs:
             Copy-Item -LiteralPath (Join-Path $tool $module) -Destination (Join-Path $portableRoot $module) -Force
           }
 
-      - name: Smoke-test a synthetic EPUB upload through the complete local engine
+      - name: Smoke-test a synthetic EPUB upload and report exact production failure
         shell: pwsh
         run: |
           $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
