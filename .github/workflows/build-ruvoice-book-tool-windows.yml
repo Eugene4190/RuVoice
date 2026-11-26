@@ -14,7 +14,7 @@ on:
       - "private-files/8.Iskusstvo..epub"
       - "private-files/paired_eval/package_ruvoice_import.py"
       - "private-files/paired_eval/test_package_ruvoice_import.py"
-      - "private-files/paired_eval/UploadedEpubPairedEvaluation.kt"
+      - "private-files/paired_eval/**"
       - "experiments/ruvoice-stress-dictionary/local_full_book_workflow.py"
       - "experiments/ruvoice-stress-dictionary/private_book_server.py"
   workflow_dispatch:
