@@ -89,20 +89,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The Android plugin generates its mockable android.jar via a separate global task.
-          gradle --no-daemon --stacktrace :app:mockableAndroidJar
           gradle --no-daemon --stacktrace :app:assembleDesktopAuditRuntime
           test -s app/build/desktop-audit/classes/ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class
-      - name: Diagnose mockable Android JAR output
-        if: always()
-        working-directory: project/ruvoice-1.1.3-stage4.9
-        shell: bash
-        run: |
-          echo "MOCKABLE_ANDROID_FILES_BEGIN"
-          find app/build -type f -iname '*mockable*.jar' -print 2>/dev/null || true
-          echo "DESKTOP_RUNTIME_JARS_BEGIN"
-          find app/build/desktop-audit/lib -maxdepth 1 -type f -name '*.jar' -printf '%f\\n' 2>/dev/null || true
-          echo "MOCKABLE_ANDROID_FILES_END"
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          jars = list(Path("app/build/desktop-audit/lib").glob("*.jar"))
+          required = {
+              "org/junit/runner/JUnitCore.class",
+              "org/json/JSONObject.class",
+              "android/util/Log.class",
+          }
+          found = set()
+          for jar in jars:
+              try:
+                  with ZipFile(jar) as archive:
+                      found.update(required.intersection(archive.namelist()))
+              except Exception:
+                  pass
+          missing = required - found
+          if missing:
+              raise SystemExit("Desktop JVM bundle is missing: " + ", ".join(sorted(missing)))
+          print("DESKTOP_RUNTIME_JARS=" + str(len(jars)))
+          print("DESKTOP_RUNTIME_ANDROID_MOCKABLE=OK")
+          PY
 
       - name: Run focused Full and Lite JVM tests (no APK build)
         working-directory: project/ruvoice-1.1.3-stage4.9
