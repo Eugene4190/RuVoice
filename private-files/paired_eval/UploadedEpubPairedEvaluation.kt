@@ -560,7 +560,10 @@ private class PairedTorchLiteStressModels(
         writer.write(value.toString())
         writer.newLine()
         writer.flush()
-        val line = reader.readLine() ?: error("Torch Lite bridge closed stdout")
+        val line = reader.readLine() ?: run {
+            val exit = if (process.isAlive) "still_running" else runCatching { process.exitValue().toString() }.getOrDefault("unknown")
+            error("Torch Lite bridge closed stdout (process_exit=$exit, request=${value.optString(\"op\")})")
+        }
         val result = JSONObject(line)
         if (result.has("error")) error(result.getString("error"))
         return result
