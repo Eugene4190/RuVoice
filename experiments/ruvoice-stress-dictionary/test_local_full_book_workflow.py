@@ -107,6 +107,51 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
                 workflow.JVM_ENTRYPOINT,
                 "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationMain",
             )
+            env = run.call_args.kwargs["env"]
+            self.assertEqual(
+                env["RUVOICE_TORCH_BRIDGE_LOG"],
+                str(work / "torch-lite-bridge.log"),
+            )
+
+    def test_worker_diagnostics_are_appended_when_the_original_ruvoice_pass_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            book = root / "book.epub"
+            book.write_bytes(b"epub-stub")
+            work = root / "work"
+            work.mkdir()
+            report = root / "paired.json"
+            paths = {
+                "java": root / "java.exe",
+                "project": root / "project",
+                "classes": root / "classes",
+                "libs": root / "lib",
+                "silero": root / "silero",
+                "eyo": root / "eyo_safe.txt",
+                "baseline_silero_json": root / "silero_ru.json",
+                "torch_script": root / "torch_lite_bridge.py",
+                "torch_exe": root / "RuVoiceModelWorker.exe",
+                "native": root / "native",
+            }
+
+            def fail_after_worker_log(command, **kwargs):
+                env = kwargs["env"]
+                Path(env["RUVOICE_TORCH_BRIDGE_LOG"]).write_text(
+                    "TORCH_BRIDGE_DIAGNOSTIC=REQUEST_BEGIN line=1 op=accentor words=2\\n"
+                    "TORCH_BRIDGE_DIAGNOSTIC=REQUEST_ERROR line=1 RuntimeError: invalid input\\n",
+                    encoding="utf-8",
+                )
+                return subprocess.CompletedProcess(command, 1, stdout="", stderr="")
+
+            with patch.object(workflow.subprocess, "run", side_effect=fail_after_worker_log):
+                with self.assertRaises(RuntimeError) as raised:
+                    workflow._run_java(
+                        paths, book, report, work, root / "private-home",
+                        "expected-book-sha", root / "replacements.txt", root / "overrides.txt",
+                    )
+            self.assertIn("TORCH_LITE_BRIDGE_DIAGNOSTICS", str(raised.exception))
+            self.assertIn("REQUEST_ERROR", str(raised.exception))
+            self.assertIn("invalid input", str(raised.exception))
 
     def test_third_model_worker_receives_mode_flag(self):
         completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
