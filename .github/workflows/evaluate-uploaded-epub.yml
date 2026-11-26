@@ -1,17 +1,8 @@
 name: Paired baseline vs RUAccent evaluation on uploaded EPUB
 
+# The reference EPUB is personal data. Never run it from automatic pushes.
+# Manual dispatch is also guarded below until this repository is private.
 on:
-  push:
-    branches:
-      - stress-dictionary-pipeline
-    paths:
-      - ".github/workflows/evaluate-uploaded-epub.yml"
-      - "private-files/paired_eval/UploadedEpubPairedEvaluation.kt"
-      - "private-files/paired_eval/RuAccentBridge.kt"
-      - "private-files/paired_eval/full_book_ruvoice_quality.py"
-      - "private-files/paired_eval/audit_book_third_model.py"
-      - "private-files/paired_eval/package_ruvoice_import.py"
-      - "project/ruvoice-1.1.3-stage4.9/app/build.gradle.kts"
   workflow_dispatch:
 
 
@@ -29,7 +20,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Check out private repository and uploaded book
+      - name: Refuse to process a personal EPUB from a public repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repository_private="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.private')"
+          echo "REPOSITORY_PRIVATE=${repository_private}"
+          if [[ "${repository_private}" != "true" ]]; then
+            echo "::error::This workflow uses a personal EPUB. Make the repository private before running the book audit."
+            exit 1
+          fi
+
+      - name: Check out the private repository and uploaded book
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
