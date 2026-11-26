@@ -109,7 +109,8 @@ afterEvaluate {
         from(layout.buildDirectory.dir("intermediates/javac/fullDebugUnitTest/compileFullDebugUnitTestJavaWithJavac/classes")) { into("classes") }
         from({
             fullDebugUnitTestTask.get().classpath.files.filter { file ->
-                file.isFile && file.extension.equals("jar", ignoreCase = true)
+                file.isFile && file.extension.equals("jar", ignoreCase = true) &&
+                    !file.absolutePath.contains("onnxruntime-android", ignoreCase = true)
             }
         }) { into("lib") }
         duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
