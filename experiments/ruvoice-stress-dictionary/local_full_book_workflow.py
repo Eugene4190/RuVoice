@@ -104,6 +104,37 @@ def _jar_contains(path: Path, entry: str) -> bool:
         return False
 
 
+def _desktop_java_classpath(classes: Path, libs: Path) -> str:
+    """Put the real org.json implementation before Android's mockable framework jar.
+
+    The Android mockable jar also contains org.json classes whose methods return JVM
+    defaults. A wildcard classpath makes class loading order unspecified and can make
+    JSONObject.getJSONObject() return None during the desktop audit.
+    """
+    class_dir = Path(classes)
+    lib_dir = Path(libs)
+    jars = sorted(
+        (path for path in lib_dir.glob("*.jar") if path.is_file()),
+        key=lambda path: path.name.casefold(),
+    )
+    json_libraries = [
+        path for path in jars
+        if path.name.casefold().startswith("json-")
+        and _jar_contains(path, "org/json/JSONObject.class")
+    ]
+    if not lib_dir.is_dir():
+        # Unit tests may inject only a synthetic classpath without a materialized bundle.
+        return os.pathsep.join((str(class_dir), str(lib_dir / "*")))
+    if not json_libraries:
+        raise FileNotFoundError(
+            "Не найдена отдельная JVM-библиотека org.json; Android mockable-jar "
+            "не может заменять реализацию JSON."
+        )
+    preferred_json = json_libraries[0]
+    ordered_jars = [preferred_json] + [path for path in jars if path != preferred_json]
+    return os.pathsep.join([str(class_dir), *(str(path) for path in ordered_jars)])
+
+
 def _require_runtime() -> dict[str, Path]:
     # One PyInstaller worker handles both official Silero Lite inference and the
     # independent character model. Avoid shipping two copies of the very large Torch runtime.
@@ -145,6 +176,8 @@ def _require_runtime() -> dict[str, Path]:
     jars = [path for path in paths["libs"].glob("*.jar") if path.is_file()]
     if not jars:
         raise FileNotFoundError("Не найдены JVM-зависимости локального RuVoice.")
+    # Fail before a book is accepted unless the real JSON implementation is available.
+    _desktop_java_classpath(paths["classes"], paths["libs"])
     bridge_class = paths["classes"] / "ru" / "kost" / "ruvoice" / "text" / "RuAccentBridgeKt.class"
     if not bridge_class.is_file() and not any(
         _jar_contains(jar, "ru/kost/ruvoice/text/RuAccentBridgeKt.class") for jar in jars
@@ -227,7 +260,7 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
     env.pop("RUVOICE_AUTO_BOOK_OVERRIDES", None)
     if auto_overrides is not None:
         env["RUVOICE_AUTO_BOOK_OVERRIDES"] = str(auto_overrides)
-    classpath = str(paths["classes"]) + os.pathsep + str(paths["libs"] / "*")
+    classpath = _desktop_java_classpath(paths["classes"], paths["libs"])
     env["RUACCENT_BRIDGE_CLASSPATH"] = classpath
     java = paths["java"]
     command = [
