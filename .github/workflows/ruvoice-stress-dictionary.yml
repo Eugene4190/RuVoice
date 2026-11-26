@@ -80,12 +80,12 @@ jobs:
         if: hashFiles('private-files/8.Iskusstvo..epub') != ''
         shell: bash
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          repository_private="$(gh api "repos/\${GITHUB_REPOSITORY}" --jq '.private')"
-          echo "REPOSITORY_PRIVATE=\${repository_private}"
-          if [[ "\${repository_private}" != "true" ]]; then
+          repository_private="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.private')"
+          echo "REPOSITORY_PRIVATE=${repository_private}"
+          if [[ "${repository_private}" != "true" ]]; then
             echo "::error::The reference EPUB is personal data; make this repository private before any book scan or report upload."
             exit 1
           fi
