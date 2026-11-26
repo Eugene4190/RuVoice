@@ -9,10 +9,27 @@ from pathlib import Path
 from unittest.mock import patch
 
 import local_full_book_workflow as workflow
-from local_full_book_workflow import _jar_contains
+from local_full_book_workflow import _jar_contains, _java_failure_summary
 
 
 class DesktopRuntimeJarValidationTests(unittest.TestCase):
+    def test_junit_assertion_is_preserved_instead_of_only_the_end_of_stack_trace(self):
+        log = "\n".join(
+            ["RUVOICE_AUDIT_FAILURE=compareOriginal :: source/output alignment failed"] +
+            [f"\tat test.Frame({index})" for index in range(50)]
+        )
+        summary = _java_failure_summary(log)
+        self.assertIn("RUVOICE_AUDIT_FAILURE=compareOriginal :: source/output alignment failed", summary)
+        self.assertIn("test.Frame(3)", summary)
+        self.assertNotIn("test.Frame(49)", summary)
+
+    def test_java_failure_summary_falls_back_to_last_lines_without_junit_marker(self):
+        log = "\n".join(f"line-{index}" for index in range(50))
+        summary = _java_failure_summary(log)
+        self.assertIn("line-49", summary)
+        self.assertIn("line-15", summary)
+        self.assertNotIn("line-0", summary)
+
     def test_frozen_onefile_uses_side_by_side_engine_directory(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
