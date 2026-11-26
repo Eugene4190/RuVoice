@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.util.zip.ZipFile
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("com.android.application")
@@ -90,7 +91,9 @@ androidComponents { onVariants { it.sources.assets?.addGeneratedSourceDirectory(
 afterEvaluate {
     // Runtime classpath already contains compile dependencies; resolving Android's compile
     // configuration separately can be ambiguous because it exposes multiple app variants.
-    val desktopAuditRuntimeClasspath = configurations.getByName("fullDebugUnitTestRuntimeClasspath")
+    // Android Gradle Plugin adds its transformed mockable android.jar to the Test task's
+    // classpath, not to fullDebugUnitTestRuntimeClasspath. Package that exact classpath.
+    val fullDebugUnitTestTask = tasks.named<Test>("testFullDebugUnitTest")
 
     tasks.register<Sync>("assembleDesktopAuditRuntime") {
         dependsOn(
@@ -104,9 +107,11 @@ afterEvaluate {
         from(layout.buildDirectory.dir("intermediates/javac/fullDebug/compileFullDebugJavaWithJavac/classes")) { into("classes") }
         from(layout.buildDirectory.dir("tmp/kotlin-classes/fullDebugUnitTest")) { into("classes") }
         from(layout.buildDirectory.dir("intermediates/javac/fullDebugUnitTest/compileFullDebugUnitTestJavaWithJavac/classes")) { into("classes") }
-        from(desktopAuditRuntimeClasspath) { into("lib") }
-        // AGP mockable android.jar is needed when production classes touch Android APIs on desktop.
-        from(fileTree(layout.buildDirectory).matching { include("**/mockable-android*.jar") }) { into("lib") }
+        from({
+            fullDebugUnitTestTask.get().classpath.files.filter { file ->
+                file.isFile && file.extension.equals("jar", ignoreCase = true)
+            }
+        }) { into("lib") }
         duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
         doLast {
             val root = layout.buildDirectory.dir("desktop-audit/classes").get().asFile
