@@ -1076,6 +1076,10 @@ class UploadedEpubPairedEvaluationTest {
                 }
             }
 
+            // These corpora contain exact occurrences from the reviewed reference EPUB,
+            // not general-purpose test sentences. Do not apply their book-specific expectations
+            // to unrelated uploads or to the synthetic smoke-test EPUB.
+            if (isReferenceBook) {
             // Run the five manually reviewed stress cases before the separate ё suite.
             // This makes a failure in spelling alignment unable to hide the stress-only result.
             val earlyStressFile = File(projectDir, "tools/data/ruvoice_stress_book_regressions.json")
@@ -1249,6 +1253,10 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("book_stress_regression_cases_total", stressCases.length())
             sanity.put("book_stress_regression_results", stressRegressionResults)
             println("BOOK_STRESS_END_TO_END=PASS cases=$stressRegressionPassed/${stressCases.length()}")
+
+            } else {
+                println("BOOK_REFERENCE_REGRESSION_CORPORA=SKIPPED_NON_REFERENCE_BOOK")
+            }
 
             val paragraphs = epubParagraphs(epub)
             val segments = makeProductionSegments(paragraphs, baselineData, systemReplacements, rules)
