@@ -76,8 +76,22 @@ jobs:
             -s private-files/paired_eval \
             -p "test_*.py" -v
 
-      - name: Build a book-specific supplement from the reference EPUB
+      - name: Require a private repository before processing the personal reference EPUB
         if: hashFiles('private-files/8.Iskusstvo..epub') != ''
+        shell: bash
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          set -euo pipefail
+          repository_private="$(gh api "repos/\${GITHUB_REPOSITORY}" --jq '.private')"
+          echo "REPOSITORY_PRIVATE=\${repository_private}"
+          if [[ "\${repository_private}" != "true" ]]; then
+            echo "::error::The reference EPUB is personal data; make this repository private before any book scan or report upload."
+            exit 1
+          fi
+
+      - name: Build a book-specific supplement from the reference EPUB
+        if: success() && hashFiles('private-files/8.Iskusstvo..epub') != ''
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/ruvoice-book-first"
@@ -94,7 +108,7 @@ jobs:
           PY
 
       - name: Upload book-specific candidate and aggregate reports
-        if: always() && hashFiles('private-files/8.Iskusstvo..epub') != ''
+        if: success() && hashFiles('private-files/8.Iskusstvo..epub') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ruvoice-book-first-reference-output
@@ -126,7 +140,7 @@ jobs:
           grep -Fxq 'трёхгорку трёхг+орку' "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt"
 
       - name: Scan uploaded book against Stage 4.9 correction list
-        if: hashFiles('private-files/8.Iskusstvo..epub') != ''
+        if: success() && hashFiles('private-files/8.Iskusstvo..epub') != ''
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/ruvoice-book-scan"
@@ -162,7 +176,7 @@ jobs:
           PY
 
       - name: Scan uploaded book against the complete built-in stress dictionary
-        if: hashFiles('private-files/8.Iskusstvo..epub') != ''
+        if: success() && hashFiles('private-files/8.Iskusstvo..epub') != ''
         run: |
           set -euo pipefail
           DICT="project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
