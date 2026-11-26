@@ -125,6 +125,38 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
             self.assertIn("--paired-json", command)
             self.assertIn("--quality-occurrences", command)
 
+    def test_desktop_classpath_prioritizes_real_json_over_android_mockable_jar(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            classes = root / "classes"
+            libs = root / "lib"
+            libs.mkdir()
+            json_jar = libs / "json-20240303.jar"
+            android_jar = libs / "mockable-android-35.jar"
+            with zipfile.ZipFile(json_jar, "w") as archive:
+                archive.writestr("org/json/JSONObject.class", b"real-json")
+            with zipfile.ZipFile(android_jar, "w") as archive:
+                archive.writestr("org/json/JSONObject.class", b"mockable-json")
+                archive.writestr("android/util/Log.class", b"android-log")
+
+            classpath = workflow._desktop_java_classpath(classes, libs)
+            entries = classpath.split(workflow.os.pathsep)
+            self.assertEqual(entries[0], str(classes))
+            self.assertEqual(entries[1], str(json_jar))
+            self.assertLess(entries.index(str(json_jar)), entries.index(str(android_jar)))
+
+    def test_desktop_classpath_rejects_android_json_without_real_json_library(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            classes = root / "classes"
+            libs = root / "lib"
+            libs.mkdir()
+            with zipfile.ZipFile(libs / "mockable-android-35.jar", "w") as archive:
+                archive.writestr("org/json/JSONObject.class", b"mockable-json")
+                archive.writestr("android/util/Log.class", b"android-log")
+            with self.assertRaises(FileNotFoundError):
+                workflow._desktop_java_classpath(classes, libs)
+
     def test_detects_expected_class_inside_runtime_jar(self):
         with tempfile.TemporaryDirectory() as temp:
             jar = Path(temp) / "runtime.jar"
