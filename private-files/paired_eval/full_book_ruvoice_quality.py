@@ -471,6 +471,7 @@ def main() -> int:
     reviewed_counts = Counter()
     reviewed_changed_occurrences = 0
     reviewed_changed_words: Counter[str] = Counter()
+    ruaccent_unaligned_occurrences = 0
     for token in tokens:
         source_word = token.get("source_word")
         output_word = str(token.get("ruvoice_output", ""))
@@ -481,6 +482,8 @@ def main() -> int:
         segment_index = int(token.get("segment_index", -1))
         word_index = int(token.get("word_index", -1))
         ruaccent_word = ruaccent_by_occurrence.get((segment_index, word_index), output_word)
+        if not ruaccent_word.strip():
+            ruaccent_unaligned_occurrences += 1
         reviewed_word = reviewed_by_occurrence.get((segment_index, word_index), output_word)
         context = context_by_segment.get(segment_index, "")
         if not CYR.fullmatch(key):
@@ -612,6 +615,7 @@ def main() -> int:
         "is_reference_book": is_reference_book,
         "tokens_from_ruvoice": len(tokens),
         "occurrences_in_quality_ledger": len(occurrence_rows),
+        "occurrences_without_aligned_ruaccent_evidence": ruaccent_unaligned_occurrences,
         "ledger_coverage_percent": round(100 * len(occurrence_rows) / len(tokens), 4) if tokens else 100.0,
         "non_russian_or_special_occurrences": counts["NON_RUSSIAN_OR_SPECIAL"],
         "manual_book_override_count": len(actual_overrides),
