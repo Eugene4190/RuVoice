@@ -114,6 +114,15 @@ jobs:
           print("DESKTOP_RUNTIME_ANDROID_MOCKABLE=OK")
           PY
 
+      - name: Test whole-book reviewed phrase matcher
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace \
+            :app:testFullDebugUnitTest \
+            --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest.reviewedPhraseMatcherHandlesCapitalCyrillicAndUnicodeWhitespace"
+
       - name: Run focused Full and Lite JVM tests (no APK build)
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
