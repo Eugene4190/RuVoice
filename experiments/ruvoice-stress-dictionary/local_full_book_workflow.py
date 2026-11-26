@@ -187,6 +187,25 @@ def _require_runtime() -> dict[str, Path]:
     return paths
 
 
+def _java_failure_summary(log_text: str, *, max_chars: int = 6000) -> str:
+    """Prefer the JUnit assertion that caused failure over the tail of its stack trace."""
+    lines = log_text.splitlines()
+    failure_indexes = [
+        index for index, line in enumerate(lines)
+        if "RUVOICE_AUDIT_FAILURE=" in line
+    ]
+    if failure_indexes:
+        blocks: list[str] = []
+        for index in failure_indexes[:5]:
+            # The JUnit failure header contains the test name and assertion message.
+            # Include a few following frames, but don't dump the complete book audit log.
+            blocks.append("\n".join(lines[index:index + 5]))
+        summary = "\n".join(blocks)
+    else:
+        summary = "\n".join(lines[-35:])
+    return summary[-max_chars:]
+
+
 def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, private_home: Path,
               book_sha: str, replacements: Path, overrides: Path, auto_overrides: Path | None = None) -> None:
     env = os.environ.copy()
@@ -222,8 +241,8 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
             text=True, check=False,
         )
     if completed.returncode != 0:
-        tail = "\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-35:])
-        raise RuntimeError("Полный проход оригинального RuVoice завершился ошибкой.\n" + tail[-6000:])
+        failure_details = _java_failure_summary(log.read_text(encoding="utf-8", errors="replace"))
+        raise RuntimeError("Полный проход оригинального RuVoice завершился ошибкой.\n" + failure_details)
     if not report.is_file():
         raise RuntimeError("Оригинальный RuVoice не создал отчёт полного прохода.")
     paired = json.loads(report.read_text(encoding="utf-8"))
