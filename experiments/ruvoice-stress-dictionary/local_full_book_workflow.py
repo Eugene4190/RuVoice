@@ -105,6 +105,9 @@ def _jar_contains(path: Path, entry: str) -> bool:
 
 
 def _require_runtime() -> dict[str, Path]:
+    # One PyInstaller worker handles both official Silero Lite inference and the
+    # independent character model. Avoid shipping two copies of the very large Torch runtime.
+    model_worker = ENGINE / "bridges" / "worker" / "RuVoiceModelWorker.exe"
     paths = {
         "java": ENGINE / "jre" / "bin" / "java.exe",
         "classes": ENGINE / "desktop-audit" / "classes",
@@ -113,9 +116,9 @@ def _require_runtime() -> dict[str, Path]:
         "silero": ENGINE / "silero-models",
         "eyo": ENGINE / "eyo_safe.txt",
         "baseline_silero_json": ENGINE / "project" / "app" / "src" / "main" / "assets" / "silero" / "silero_ru.json",
-        "torch_exe": ENGINE / "bridges" / "RuVoiceTorchBridge.exe",
+        "torch_exe": model_worker,
         "torch_script": ENGINE / "bridges" / "torch_lite_bridge.py",
-        "third_model": ENGINE / "bridges" / "RuVoiceThirdModel.exe",
+        "third_model": model_worker,
         "native": ENGINE / "ruaccent-native",
         "aot": ENGINE / "aot" / "data" / "Russian",
         "system_stress": ENGINE / "project" / "app" / "src" / "main" / "assets" / "dicts" / "stress" / "Системный.txt",
@@ -150,6 +153,8 @@ def _require_runtime() -> dict[str, Path]:
     required_jar_entries = {
         "org/junit/runner/JUnitCore.class": "Не включена библиотека JUnit для запуска полного аудита.",
         "org/json/JSONObject.class": "Не включена библиотека JSON для обмена между JVM-процессами.",
+        "ai/onnxruntime/OrtEnvironment.class": "Не включён настольный ONNX Runtime для Windows.",
+        "android/util/Log.class": "Не включены Android API-заглушки для JVM-движка.",
     }
     for entry, message in required_jar_entries.items():
         if not any(_jar_contains(jar, entry) for jar in jars):
@@ -164,6 +169,21 @@ def _require_runtime() -> dict[str, Path]:
     for key in ("reference_overrides", "reference_replacements"):
         if not paths[key].is_file():
             raise FileNotFoundError(f"Не найден проверенный книжный ресурс: {paths[key].name}")
+    project_assets = paths["project"] / "app" / "src" / "main" / "assets"
+    project_inputs = (
+        project_assets / "morph.bin",
+        project_assets / "hard_e.txt",
+        paths["project"] / "tools" / "data" / "ruvoice_stress_book_regressions.json",
+        paths["project"] / "tools" / "data" / "ruaccent_yo_book_regressions.json",
+    )
+    for input_path in project_inputs:
+        if not input_path.is_file():
+            raise FileNotFoundError(f"Не найден ресурс production RuVoice: {input_path.name}")
+    for model_name in ("accentor.ptl", "homo.ptl"):
+        if not (paths["silero"] / model_name).is_file():
+            raise FileNotFoundError(f"Не найдена официальная модель RuVoice: {model_name}")
+    if os.name == "nt" and not (paths["native"] / "ruvoice_tokenizers.dll").is_file():
+        raise FileNotFoundError("Не найдена Windows JNI-библиотека ruvoice_tokenizers.dll")
     return paths
 
 
