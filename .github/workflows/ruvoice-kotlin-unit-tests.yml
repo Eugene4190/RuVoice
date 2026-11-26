@@ -123,6 +123,15 @@ jobs:
             :app:testFullDebugUnitTest \
             --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest.reviewedPhraseMatcherHandlesCapitalCyrillicAndUnicodeWhitespace"
 
+      - name: Test source-to-production token expansion accounting
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace \
+            :app:testFullDebugUnitTest \
+            --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest.sourceExpansionIsTrackedSeparatelyFromProductionOutputAlignment"
+
       - name: Run focused Full and Lite JVM tests (no APK build)
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
