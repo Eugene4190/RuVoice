@@ -1620,6 +1620,8 @@ class UploadedEpubPairedEvaluationTest {
 
             val summary = JSONObject()
                 .put("book_file", epub.name)
+                .put("book_sha256", bookSha256)
+                .put("is_reference_book", isReferenceBook)
                 .put("model_revision", RuAccentInt8ModelManifest.revision)
                 .put("ruaccent_model_files", RuAccentInt8ModelManifest.files.size)
                 .put("ruaccent_model_bytes", downloaded)

@@ -286,8 +286,12 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
     if not report.is_file():
         raise RuntimeError("Оригинальный RuVoice не создал отчёт полного прохода.")
     paired = json.loads(report.read_text(encoding="utf-8"))
-    if paired.get("book_sha256") != book_sha:
-        raise RuntimeError("Отчёт RuVoice относится не к загруженной книге.")
+    report_sha = paired.get("book_sha256")
+    if report_sha != book_sha:
+        raise RuntimeError(
+            "Отчёт RuVoice относится не к загруженной книге: "
+            f"input_sha256={book_sha}, report_sha256={report_sha}, file={book.name}."
+        )
 
 
 def _run_quality_module(paths: dict[str, Path], work: Path, paired: Path, output: Path,
