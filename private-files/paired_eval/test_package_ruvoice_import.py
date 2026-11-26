@@ -40,17 +40,17 @@ class PackageRuVoiceImportTests(unittest.TestCase):
         )
         with (quality / "WholeBook_RuVoice_AllOccurrences.tsv").open("w", encoding="utf-8-sig") as stream:
             stream.write(
-                "baseline_status\\treviewed_status\\tsource_form\\truvoice_output\\treviewed_output\\t"
-                "context\\tsegment_index\\tword_index\\n"
+                "baseline_status\treviewed_status\tsource_form\truvoice_output\treviewed_output\t"
+                "context\tsegment_index\tword_index\n"
             )
             for index in range(100):
                 stream.write(
-                    f"BOTH_MATCH_AOT_WIKT\\tBOTH_MATCH_AOT_WIKT\\tпример\\tпри+мер\\tпри+мер\\t"
-                    f"Контекст примера {index}\\t{index}\\t0\\n"
+                    f"BOTH_MATCH_AOT_WIKT\tBOTH_MATCH_AOT_WIKT\tпример\tпри+мер\tпри+мер\t"
+                    f"Контекст примера {index}\t{index}\t0\n"
                 )
         (quality / "WholeBook_RuVoice_UniqueWords.tsv").write_text(
-            "priority_status\\tword\\tbook_frequency\\tsample_contexts\\n"
-            "BOTH_MATCH_AOT_WIKT\\tпример\\t100\\tКонтекст примера\\n",
+            "priority_status\tword\tbook_frequency\tsample_contexts\n"
+            "BOTH_MATCH_AOT_WIKT\tпример\t100\tКонтекст примера\n",
             encoding="utf-8-sig",
         )
         replacements = root / "replacements.txt"
@@ -99,10 +99,10 @@ class PackageRuVoiceImportTests(unittest.TestCase):
             book, quality, replacements = self.make_fixture(root)
             ledger = quality / "WholeBook_RuVoice_AllOccurrences.tsv"
             ledger.write_text(
-                "baseline_status\\treviewed_status\\tsource_form\\truvoice_output\\treviewed_output\\t"
-                "context\\tsegment_index\\tword_index\\n"
-                "BOTH_MATCH_AOT_WIKT\\tBOTH_MATCH_AOT_WIKT\\tпример\\tпри+мер\\tпри+мер\\t"
-                "Контекст\\t0\\t0\\n",
+                "baseline_status\treviewed_status\tsource_form\truvoice_output\treviewed_output\t"
+                "context\tsegment_index\tword_index\n"
+                "BOTH_MATCH_AOT_WIKT\tBOTH_MATCH_AOT_WIKT\tпример\tпри+мер\tпри+мер\t"
+                "Контекст\t0\t0\n",
                 encoding="utf-8-sig",
             )
             with self.assertRaisesRegex(ValueError, "не совпадает со сводкой"):
