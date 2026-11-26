@@ -1,6 +1,11 @@
 name: Build RuVoice Book Tool for Windows
 
 on:
+  push:
+    branches:
+      - stress-dictionary-pipeline
+    paths:
+      - ".github/workflows/build-ruvoice-book-tool-windows.yml"
   workflow_dispatch:
 
 permissions:
@@ -216,7 +221,7 @@ jobs:
           $tool = Join-Path $root "experiments\ruvoice-stress-dictionary\desktop_runtime"
           $reference = Join-Path $root "private-files\paired_eval"
           $out = Join-Path $env:RUNNER_TEMP "ruvoice-worker-build"
-          $args = @(
+          $workerArgs = @(
             "--noconfirm", "--clean", "--onedir", "--console",
             "--name", "RuVoiceModelWorker",
             "--distpath", (Join-Path $out "dist"),
@@ -233,7 +238,7 @@ jobs:
             "--add-data", ((Join-Path $reference "audit_book_third_model.py") + ";."),
             (Join-Path $tool "ruvoice_model_worker.py")
           )
-          & python -m PyInstaller @args
+          & python -m PyInstaller @workerArgs
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the shared model worker" }
           $worker = Join-Path $out "dist\RuVoiceModelWorker"
           if (-not (Test-Path -LiteralPath (Join-Path $worker "RuVoiceModelWorker.exe"))) {
@@ -282,7 +287,7 @@ jobs:
           $root = $env:GITHUB_WORKSPACE
           $tool = Join-Path $root "experiments\ruvoice-stress-dictionary"
           $out = Join-Path $env:RUNNER_TEMP "ruvoice-server-build"
-          $args = @(
+          $serverArgs = @(
             "--noconfirm", "--clean", "--onefile", "--console",
             "--name", "RuVoiceBookTool",
             "--distpath", (Join-Path $out "dist"),
@@ -291,12 +296,17 @@ jobs:
             "--paths", $tool,
             (Join-Path $tool "private_book_server.py")
           )
-          & python -m PyInstaller @args
+          & python -m PyInstaller @serverArgs
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller could not build RuVoiceBookTool.exe" }
           $exe = Join-Path $out "dist\RuVoiceBookTool.exe"
           if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "RuVoiceBookTool.exe was not produced" }
-          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\RuVoiceBookTool.exe") -Force
-          Copy-Item -LiteralPath (Join-Path $tool "Start_RuVoice_Book_Tool_Windows.bat") -Destination (Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\Start_RuVoice_Book_Tool_Windows.bat") -Force
+          $portableRoot = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $portableRoot "RuVoiceBookTool.exe") -Force
+          Copy-Item -LiteralPath (Join-Path $tool "Start_RuVoice_Book_Tool_Windows.bat") -Destination (Join-Path $portableRoot "Start_RuVoice_Book_Tool_Windows.bat") -Force
+          # Keep a working Python-source fallback for users who intentionally remove the EXE.
+          foreach ($module in @("private_book_server.py", "local_full_book_workflow.py", "book_tool_paths.py")) {
+            Copy-Item -LiteralPath (Join-Path $tool $module) -Destination (Join-Path $portableRoot $module) -Force
+          }
 
       - name: Smoke-test a real EPUB upload through the complete local engine
         shell: pwsh
