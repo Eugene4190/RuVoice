@@ -714,7 +714,37 @@ private fun pairedGitBlobSha(file: File): String {
     return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
+private data class ProductionTokenAlignment(
+    val sourceTokens: Int,
+    val baselineTokens: Int,
+    val reviewedTokens: Int,
+    val mergedTokens: Int,
+) {
+    // Pipeline.accent can expand or normalize text before the spoken token stream is emitted.
+    // Source-to-output count differences affect source mapping, not comparison of production runs.
+    val sourceMappingAvailable: Boolean
+        get() = sourceTokens == baselineTokens
+
+    val outputStreamsAligned: Boolean
+        get() = baselineTokens == reviewedTokens && baselineTokens == mergedTokens
+}
+
 class UploadedEpubPairedEvaluationTest {
+    @Test
+    fun sourceExpansionIsTrackedSeparatelyFromProductionOutputAlignment() {
+        val expanded = ProductionTokenAlignment(
+            sourceTokens = 3,
+            baselineTokens = 4,
+            reviewedTokens = 4,
+            mergedTokens = 4,
+        )
+        check(!expanded.sourceMappingAvailable)
+        check(expanded.outputStreamsAligned)
+
+        val unsafe = expanded.copy(mergedTokens = 5)
+        check(!unsafe.outputStreamsAligned)
+    }
+
     @Test
     fun reviewedPhraseMatcherHandlesCapitalCyrillicAndUnicodeWhitespace() {
         check(phraseOccurrenceCount(
@@ -1240,6 +1270,10 @@ class UploadedEpubPairedEvaluationTest {
             var yoChanges = 0
             var lexicalMismatches = 0
             var alignmentMismatches = 0
+            var sourceOutputCountMismatchSegments = 0
+            var sourceOutputCountDelta = 0
+            val alignmentMismatchSamples = JSONArray()
+            val sourceOutputCountMismatchSamples = JSONArray()
             val changeRows = JSONArray()
             val reviewCandidates = JSONArray()
             val baselineTokens = JSONArray()
@@ -1279,6 +1313,12 @@ class UploadedEpubPairedEvaluationTest {
                 val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
                 val sourceWords = wordRegex.findAll(baselineSource.replace("+", "")).toList()
+                val tokenAlignment = ProductionTokenAlignment(
+                    sourceTokens = sourceWords.size,
+                    baselineTokens = oldWords.size,
+                    reviewedTokens = reviewedWords.size,
+                    mergedTokens = newWords.size,
+                )
 
                 // The book overlay is deliberately narrow: only its reviewed wordforms and
                 // two explicit contextual phrases may change. This catches accidental loading
@@ -1388,8 +1428,32 @@ class UploadedEpubPairedEvaluationTest {
                         .put("ruaccent_merged_output", outputWord)
                         .put("ruaccent_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
                 }
-                if (sourceWords.size != oldWords.size || oldWords.size != newWords.size || oldWords.size != reviewedWords.size) {
+                if (!tokenAlignment.sourceMappingAvailable) {
+                    sourceOutputCountMismatchSegments++
+                    sourceOutputCountDelta += kotlin.math.abs(sourceWords.size - oldWords.size)
+                    if (sourceOutputCountMismatchSamples.length() < 20) {
+                        sourceOutputCountMismatchSamples.put(JSONObject()
+                            .put("segment_index", segmentIndex)
+                            .put("source_tokens", sourceWords.size)
+                            .put("baseline_tokens", oldWords.size)
+                            .put("source_chars", baselineSource.length)
+                            .put("baseline_chars", baseline.length))
+                    }
+                }
+                if (!tokenAlignment.outputStreamsAligned) {
                     alignmentMismatches++
+                    if (alignmentMismatchSamples.length() < 20) {
+                        alignmentMismatchSamples.put(JSONObject()
+                            .put("segment_index", segmentIndex)
+                            .put("source_tokens", sourceWords.size)
+                            .put("baseline_tokens", oldWords.size)
+                            .put("reviewed_tokens", reviewedWords.size)
+                            .put("merged_tokens", newWords.size)
+                            .put("source_chars", baselineSource.length)
+                            .put("baseline_chars", baseline.length)
+                            .put("reviewed_chars", reviewed.length)
+                            .put("merged_chars", combined.length))
+                    }
                     continue
                 }
                 var segmentChanged = false
@@ -1496,7 +1560,9 @@ class UploadedEpubPairedEvaluationTest {
             // A full-book comparison is valid only when every planned production token
             // appears exactly once in all three streams. Never silently skip misaligned segments.
             check(alignmentMismatches == 0) {
-                "Production token alignment failed in $alignmentMismatches segments"
+                "Production output token alignment failed in $alignmentMismatches segments; " +
+                    "first_samples=$alignmentMismatchSamples; " +
+                    "source_output_count_mismatch_segments=$sourceOutputCountMismatchSegments"
             }
             check(lexicalMismatches == 0) {
                 "The baseline/reviewed/merged streams changed lexical tokens in $lexicalMismatches occurrences"
@@ -1545,6 +1611,10 @@ class UploadedEpubPairedEvaluationTest {
                 .put("yo_word_changes", yoChanges)
                 .put("lexical_or_alignment_mismatches", lexicalMismatches)
                 .put("segment_alignment_mismatches", alignmentMismatches)
+                .put("source_output_token_count_mismatch_segments", sourceOutputCountMismatchSegments)
+                .put("source_output_token_count_delta", sourceOutputCountDelta)
+                .put("source_output_token_count_mismatch_samples", sourceOutputCountMismatchSamples)
+                .put("alignment_mismatch_samples", alignmentMismatchSamples)
                 .put("ruaccent_sentences_called", corrector.calls)
                 .put("ruaccent_decisions_stressed", corrector.stressed)
                 .put("ruaccent_decisions_unstressed", corrector.unstressed)
@@ -1591,7 +1661,10 @@ class UploadedEpubPairedEvaluationTest {
                 " words=" + wordCount + " changed_segments=" + changedSegments + " changed_tokens=" + changedTokens +
                 " stress_changes=" + stressChanges + " added=" + stressAdded + " removed=" + stressRemoved +
                 " moved=" + stressMoved + " yo_changes=" + yoChanges)
-            println("PAIRED_BOOK_SAFETY lexical_mismatches=" + lexicalMismatches + " alignment_mismatches=" + alignmentMismatches)
+            println("PAIRED_BOOK_SAFETY lexical_mismatches=" + lexicalMismatches +
+                " output_alignment_mismatches=" + alignmentMismatches +
+                " source_output_count_mismatch_segments=" + sourceOutputCountMismatchSegments +
+                " source_output_count_delta=" + sourceOutputCountDelta)
             println("PAIRED_BOOK_ACCURACY=NOT_MEASURED")
             println("PAIRED_BOOK_REPORT=" + reportFile.absolutePath + " bytes=" + reportFile.length())
         } finally {
