@@ -283,6 +283,61 @@ jobs:
           New-Item -ItemType Directory -Force -Path $workerTarget | Out-Null
           Copy-Item -Path (Join-Path $worker "*") -Destination $workerTarget -Recurse -Force
 
+      - name: Preflight the packaged Torch Lite worker with official RuVoice models
+        shell: pwsh
+        run: |
+          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\\engine"
+          $worker = Join-Path $engine "bridges\\worker\\RuVoiceModelWorker.exe"
+          $accentor = Join-Path $engine "silero-models\\accentor.ptl"
+          $homo = Join-Path $engine "silero-models\\homo.ptl"
+          $log = Join-Path $env:RUNNER_TEMP "torch-lite-preflight.log"
+          $env:RUVOICE_TORCH_BRIDGE_LOG = $log
+          @'
+          import json, subprocess, sys
+          worker, accentor, homo = sys.argv[1:4]
+          batches = [
+              ["замок"],
+              ["строительство", "дома", "отражается", "глаза", "разуму", "руки", "инструмент", "культура"],
+              ["пример", "человек", "книга", "говорить"] * 8,
+              ["произношение", "контекст", "ударение", "словарь"] * 16,
+          ]
+          requests = [{"op": "accentor", "words": words} for words in batches]
+          requests.append({"op": "quit"})
+          payload = "".join(json.dumps(item, ensure_ascii=False) + "\\n" for item in requests)
+          completed = subprocess.run(
+              [worker, accentor, homo], input=payload, text=True, encoding="utf-8",
+              capture_output=True, timeout=300, check=False,
+          )
+          print("TORCH_LITE_WORKER_EXIT=" + str(completed.returncode))
+          print("TORCH_LITE_WORKER_STDOUT_BEGIN")
+          print(completed.stdout)
+          print("TORCH_LITE_WORKER_STDOUT_END")
+          print("TORCH_LITE_WORKER_STDERR_BEGIN")
+          print(completed.stderr[-12000:])
+          print("TORCH_LITE_WORKER_STDERR_END")
+          if completed.returncode != 0:
+              raise SystemExit("Packaged Torch Lite worker exited abnormally")
+          lines = [line for line in completed.stdout.splitlines() if line.strip()]
+          if len(lines) != len(batches) + 1:
+              raise SystemExit(f"Expected ready plus {len(batches)} replies, got {len(lines)}")
+          records = [json.loads(line) for line in lines]
+          if not records[0].get("ready"):
+              raise SystemExit("Packaged Torch Lite worker did not send ready")
+          for index, words in enumerate(batches, start=1):
+              result = records[index]
+              if "error" in result:
+                  raise SystemExit("Torch Lite request " + str(index) + " failed: " + result["error"])
+              if len(result.get("stress", [])) != len(words) or len(result.get("yo", [])) != len(words):
+                  raise SystemExit("Torch Lite output did not align with words in request " + str(index))
+          print("TORCH_LITE_PACKAGED_WORKER_PREFLIGHT=PASS batches=" + str(len(batches)) +
+                " words=" + str(sum(map(len, batches))))
+          '@ | python - $worker $accentor $homo
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Tail 100 }
+            throw "Packaged Torch Lite worker preflight failed"
+          }
+          if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Tail 100 }
+
       - name: Validate all full-book desktop runtime components
         shell: pwsh
         run: |
