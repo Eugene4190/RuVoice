@@ -326,7 +326,7 @@ jobs:
             Copy-Item -LiteralPath (Join-Path $tool $module) -Destination (Join-Path $portableRoot $module) -Force
           }
 
-      - name: Smoke-test a real EPUB upload through the complete local engine
+      - name: Smoke-test a synthetic EPUB upload through the complete local engine
         shell: pwsh
         run: |
           $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
@@ -372,9 +372,13 @@ jobs:
             $tokenMatch = [regex]::Match($page.Content, 'name="token" value="([^"]+)"')
             if (-not $tokenMatch.Success) { throw "The local upload form has no token" }
             $form = @{ token = $tokenMatch.Groups[1].Value; book = Get-Item -LiteralPath $epub }
-            $upload = Invoke-WebRequest -Uri "http://127.0.0.1:$port/upload" -Method Post -Form $form -TimeoutSec 1800
+            $upload = Invoke-WebRequest -Uri "http://127.0.0.1:$port/upload" -Method Post -Form $form -TimeoutSec 1800 -SkipHttpErrorCheck
             if ($upload.StatusCode -ne 200 -or -not $upload.Content.Contains("ZIP готов")) {
-              throw ("The full RuVoice engine did not return a ZIP: " + $upload.Content)
+              $messageMatch = [regex]::Match($upload.Content, '<p>(.*?)</p>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+              $message = if ($messageMatch.Success) { [System.Net.WebUtility]::HtmlDecode($messageMatch.Groups[1].Value) } else { "No server error detail was returned" }
+              Write-Host "SMOKE_UPLOAD_STATUS=$($upload.StatusCode)"
+              Write-Host "SMOKE_UPLOAD_ERROR=$message"
+              throw "The full RuVoice engine did not return a ZIP (HTTP $($upload.StatusCode))."
             }
             $downloadMatch = [regex]::Match($upload.Content, 'href="(/download/[^"]+)"')
             if (-not $downloadMatch.Success) { throw "The result page has no ZIP download link" }
