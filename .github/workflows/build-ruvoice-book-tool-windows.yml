@@ -355,7 +355,7 @@ jobs:
           $exe = Join-Path $stage "RuVoiceBookTool.exe"
           $privateHome = Join-Path $env:RUNNER_TEMP "ruvoice-reference-book-private"
           $port = 18765
-          $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\\8.Iskusstvo..epub"
+          $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\8.Iskusstvo..epub"
           $zip = Join-Path $env:RUNNER_TEMP "ruvoice-reference-book-result.zip"
           $bookOutput = Join-Path $env:GITHUB_WORKSPACE "RuVoiceBookOutput.zip"
           if (-not (Test-Path -LiteralPath $epub -PathType Leaf)) { throw "The uploaded reference EPUB is missing: $epub" }
@@ -386,7 +386,7 @@ jobs:
             $form = @{ token = $tokenMatch.Groups[1].Value; book = $uploadFile }
             $upload = Invoke-WebRequest -Uri "http://127.0.0.1:$port/upload" -Method Post -Form $form -TimeoutSec 1800 -SkipHttpErrorCheck
             if ($upload.StatusCode -ne 200 -or -not $upload.Content.Contains("ZIP готов")) {
-              $messageMatch = [regex]::Match($upload.Content, '</form>\\s*<p>(.*?)</p>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+              $messageMatch = [regex]::Match($upload.Content, '</form>\s*<p>(.*?)</p>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
               $message = if ($messageMatch.Success) { [System.Net.WebUtility]::HtmlDecode($messageMatch.Groups[1].Value) } else { "No server feedback paragraph was returned" }
               Write-Host "REFERENCE_BOOK_UPLOAD_STATUS=$($upload.StatusCode)"
               Write-Host "REFERENCE_BOOK_UPLOAD_ERROR=$message"
@@ -416,7 +416,7 @@ jobs:
               expected = summary["tokens_from_original_ruvoice"]
               assert expected == summary["occurrences_in_full_context_ledger"], summary
               ledger = z.open("WholeBook_RuVoice_AllOccurrences.tsv")
-              rows = list(csv.DictReader((b.decode("utf-8-sig") for b in ledger), delimiter="\\t"))
+              rows = list(csv.DictReader((b.decode("utf-8-sig") for b in ledger), delimiter="\t"))
               assert len(rows) == expected, (len(rows), expected)
               assert len({(r["segment_index"], r["word_index"]) for r in rows}) == expected
               print("REFERENCE_BOOK_ZIP_VALIDATED=" + json.dumps({
@@ -435,7 +435,7 @@ jobs:
             $bookHashAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
             if ($bookHashAfter -ne $bookHashBefore) { throw "The source EPUB changed during processing" }
             Copy-Item -LiteralPath $zip -Destination $bookOutput -Force
-            if (-not (Test-Path -LiteralPath (Join-Path $privateHome "state\\book_history.json") -PathType Leaf)) {
+            if (-not (Test-Path -LiteralPath (Join-Path $privateHome "state\book_history.json") -PathType Leaf)) {
               throw "The local history file was not created"
             }
             if ((Get-ChildItem -Path (Join-Path $privateHome "incoming") -File | Measure-Object).Count -ne 0) {
