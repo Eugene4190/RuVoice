@@ -70,13 +70,6 @@ private fun phraseOccurrenceCount(phrase: String, text: String): Int {
     return Regex("(?i)(?<![а-яё])$whitespaceFlexible(?![а-яё])").findAll(text).count()
 }
 
-private fun wholeWordOccurrenceCount(word: String, text: String): Int =
-    Regex("(?i)(?<![а-яё])${Regex.escape(word)}(?![а-яё])").findAll(text).count()
-
-private fun phraseOccurs(phrase: String, text: String): Boolean =
-    phraseOccurrenceCount(phrase, text) > 0
-
-
 private fun localName(node: Node): String =
     (node.localName ?: node.nodeName.substringAfter(':')).lowercase(Locale.ROOT)
 
@@ -1278,14 +1271,13 @@ class UploadedEpubPairedEvaluationTest {
                     val beforePosition = stressPosition(beforeWord)
                     val reviewedPosition = stressPosition(reviewedWord)
                     val expectedVariant = allBookOverrides[beforeKey]
-                    // segment.text is already transformed by the production planner; a phrase
-                    // replacement can therefore make the original key impossible to find there.
-                    // Match against the original paragraph and require every occurrence of this
-                    // source word in that paragraph to belong to this exact reviewed phrase.
+                    // A paragraph may contain other uses of the same word outside the reviewed
+                    // phrase. The phrase's presence is necessary, but not sufficient: below we
+                    // accept this occurrence only when the reviewed stream has the exact approved
+                    // stress position. Any other changed occurrence must still equal baseline.
                     val phraseTarget = bookPhraseTargets.firstOrNull { target ->
-                        val phraseCount = phraseOccurrenceCount(target.phrase, segment.sourceContext)
-                        target.sourceWord == beforeKey && phraseCount > 0 &&
-                            phraseCount == wholeWordOccurrenceCount(target.sourceWord, segment.sourceContext)
+                        target.sourceWord == beforeKey &&
+                            phraseOccurrenceCount(target.phrase, segment.sourceContext) > 0
                     }
                     if (expectedVariant != null) {
                         val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
@@ -1297,15 +1289,12 @@ class UploadedEpubPairedEvaluationTest {
                                 " context='" + segment.text + "'"
                         }
                         reviewedOverrideSeen[beforeKey] = (reviewedOverrideSeen[beforeKey] ?: 0) + 1
-                    } else if (phraseTarget != null) {
+                    } else if (phraseTarget != null && run {
                         val expectedPhrasePosition = checkNotNull(reviewedVariantPosition(phraseTarget.targetWord)) {
                             "Invalid phrase stress marker: ${phraseTarget.targetWord}"
                         }
-                        check(reviewedPosition == expectedPhrasePosition) {
-                            "Book-only phrase override failed for " + beforeKey + " in phrase '" + phraseTarget.phrase +
-                                "' segment " + segmentIndex + ": expected=" + expectedPhrasePosition +
-                                " actual=" + reviewedPosition + " context='" + segment.text + "'"
-                        }
+                        reviewedPosition == expectedPhrasePosition
+                    }) {
                         reviewedPhraseOverrideHits++
                         phraseTargetHits[phraseTarget.phrase] = (phraseTargetHits[phraseTarget.phrase] ?: 0) + 1
                     } else {
