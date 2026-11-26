@@ -89,6 +89,8 @@ def is_suspected_mismatch(status: str) -> bool:
     return status in {
         "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT",
         "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE",
+        "RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE",
+        "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_RUACCENT_UNAVAILABLE",
         "BOTH_DIFFER_FROM_AOT_WIKT",
         "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON",
         "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW",
@@ -248,6 +250,7 @@ def verdict(
     system: set[int],
     context: str = "",
     contextual_acceptances: dict[str, list[tuple[int, re.Pattern[str], str]]] | None = None,
+    ruaccent_available: bool = True,
 ) -> tuple[str, str]:
     vowels = sum(ch in VOWELS for ch in key)
     if key in FUNCTION_WORDS:
@@ -271,6 +274,10 @@ def verdict(
             agreed = next(iter(common))
             base_ok = base_position == agreed
             ruaccent_ok = ruaccent_position == agreed
+            if not ruaccent_available:
+                if base_ok:
+                    return "BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE", "RuVoice совпадает с единственным вариантом обоих словарей; RUAccent для этого сегмента не выровнен"
+                return "RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE", "RuVoice расходится с единственным вариантом двух словарей; RUAccent для этого сегмента не выровнен"
             if base_ok and ruaccent_ok:
                 return "BOTH_MATCH_AOT_WIKT", "RuVoice и RUAccent совпали с единственным вариантом AOT/Wiktionary"
             if not base_ok and ruaccent_ok and base_position in system:
@@ -288,6 +295,8 @@ def verdict(
         if base_position in source_union:
             return "BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT", "Ударение RuVoice присутствует в вариантах хотя бы одного источника"
         if common:
+            if not ruaccent_available:
+                return "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_RUACCENT_UNAVAILABLE", "Оба источника имеют общий вариант, но RuVoice вне всех перечисленных вариантов; RUAccent для сегмента не выровнен"
             if ruaccent_position in common:
                 return "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON", "RuVoice вне найденных вариантов; RUAccent совпадает с общим вариантом"
             return "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW", "Оба источника имеют общий вариант, но RuVoice вне всех перечисленных вариантов; нужен контекстный разбор"
@@ -299,6 +308,8 @@ def verdict(
         positions = set(source)
         if base_position in positions:
             return "SINGLE_SOURCE_SUPPORTS_RUVOICE", f"Только {name} найден; он поддерживает RuVoice"
+        if not ruaccent_available:
+            return "BASELINE_OUTSIDE_SINGLE_SOURCE_RUACCENT_UNAVAILABLE", f"Только {name} найден; RuVoice вне его вариантов, RUAccent для сегмента не выровнен"
         if ruaccent_position in positions:
             return "SINGLE_SOURCE_SUPPORTS_RUACCENT", f"Только {name} найден; он поддерживает RUAccent"
         return "SINGLE_SOURCE_DIFFERS_FROM_BOTH", f"Только {name} найден и не совпадает с обеими моделями"
@@ -495,18 +506,21 @@ def main() -> int:
             continue
         base_position = token.get("ruvoice_stress_vowel_index")
         base_position = None if base_position in (None, "null") else int(base_position)
+        ruaccent_available = bool(ruaccent_word.strip())
         ruaccent_position = acute_position(ruaccent_word)
         system_positions = system.get(key, set())
         aot_positions = aot.get(key, {})
         wikt_positions = wikt.get(key, {})
         status, reason = verdict(
             key, base_position, ruaccent_position, aot_positions, wikt_positions,
-            system_positions, context, contextual_acceptances
+            system_positions, context, contextual_acceptances,
+            ruaccent_available=ruaccent_available,
         )
         reviewed_position = acute_position(reviewed_word)
         reviewed_status, reviewed_reason = verdict(
             key, reviewed_position, ruaccent_position, aot_positions, wikt_positions,
-            system_positions, context, contextual_acceptances
+            system_positions, context, contextual_acceptances,
+            ruaccent_available=ruaccent_available,
         )
         counts[status] += 1
         reviewed_counts[reviewed_status] += 1
@@ -524,7 +538,12 @@ def main() -> int:
         item["frequency"] += 1
         item["base_positions"][base_position if base_position is not None else "UNMARKED"] += 1
         item["reviewed_positions"][reviewed_position if reviewed_position is not None else "UNMARKED"] += 1
-        item["ruaccent_positions"][ruaccent_position if ruaccent_position is not None else "UNMARKED"] += 1
+        ruaccent_position_label = (
+            "UNALIGNED" if not ruaccent_available
+            else ruaccent_position if ruaccent_position is not None
+            else "UNMARKED"
+        )
+        item["ruaccent_positions"][ruaccent_position_label] += 1
         item["statuses"][status] += 1
         item["reviewed_statuses"][reviewed_status] += 1
         item["source_forms"][output_word] += 1
@@ -546,12 +565,15 @@ def main() -> int:
     # Rank unique words by severity and how often they appear.
     priority_order = {
         "BOTH_DIFFER_FROM_AOT_WIKT": 0,
+        "RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE": 1,
         "BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT": 1,
         "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE": 1,
         "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON": 2,
         "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW": 3,
+        "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_RUACCENT_UNAVAILABLE": 3,
         "AOT_WIKT_DISAGREE_BASELINE_OUTSIDE_VARIANTS": 4,
         "SINGLE_SOURCE_DIFFERS_FROM_BOTH": 5,
+        "BASELINE_OUTSIDE_SINGLE_SOURCE_RUACCENT_UNAVAILABLE": 5,
         "RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE": 6,
         "SINGLE_SOURCE_MULTIPLE_VARIANTS": 6,
         "BUILTIN_DIFFERS_OR_AMBIGUOUS": 7,
@@ -559,6 +581,7 @@ def main() -> int:
         "FUNCTION_WORD_CONTEXT_REQUIRED": 9,
         "MONOSYLLABLE_NOT_SCORED": 10,
         "BOTH_MATCH_AOT_WIKT": 11,
+        "BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE": 11,
         "BASELINE_ONE_OF_SHARED_VARIANTS": 12,
         "SINGLE_SOURCE_SUPPORTS_RUVOICE": 13,
         "SINGLE_SOURCE_SUPPORTS_RUACCENT": 14,
@@ -597,15 +620,17 @@ def main() -> int:
 
     total = sum(item["frequency"] for item in aggregate.values())
     scored = {
-        "BOTH_MATCH_AOT_WIKT", "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS",
-        "BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT",
+        "BOTH_MATCH_AOT_WIKT", "BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE",
+        "BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS", "BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT",
         "RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE",
+        "RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE",
         "RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE",
         "BOTH_DIFFER_FROM_AOT_WIKT", "AOT_WIKT_DISAGREE",
         "SINGLE_SOURCE_SUPPORTS_RUVOICE", "SINGLE_SOURCE_SUPPORTS_RUACCENT",
-        "SINGLE_SOURCE_DIFFERS_FROM_BOTH",
+        "SINGLE_SOURCE_DIFFERS_FROM_BOTH", "BASELINE_OUTSIDE_SINGLE_SOURCE_RUACCENT_UNAVAILABLE",
         "RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON",
         "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_REVIEW",
+        "BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_RUACCENT_UNAVAILABLE",
         "AOT_WIKT_DISAGREE_BASELINE_OUTSIDE_VARIANTS",
         "CONTEXTUAL_VARIANT_ACCEPTED",
     }
@@ -628,21 +653,29 @@ def main() -> int:
         "word_occurrences_with_some_independent_reference": sum(counts[s] for s in scored),
         "occurrences_in_strict_aot_wikt_single_stress_consensus": (
             counts["BOTH_MATCH_AOT_WIKT"] +
+            counts["BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE"] +
+            counts["RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE"] +
             counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] +
             counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] +
             counts["RUACCENT_DIFFERS_RUVOICE_AND_BOTH_DICTS_AGREE"] +
             counts["BOTH_DIFFER_FROM_AOT_WIKT"]
         ),
         "ruvoice_matches_two_source_consensus_and_variants": (
-            counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS"]
+            counts["BOTH_MATCH_AOT_WIKT"] +
+            counts["BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE"] +
+            counts["BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS"]
         ),
         "ruvoice_supported_by_at_least_one_reference_variant": (
-            counts["BOTH_MATCH_AOT_WIKT"] + counts["BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS"] +
+            counts["BOTH_MATCH_AOT_WIKT"] +
+            counts["BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE"] +
+            counts["BASELINE_SUPPORTED_BY_BOTH_SOURCE_VARIANTS"] +
             counts["BASELINE_SUPPORTED_BY_ONE_SOURCE_VARIANT"] + counts["SINGLE_SOURCE_SUPPORTS_RUVOICE"] +
             counts["CONTEXTUAL_VARIANT_ACCEPTED"]
         ),
         "ruvoice_suspected_mismatches_against_two_sources": (
             counts["RUVOICE_DIFFERS_RUACCENT_AND_BOTH_DICTS_AGREE"] +
+            counts["RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE"] +
+            counts["BASELINE_OUTSIDE_ALL_REFERENCE_VARIANTS_RUACCENT_UNAVAILABLE"] +
             counts["BUILTIN_DICTIONARY_CONFLICTS_WITH_AOT_WIKT"] +
             counts["BOTH_DIFFER_FROM_AOT_WIKT"] +
             counts["RUVOICE_OUTSIDE_REFERENCE_VARIANTS_RUACCENT_MATCHES_COMMON"] +

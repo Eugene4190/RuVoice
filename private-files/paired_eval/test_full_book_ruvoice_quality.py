@@ -89,6 +89,27 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         )
         self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
 
+    def test_unaligned_ruaccent_is_not_misreported_as_an_unmarked_prediction(self) -> None:
+        supported, _ = quality.verdict(
+            "маркер", 0, None, {0: {"AOT"}}, {0: {"Wiktionary"}}, set(),
+            ruaccent_available=False,
+        )
+        self.assertEqual(supported, "BASELINE_MATCHES_AOT_WIKT_RUACCENT_UNAVAILABLE")
+
+        disagreement, _ = quality.verdict(
+            "маркер", 1, None, {0: {"AOT"}}, {0: {"Wiktionary"}}, set(),
+            ruaccent_available=False,
+        )
+        self.assertEqual(disagreement, "RUVOICE_DIFFERS_FROM_AOT_WIKT_RUACCENT_UNAVAILABLE")
+
+    def test_unaligned_ruaccent_does_not_count_as_second_model_for_single_source(self) -> None:
+        status, reason = quality.verdict(
+            "маркер", 1, None, {0: {"AOT"}}, {}, set(),
+            ruaccent_available=False,
+        )
+        self.assertEqual(status, "BASELINE_OUTSIDE_SINGLE_SOURCE_RUACCENT_UNAVAILABLE")
+        self.assertIn("не выровнен", reason)
+
     def test_non_russian_tokens_remain_in_full_occurrence_ledger(self) -> None:
         row = quality.non_russian_occurrence_row(
             {
