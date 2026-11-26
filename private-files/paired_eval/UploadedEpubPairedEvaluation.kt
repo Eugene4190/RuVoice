@@ -1162,7 +1162,8 @@ class UploadedEpubPairedEvaluationTest {
                 val targetWord = item.getString("word")
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
-                val checkedWithBookOverlay = caseId == "silks-plural-01"
+                val checkedWithBookOverlay = caseId == "silks-plural-01" &&
+                    bookReplacementLines.any { it.trim() == "шелка и = шелк+а и" }
                 val checkedWithManualStress = plain(targetWord).lowercase(Locale.ROOT) in bookOverrides
                 val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
                 val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
