@@ -319,13 +319,15 @@ jobs:
           @'
           import json, subprocess, sys
           worker, accentor, homo = sys.argv[1:4]
+          singleton_words = ["произношение", "контекст", "ударение", "словарь"]
+          singleton_batches = [[word] for word in singleton_words]
           batches = [
               ["замок"],
               ["строительство", "дома", "отражается", "глаза", "разуму", "руки", "инструмент", "культура"],
               ["пример", "человек", "книга", "говорить"] * 8,
               ["произношение", "контекст", "ударение", "словарь"] * 16,
           ]
-          requests = [{"op": "accentor", "words": words} for words in batches]
+          requests = [{"op": "accentor", "words": words} for words in singleton_batches + batches]
           requests.append({"op": "quit"})
           payload = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in requests)
           completed = subprocess.run(
@@ -342,17 +344,20 @@ jobs:
           if completed.returncode != 0:
               raise SystemExit("Packaged Torch Lite worker exited abnormally")
           lines = [line for line in completed.stdout.splitlines() if line.strip()]
-          if len(lines) != len(batches) + 1:
-              raise SystemExit(f"Expected ready plus {len(batches)} replies, got {len(lines)}")
+          expected_requests = len(singleton_batches) + len(batches)
+          if len(lines) != expected_requests + 1:
+              raise SystemExit(f"Expected ready plus {expected_requests} replies, got {len(lines)}")
           records = [json.loads(line) for line in lines]
           if not records[0].get("ready"):
               raise SystemExit("Packaged Torch Lite worker did not send ready")
-          for index, words in enumerate(batches, start=1):
+          for index, words in enumerate(singleton_batches + batches, start=1):
               result = records[index]
               if "error" in result:
-                  raise SystemExit("Torch Lite request " + str(index) + " failed: " + result["error"])
+                  label = words[0] if len(words) == 1 else "batch-" + str(index - len(singleton_batches))
+                  raise SystemExit("Torch Lite request " + str(index) + " (" + label + ") failed: " + result["error"])
               if len(result.get("stress", [])) != len(words) or len(result.get("yo", [])) != len(words):
                   raise SystemExit("Torch Lite output did not align with words in request " + str(index))
+          print("TORCH_LITE_SINGLETON_PREFLIGHT=PASS words=" + str(len(singleton_words)))
           print("TORCH_LITE_PACKAGED_WORKER_PREFLIGHT=PASS batches=" + str(len(batches)) +
                 " words=" + str(sum(map(len, batches))))
           '@ | python - $worker $accentor $homo
