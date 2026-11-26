@@ -278,6 +278,10 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
         )
     if completed.returncode != 0:
         failure_details = _java_failure_summary(log.read_text(encoding="utf-8", errors="replace"))
+        if torch_bridge_log.is_file():
+            bridge_details = torch_bridge_log.read_text(encoding="utf-8", errors="replace")[-12000:]
+            if bridge_details:
+                failure_details += "\\n\\nTORCH_LITE_BRIDGE_DIAGNOSTICS:\\n" + bridge_details
         raise RuntimeError("Полный проход оригинального RuVoice завершился ошибкой.\n" + failure_details)
     if not report.is_file():
         raise RuntimeError("Оригинальный RuVoice не создал отчёт полного прохода.")
