@@ -66,12 +66,15 @@ private fun parseBookPhraseTargets(lines: List<String>): List<BookPhraseTarget> 
 }
 
 private fun phraseOccurrenceCount(phrase: String, text: String): Int {
-    // Build the regex one escaped word at a time. Regex.escape(wholePhrase) quotes
-    // the entire string, so injecting \\s+ after escaping would make it literal text.
-    val words = phrase.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    // Escape each word separately so flexible separators stay regex operators.
+    // \p{Z} covers typographic/non-breaking Unicode spaces; IGNORE_CASE in Kotlin
+    // uses Unicode case folding, needed for an initial capital Cyrillic letter.
+    val spaces = Regex("[\\s\\p{Z}]+")
+    val words = phrase.trim().split(spaces).filter { it.isNotEmpty() }
     if (words.isEmpty()) return 0
-    val whitespaceFlexible = words.joinToString("\\\\s+") { Regex.escape(it) }
-    return Regex("(?i)(?<![а-яё])$whitespaceFlexible(?![а-яё])").findAll(text).count()
+    val whitespaceFlexible = words.joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
+    return Regex("(?<![а-яё])$whitespaceFlexible(?![а-яё])", RegexOption.IGNORE_CASE)
+        .findAll(text).count()
 }
 
 private fun localName(node: Node): String =
@@ -710,6 +713,22 @@ private fun pairedGitBlobSha(file: File): String {
 }
 
 class UploadedEpubPairedEvaluationTest {
+    @Test
+    fun reviewedPhraseMatcherHandlesCapitalCyrillicAndUnicodeWhitespace() {
+        check(phraseOccurrenceCount(
+            "сети значений",
+            "Сети значений в потоке энергии сознания"
+        ) == 1) { "Reviewed phrase matcher must find a capital-Cyrillic phrase" }
+        check(phraseOccurrenceCount(
+            "сети значений",
+            "сети\\u00a0значений; сети\\tзначений"
+        ) == 2) { "Reviewed phrase matcher must accept non-breaking and repeated whitespace" }
+        check(phraseOccurrenceCount(
+            "сети значений",
+            "подсети значений и сети значенийx"
+        ) == 0) { "Reviewed phrase matcher must enforce whole-word boundaries" }
+    }
+
     @Test
     fun compareOriginalRuVoiceWithRuAccentMergedAcrossTheWholeBook() {
         val projectDir = File(checkNotNull(System.getenv("RUVOICE_PROJECT_DIR"))).canonicalFile
