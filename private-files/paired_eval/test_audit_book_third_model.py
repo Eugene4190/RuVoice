@@ -164,6 +164,19 @@ class ThreeModelOverrideTests(unittest.TestCase):
         self.assertEqual(evidence[0][0], "ONE_DICTIONARY_PLUS_TWO_MODELS")
         self.assertEqual(summary["confirmed_occurrences"], 2)
 
+    def test_partial_third_model_alignment_blocks_book_wide_override(self):
+        # Only two of the book's three occurrences reached the aligned model output.
+        # Matching models and dictionary evidence on this partial sample are not enough.
+        rows = [self.row(segment=i, index=0) for i in range(2)]
+        quality = {(i, 0): self.quality("1", "1") for i in range(2)}
+        confirmed, oov, evidence, summary = module.build_three_model_overrides(
+            rows, quality, set(), expected_occurrence_counts={"пример": 3}
+        )
+        self.assertEqual(confirmed, [])
+        self.assertEqual(oov, [])
+        self.assertEqual(evidence, [])
+        self.assertEqual(summary["excluded_by_reason"]["incomplete_occurrence_coverage"], 1)
+
     def test_repeated_oov_is_separate_not_importable(self):
         rows = [self.row(segment=i, index=0) for i in range(3)]
         quality = {(i, 0): self.quality() for i in range(3)}
