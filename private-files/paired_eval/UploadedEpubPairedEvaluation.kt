@@ -66,15 +66,17 @@ private fun parseBookPhraseTargets(lines: List<String>): List<BookPhraseTarget> 
 }
 
 private fun phraseOccurrenceCount(phrase: String, text: String): Int {
-    // Escape each word separately so flexible separators stay regex operators.
-    // \p{Z} covers typographic/non-breaking Unicode spaces; IGNORE_CASE in Kotlin
-    // uses Unicode case folding, needed for an initial capital Cyrillic letter.
+    // Normalize case explicitly: Java's default regex case rules are not a safe
+    // dependency for Cyrillic. Escape each word separately so whitespace operators
+    // remain active; \\p{Z} also covers NBSP and typographic separators.
+    val normalizedPhrase = phrase.lowercase(Locale.ROOT)
+    val normalizedText = text.lowercase(Locale.ROOT)
     val spaces = Regex("[\\s\\p{Z}]+")
-    val words = phrase.trim().split(spaces).filter { it.isNotEmpty() }
+    val words = normalizedPhrase.trim().split(spaces).filter { it.isNotEmpty() }
     if (words.isEmpty()) return 0
     val whitespaceFlexible = words.joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
-    return Regex("(?<![а-яё])$whitespaceFlexible(?![а-яё])", RegexOption.IGNORE_CASE)
-        .findAll(text).count()
+    return Regex("(?<![\\p{L}])$whitespaceFlexible(?![\\p{L}])")
+        .findAll(normalizedText).count()
 }
 
 private fun localName(node: Node): String =
