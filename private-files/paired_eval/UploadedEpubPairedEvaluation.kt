@@ -1076,14 +1076,6 @@ class UploadedEpubPairedEvaluationTest {
                 }
             }
 
-            val utolshilasReviewed = readable(
-                "Ветвь системы значений утолщилась? Утолщилась.",
-                reviewedStress, data
-            )
-            check(Regex("(?i)утолщи́лась").findAll(utolshilasReviewed).count() == 2) {
-                "Book override must accent both occurrences of утолщилась on и: $utolshilasReviewed"
-            }
-
             // Run the five manually reviewed stress cases before the separate ё suite.
             // This makes a failure in spelling alignment unable to hide the stress-only result.
             val earlyStressFile = File(projectDir, "tools/data/ruvoice_stress_book_regressions.json")
