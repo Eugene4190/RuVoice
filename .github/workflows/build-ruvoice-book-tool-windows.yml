@@ -30,6 +30,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check whether private reference-book data may be used
+        id: privacy
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $private = gh api "repos/$env:GITHUB_REPOSITORY" --jq ".private"
+          if ($LASTEXITCODE -ne 0 -or ($private -ne "true" -and $private -ne "false")) {
+            throw "Could not establish repository privacy; refusing to process reference-book data."
+          }
+          "RUVOICE_REFERENCE_BOOK_PRIVATE=$private" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "RUVOICE_REFERENCE_BOOK_PRIVATE=$private"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -162,9 +175,20 @@ jobs:
           $auditOut = Join-Path $engine "audit-scripts"
           $bridgeOut = Join-Path $engine "bridges"
           New-Item -ItemType Directory -Force -Path $referenceOut, $auditOut, $bridgeOut, (Join-Path $engine "silero-models"), (Join-Path $engine "aot\data\Russian"), (Join-Path $engine "ruaccent-native") | Out-Null
-          Copy-Item -LiteralPath (Join-Path $reference "book_context_acceptances.tsv") -Destination (Join-Path $referenceOut "book_context_acceptances.tsv") -Force
-          Copy-Item -LiteralPath (Join-Path $reference "book_reviewed_overrides.txt") -Destination (Join-Path $referenceOut "book_reviewed_overrides.txt") -Force
-          Copy-Item -LiteralPath (Join-Path $reference "book_reviewed_replacements.txt") -Destination (Join-Path $referenceOut "book_reviewed_replacements.txt") -Force
+          if ($env:RUVOICE_REFERENCE_BOOK_PRIVATE -eq "true") {
+            Copy-Item -LiteralPath (Join-Path $reference "book_context_acceptances.tsv") -Destination (Join-Path $referenceOut "book_context_acceptances.tsv") -Force
+            Copy-Item -LiteralPath (Join-Path $reference "book_reviewed_overrides.txt") -Destination (Join-Path $referenceOut "book_reviewed_overrides.txt") -Force
+            Copy-Item -LiteralPath (Join-Path $reference "book_reviewed_replacements.txt") -Destination (Join-Path $referenceOut "book_reviewed_replacements.txt") -Force
+            Write-Host "PRIVATE_BOOK_RULES=STAGED"
+          } else {
+            "# Reference-book rules are intentionally omitted from public builds." |
+              Set-Content -Encoding UTF8 (Join-Path $referenceOut "book_context_acceptances.tsv")
+            "# No reference-book overrides are bundled in public builds." |
+              Set-Content -Encoding UTF8 (Join-Path $referenceOut "book_reviewed_overrides.txt")
+            "# No reference-book replacements are bundled in public builds." |
+              Set-Content -Encoding UTF8 (Join-Path $referenceOut "book_reviewed_replacements.txt")
+            Write-Host "PRIVATE_BOOK_RULES=OMITTED"
+          }
           Copy-Item -LiteralPath (Join-Path $reference "full_book_ruvoice_quality.py") -Destination (Join-Path $auditOut "full_book_ruvoice_quality.py") -Force
           Copy-Item -LiteralPath (Join-Path $reference "package_ruvoice_import.py") -Destination (Join-Path $auditOut "package_ruvoice_import.py") -Force
           Copy-Item -LiteralPath (Join-Path $reference "torch_lite_bridge.py") -Destination (Join-Path $bridgeOut "torch_lite_bridge.py") -Force
@@ -414,23 +438,60 @@ jobs:
             Copy-Item -LiteralPath (Join-Path $tool $module) -Destination (Join-Path $portableRoot $module) -Force
           }
 
-      - name: Run the full production audit on the uploaded reference EPUB
+      - name: Run an end-to-end upload smoke test without exposing a personal book
         shell: pwsh
         run: |
           $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
           $exe = Join-Path $stage "RuVoiceBookTool.exe"
-          $privateHome = Join-Path $env:RUNNER_TEMP "ruvoice-reference-book-private"
+          $privateHome = Join-Path $env:RUNNER_TEMP "ruvoice-smoke-private"
           $port = 18765
-          $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\8.Iskusstvo..epub"
-          $zip = Join-Path $env:RUNNER_TEMP "ruvoice-reference-book-result.zip"
-          $bookOutput = Join-Path $env:GITHUB_WORKSPACE "RuVoiceBookOutput.zip"
-          if (-not (Test-Path -LiteralPath $epub -PathType Leaf)) { throw "The uploaded reference EPUB is missing: $epub" }
-          $bookHashBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
-          if ($bookHashBefore -ne "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119") {
-            throw "The uploaded EPUB does not match the reviewed reference-book manifest: $bookHashBefore"
-          }
-          Write-Host "REFERENCE_EPUB_SHA256=$bookHashBefore"
+          $zip = Join-Path $env:RUNNER_TEMP "ruvoice-smoke-result.zip"
+          $bookOutput = Join-Path $env:RUNNER_TEMP "ruvoice-smoke-package-copy.zip"
 
+          if ($env:RUVOICE_REFERENCE_BOOK_PRIVATE -eq "true") {
+            $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\8.Iskusstvo..epub"
+            if (-not (Test-Path -LiteralPath $epub -PathType Leaf)) { throw "The private reference EPUB is missing: $epub" }
+            $bookHashBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+            if ($bookHashBefore -ne "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119") {
+              throw "The private reference EPUB does not match its reviewed manifest: $bookHashBefore"
+            }
+            Write-Host "SMOKE_BOOK_TYPE=PRIVATE_REFERENCE"
+          } else {
+            $epub = Join-Path $env:RUNNER_TEMP "ruvoice-synthetic-smoke.epub"
+            @'
+          import sys
+          from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+
+          path = sys.argv[1]
+          container = """<?xml version="1.0" encoding="UTF-8"?>
+          <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+            <rootfiles><rootfile full-path="OPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles>
+          </container>"""
+          opf = """<?xml version="1.0" encoding="UTF-8"?>
+          <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book">
+            <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book">synthetic-ruvoice-smoke</dc:identifier><dc:title>RuVoice synthetic smoke test</dc:title><dc:language>ru</dc:language></metadata>
+            <manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
+            <spine><itemref idref="chapter"/></spine>
+          </package>"""
+          xhtml = """<?xml version="1.0" encoding="UTF-8"?>
+          <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Smoke test</title></head>
+          <body>
+          <p>Это короткая проверочная книга. В начале истории человек читает простые предложения, чтобы проверить произношение русских слов в контексте. Затем программа сохраняет исходный текст и формирует список пользовательских правил.</p>
+          <p>Вторая часть проверки нужна для того, чтобы убедиться: каждое слово проходит через настоящий движок RuVoice, а результат можно собрать в отдельный архив.</p>
+          </body></html>"""
+          with ZipFile(path, "w") as archive:
+              archive.writestr("mimetype", "application/epub+zip", compress_type=ZIP_STORED)
+              archive.writestr("META-INF/container.xml", container, compress_type=ZIP_DEFLATED)
+              archive.writestr("OPS/package.opf", opf, compress_type=ZIP_DEFLATED)
+              archive.writestr("OPS/chapter.xhtml", xhtml, compress_type=ZIP_DEFLATED)
+          print("SYNTHETIC_EPUB_CREATED=" + path)
+          '@ | python - $epub
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the synthetic smoke-test EPUB" }
+            Write-Host "SMOKE_BOOK_TYPE=SYNTHETIC"
+          }
+
+          $bookHashBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+          Write-Host "SMOKE_EPUB_SHA256=$bookHashBefore"
           $process = Start-Process -FilePath $exe -ArgumentList @(
             "--no-browser", "--port", "$port", "--private-home", "$privateHome"
           ) -PassThru -WindowStyle Hidden
@@ -454,8 +515,8 @@ jobs:
             if ($upload.StatusCode -ne 200 -or -not $upload.Content.Contains("ZIP готов")) {
               $messageMatch = [regex]::Match($upload.Content, '</form>\s*<p>(.*?)</p>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
               $message = if ($messageMatch.Success) { [System.Net.WebUtility]::HtmlDecode($messageMatch.Groups[1].Value) } else { "No server feedback paragraph was returned" }
-              Write-Host "REFERENCE_BOOK_UPLOAD_STATUS=$($upload.StatusCode)"
-              Write-Host "REFERENCE_BOOK_UPLOAD_ERROR=$message"
+              Write-Host "SMOKE_UPLOAD_STATUS=$($upload.StatusCode)"
+              Write-Host "SMOKE_UPLOAD_ERROR=$message"
               throw "The original RuVoice audit did not return a ZIP (HTTP $($upload.StatusCode))."
             }
             $downloadMatch = [regex]::Match($upload.Content, 'href="(/download/[^"]+)"')
@@ -482,21 +543,18 @@ jobs:
               expected = summary["tokens_from_original_ruvoice"]
               assert expected == summary["occurrences_in_full_context_ledger"], summary
               ledger = z.open("WholeBook_RuVoice_AllOccurrences.tsv")
-              rows = list(csv.DictReader((b.decode("utf-8-sig") for b in ledger), delimiter="\t"))
+              rows = list(csv.DictReader((line.decode("utf-8-sig") for line in ledger), delimiter="\t"))
               assert len(rows) == expected, (len(rows), expected)
               assert len({(r["segment_index"], r["word_index"]) for r in rows}) == expected
-              print("REFERENCE_BOOK_ZIP_VALIDATED=" + json.dumps({
+              print("SMOKE_ZIP_VALIDATED=" + json.dumps({
                   "tokens": expected,
                   "wordforms": summary["unique_russian_wordforms"],
                   "ledger_coverage_percent": summary["ledger_coverage_percent"],
                   "stress_entries": summary["total_imported_stress_overrides"],
                   "replacement_rules": summary["imported_context_replacement_rules"],
-                  "baseline_suspected_mismatches": summary["baseline_suspected_mismatches"],
-                  "reviewed_suspected_mismatches": summary["reviewed_suspected_mismatches"],
-                  "independent_reference_occurrences": summary["word_occurrences_with_some_independent_reference"],
               }, ensure_ascii=False))
           '@ | python - $zip
-            if ($LASTEXITCODE -ne 0) { throw "Reference-book ZIP validation failed" }
+            if ($LASTEXITCODE -ne 0) { throw "Smoke-test ZIP validation failed" }
 
             $bookHashAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
             if ($bookHashAfter -ne $bookHashBefore) { throw "The source EPUB changed during processing" }
@@ -510,7 +568,7 @@ jobs:
             if ((Get-ChildItem -Path (Join-Path $privateHome "packages") -Filter "*.zip" -File | Measure-Object).Count -lt 1) {
               throw "The result ZIP was not saved in the local packages folder"
             }
-            Write-Host "PASS: The real reference EPUB completed the original RuVoice audit, occurrence-ledger validation, and import ZIP creation"
+            Write-Host "PASS: the upload, original RuVoice processing, full occurrence ledger, and import ZIP smoke test completed"
           } finally {
             if ($process -and -not $process.HasExited) { & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null }
           }
