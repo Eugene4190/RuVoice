@@ -286,10 +286,10 @@ jobs:
       - name: Preflight the packaged Torch Lite worker with official RuVoice models
         shell: pwsh
         run: |
-          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\\engine"
-          $worker = Join-Path $engine "bridges\\worker\\RuVoiceModelWorker.exe"
-          $accentor = Join-Path $engine "silero-models\\accentor.ptl"
-          $homo = Join-Path $engine "silero-models\\homo.ptl"
+          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine"
+          $worker = Join-Path $engine "bridges\worker\RuVoiceModelWorker.exe"
+          $accentor = Join-Path $engine "silero-models\accentor.ptl"
+          $homo = Join-Path $engine "silero-models\homo.ptl"
           $log = Join-Path $env:RUNNER_TEMP "torch-lite-preflight.log"
           $env:RUVOICE_TORCH_BRIDGE_LOG = $log
           @'
@@ -303,7 +303,7 @@ jobs:
           ]
           requests = [{"op": "accentor", "words": words} for words in batches]
           requests.append({"op": "quit"})
-          payload = "".join(json.dumps(item, ensure_ascii=False) + "\\n" for item in requests)
+          payload = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in requests)
           completed = subprocess.run(
               [worker, accentor, homo], input=payload, text=True, encoding="utf-8",
               capture_output=True, timeout=300, check=False,
