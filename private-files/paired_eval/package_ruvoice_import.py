@@ -132,7 +132,7 @@ def package(
     ledger_rows = 0
     seen_coordinates: set[tuple[str, str]] = set()
     with occurrence_path.open("r", encoding="utf-8-sig", newline="") as stream:
-        reader = csv.DictReader(stream, delimiter="\\t")
+        reader = csv.DictReader(stream, delimiter="\t")
         columns = set(reader.fieldnames or [])
         missing_columns = required_columns - columns
         if missing_columns:
