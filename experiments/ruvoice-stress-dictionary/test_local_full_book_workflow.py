@@ -169,6 +169,7 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
             self.assertEqual(command[1], "--third-model")
             self.assertIn("--paired-json", command)
             self.assertIn("--quality-occurrences", command)
+            self.assertIn("--all-segments", command)
 
     def test_desktop_classpath_prioritizes_real_json_over_android_mockable_jar(self):
         with tempfile.TemporaryDirectory() as temp:
