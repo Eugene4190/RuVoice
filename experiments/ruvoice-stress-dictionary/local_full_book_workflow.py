@@ -243,6 +243,8 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
               book_sha: str, replacements: Path, overrides: Path, auto_overrides: Path | None = None) -> None:
     env = os.environ.copy()
     project = paths["project"]
+    torch_bridge_log = work / "torch-lite-bridge.log"
+    torch_bridge_log.unlink(missing_ok=True)
     env.update({
         "RUVOICE_PROJECT_DIR": str(project),
         "RUVOICE_BOOK_PATH": str(book.resolve()),
@@ -252,6 +254,7 @@ def _run_java(paths: dict[str, Path], book: Path, report: Path, work: Path, priv
         "RUVOICE_BASELINE_SILERO_JSON": str(paths["baseline_silero_json"]),
         "RUVOICE_TORCH_BRIDGE": str(paths["torch_script"]),
         "RUVOICE_TORCH_BRIDGE_EXE": str(paths["torch_exe"]),
+        "RUVOICE_TORCH_BRIDGE_LOG": str(torch_bridge_log),
         "RUVOICE_BOOK_OVERRIDES": str(overrides),
         "RUVOICE_BOOK_REPLACEMENTS": str(replacements),
         "RUVOICE_RUACCENT_MODEL_CACHE": str(private_home / "models" / "ruaccent"),
