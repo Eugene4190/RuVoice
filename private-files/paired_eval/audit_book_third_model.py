@@ -221,6 +221,7 @@ def build_three_model_overrides(
     rows: list[list[Any]],
     quality: dict[tuple[int, int], dict[str, str]],
     existing: set[str],
+    expected_occurrence_counts: dict[str, int] | None = None,
 ) -> tuple[list[str], list[str], list[list[Any]], dict[str, Any]]:
     """
     Group every token occurrence by exact spelling. Confirmed output requires two
@@ -265,6 +266,14 @@ def build_three_model_overrides(
     evidence: list[list[Any]] = []
     tiers = Counter()
     for key, group in grouped.items():
+        # An alignment gap must never turn a partial sample into a book-wide rule.
+        # The expected count comes from every production RuVoice occurrence, not
+        # from the subset that the independent model happened to align.
+        if expected_occurrence_counts is not None:
+            expected_count = expected_occurrence_counts.get(key, 0)
+            if expected_count <= 0 or len(group) != expected_count:
+                excluded["incomplete_occurrence_coverage"] += 1
+                continue
         if len({row["word"] for row in group}) != 1:
             excluded["orthographic_variants_share_key"] += 1
             continue
@@ -539,15 +548,38 @@ def main() -> int:
                 mismatch_groups.setdefault(pair, Counter())[context[:160]] += 1
 
     out_rows.sort(key=lambda row: (int(row[0]), int(row[1])))
-    if not args.all_segments:
-        actual_coords = [(int(row[0]), int(row[1])) for row in out_rows]
-        if len(actual_coords) != len(set(actual_coords)) or set(actual_coords) != candidate_coords:
-            missing = sorted(candidate_coords - set(actual_coords))[:20]
-            extra = sorted(set(actual_coords) - candidate_coords)[:20]
-            raise RuntimeError(
-                "Third-model occurrence coverage mismatch; automatic corrections are blocked. "
-                f"missing={missing} extra={extra}"
-            )
+    actual_coord_list = [(int(row[0]), int(row[1])) for row in out_rows]
+    actual_coords = set(actual_coord_list)
+    if len(actual_coord_list) != len(actual_coords):
+        raise RuntimeError("Third-model output contains duplicate production occurrence coordinates")
+
+    # Candidate wordforms are eligible for automatic correction only when every
+    # occurrence selected during preflight was actually inferred and aligned.
+    candidate_actual_coords = actual_coords & candidate_coords
+    if candidate_actual_coords != candidate_coords:
+        missing = sorted(candidate_coords - candidate_actual_coords)[:20]
+        raise RuntimeError(
+            "Third-model candidate occurrence coverage mismatch; automatic corrections are blocked. "
+            f"missing={missing}"
+        )
+    if not args.all_segments and actual_coords != candidate_coords:
+        extra = sorted(actual_coords - candidate_coords)[:20]
+        raise RuntimeError(
+            "Third-model selected-mode output contains unexpected occurrences. "
+            f"extra={extra}"
+        )
+
+    expected_model_coords: set[tuple[int, int]] = set()
+    expected_occurrence_counts: Counter[str] = Counter()
+    for baseline in baseline_rows:
+        coord = (int(baseline["segment_index"]), int(baseline["word_index"]))
+        source_word = str(baseline.get("source_word") or baseline.get("ruvoice_output") or "")
+        key = norm(source_word)
+        if CYR_RE.fullmatch(key) and len(word_vowels(key)) >= 2:
+            expected_model_coords.add(coord)
+            expected_occurrence_counts[key] += 1
+    missing_model_coords = expected_model_coords - actual_coords
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output_path = args.output_dir / "Book_Third_Model_AllOccurrences.tsv"
     write_tsv(output_path, out_rows)
@@ -568,7 +600,8 @@ def main() -> int:
         writer.writerows(pair_rows)
 
     confirmed_lines, oov_lines, evidence_rows, auto_summary = build_three_model_overrides(
-        out_rows, quality, existing_overrides
+        out_rows, quality, existing_overrides,
+        expected_occurrence_counts=expected_occurrence_counts,
     )
     confirmed_path = args.output_dir / "Book_Three_Model_Confirmed_Overrides.txt"
     confirmed_path.write_text(
@@ -608,10 +641,17 @@ def main() -> int:
         "expected_production_tokens_in_inferred_segments": expected_segment_count,
         "candidate_selection": candidate_summary,
         "candidate_occurrence_coverage": (
-            "FULL" if args.all_segments else f"{len(out_rows)}/{len(candidate_coords)}"
+            "FULL" if candidate_actual_coords == candidate_coords
+            else f"{len(candidate_actual_coords)}/{len(candidate_coords)}"
         ),
         "all_segments_mode": bool(args.all_segments),
-        "aligned_multisyllabic_occurrences": len(out_rows),
+        "expected_multisyllabic_occurrences": len(expected_model_coords),
+        "aligned_multisyllabic_occurrences": len(actual_coords),
+        "missing_multisyllabic_occurrences": len(missing_model_coords),
+        "multisyllabic_occurrence_coverage_percent": (
+            round(100 * len(actual_coords & expected_model_coords) / len(expected_model_coords), 4)
+            if expected_model_coords else 100.0
+        ),
         "third_model_disagreement_occurrences": counters["third_model_disagreement_occurrences"],
         "unique_disagreement_groups": len(mismatch_groups),
         "disagreement_counts": dict(counters),
