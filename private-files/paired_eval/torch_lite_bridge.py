@@ -11,14 +11,16 @@ from pathlib import Path
 
 import torch
 from torch.jit.mobile import _load_for_lite_interpreter
+from silero_stress import load_accentor as load_silero_accentor
 
-TORCH_VERSION = torch.__version__.split("+", 1)[0]
-if TORCH_VERSION != "2.1.0":
+TORCH_VERSION = tuple(
+    int(part) for part in torch.__version__.split("+", 1)[0].split(".")[:2]
+)
+if TORCH_VERSION < (2, 4):
     raise RuntimeError(
-        "Official RuVoice 1.1.3 uses pytorch_android_lite 2.1.0; "
-        f"desktop TorchScript-Lite bridge must match it, got {torch.__version__}"
+        "RuVoice Silero model export requires torch>=2.4; "
+        f"got {torch.__version__}"
     )
-torch.set_num_threads(1)
 
 accentor_path, homo_path = sys.argv[1:3]
 log_stream = None
@@ -114,16 +116,50 @@ def accentor_predict(words):
 diagnostic("START python=" + sys.version.replace("\n", " ") + " torch=" + torch.__version__)
 diagnostic("MODELS accentor=" + str(Path(accentor_path).resolve()) + " homo=" + str(Path(homo_path).resolve()))
 torch.set_num_threads(2)
-accentor = _load_for_lite_interpreter(accentor_path)
-diagnostic("ACCENTOR_MODEL_LOADED")
+lite_accentor = _load_for_lite_interpreter(accentor_path)
+diagnostic("ACCENTOR_LITE_MODEL_LOADED_FOR_PARITY")
 homograph = _load_for_lite_interpreter(homo_path)
 diagnostic("HOMO_MODEL_LOADED")
 
+# The official RuVoice exporter creates accentor.ptl from this exact eager model
+# and verifies identical output rows. The Python Lite wrapper fails on some OOV
+# strings even though the Android IValue bridge accepts them; use the original
+# eager model for desktop inference and retain .ptl as an equivalence check.
+silero_source = load_silero_accentor("ru")
+accentor = silero_source.accentor.model
+diagnostic("ACCENTOR_EAGER_MODEL_LOADED source=silero-stress-1.5")
+
+
+def output_parts(value):
+    return tuple(value) if isinstance(value, (tuple, list)) else (value,)
+
+
 with torch.no_grad():
+    diagnostic("STARTUP_LITE_EAGER_PARITY_BEGIN")
+    parity_words = [
+        "привет", "замок", "молоко", "ёжик", "а", "ктулхуобразный",
+        "дома", "глаза", "разуму", "руки", "культура", "произношение", "ударение",
+    ]
+    for word in parity_words:
+        lite_parts = output_parts(lite_accentor([word]))
+        eager_parts = output_parts(accentor([word]))
+        if len(lite_parts) != len(eager_parts):
+            raise RuntimeError("Silero eager/Lite output count mismatch for " + word)
+        for part_index, (lite_value, eager_value) in enumerate(zip(lite_parts, eager_parts)):
+            if not isinstance(lite_value, torch.Tensor) or not isinstance(eager_value, torch.Tensor):
+                raise RuntimeError("Silero eager/Lite output is not a tensor for " + word)
+            if lite_value.shape != eager_value.shape or not torch.equal(lite_value, eager_value):
+                raise RuntimeError(
+                    "Silero eager model does not exactly match RuVoice .ptl for "
+                    + word + " output=" + str(part_index)
+                )
+    diagnostic("STARTUP_LITE_EAGER_PARITY_OK words=" + str(len(parity_words)))
+    del lite_accentor
+    diagnostic("ACCENTOR_LITE_PARITY_MODULE_RELEASED")
     diagnostic("STARTUP_SELFTEST_BEGIN")
     test = accentor(["замок"])
     if not isinstance(test, (tuple, list)) or len(test) < 1:
-        raise RuntimeError("Unexpected accentor output during startup self-test")
+        raise RuntimeError("Unexpected eager Silero accentor output during startup self-test")
     diagnostic("STARTUP_SELFTEST_OK output=" + repr([describe_tensor(x) for x in test]) if isinstance(test, (tuple, list)) else "STARTUP_SELFTEST_OK output=" + describe_tensor(test))
     emit({"ready": True})
 

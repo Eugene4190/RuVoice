@@ -46,7 +46,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
 
       - name: Set up JDK 17
@@ -269,9 +269,9 @@ jobs:
       - name: Install the portable PyTorch and independent stress model
         shell: pwsh
         run: |
-          python -m pip install --no-cache-dir torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --no-cache-dir numpy==1.26.4 pandas==2.2.3 tqdm==4.67.1 ruaccent-predictor==1.2.0 pyinstaller
-          python -c "import torch; from ruaccent import load_accentor; from torch.jit.mobile import _load_for_lite_interpreter; v=torch.__version__.split('+')[0]; assert v == '2.1.0', 'Production RuVoice uses pytorch_android_lite 2.1.0, got '+torch.__version__; print('PYTORCH='+torch.__version__); print('RUACCENT_WORKER_IMPORT=OK')"
+          python -m pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir numpy==1.26.4 pandas==2.2.3 tqdm==4.67.1 ruaccent-predictor==1.2.0 silero-stress==1.5 pyinstaller
+          python -c "import torch; from ruaccent import load_accentor; from silero_stress import load_accentor as load_silero; from torch.jit.mobile import _load_for_lite_interpreter; v=tuple(int(x) for x in torch.__version__.split('+')[0].split('.')[:2]); assert v >= (2,4), 'RuVoice Silero exporter requires torch>=2.4, got '+torch.__version__; s=load_silero('ru'); assert hasattr(s.accentor, 'model'); print('PYTORCH='+torch.__version__); print('SILERO_STRESS_SOURCE=1.5'); print('RUACCENT_WORKER_IMPORT=OK')"
 
       - name: Build the shared portable Silero and third-model worker
         shell: pwsh
@@ -289,6 +289,7 @@ jobs:
             "--paths", $tool,
             "--collect-all", "torch",
             "--collect-all", "ruaccent",
+            "--collect-all", "silero_stress",
             "--collect-all", "numpy",
             "--collect-all", "pandas",
             "--collect-all", "transformers",
