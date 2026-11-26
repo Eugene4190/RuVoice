@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import re
@@ -93,8 +94,13 @@ def sanitize_summary(raw: dict[str, Any], book_name: str, book_sha: str) -> dict
         "unscored_function_word_occurrences": raw.get("unscored_function_word_occurrences", 0),
         "unscored_monosyllable_occurrences": raw.get("unscored_monosyllable_occurrences", 0),
         "occurrences_without_independent_reference": raw.get("no_independent_reference_occurrences", 0),
+        "function_word_occurrences_requiring_phrase_review": raw.get("unscored_function_word_occurrences", 0),
+        "monosyllable_occurrences_not_lexically_scored": raw.get("unscored_monosyllable_occurrences", 0),
         "baseline_suspected_mismatches": raw.get("baseline_suspected_mismatches", 0),
         "reviewed_suspected_mismatches": raw.get("reviewed_ruvoice_suspected_mismatches", 0),
+        "status_counts": raw.get("status_counts", {}),
+        "reviewed_status_counts": raw.get("reviewed_status_counts", {}),
+        "word_occurrences_with_some_independent_reference": raw.get("word_occurrences_with_some_independent_reference", 0),
         "warning": (
             "100% означает, что каждое словоупотребление присутствует в проверочном реестре. "
             "Это не математическая гарантия идеальной нормативной оценки: неоднозначные случаи "
@@ -112,11 +118,35 @@ def package(
 ) -> dict[str, Any]:
     summary_path = quality_dir / "WholeBook_RuVoice_Quality_Summary.json"
     stress_path = quality_dir / "Book_Importable_Stress_Overrides.txt"
-    unresolved_path = quality_dir / "Book_Unresolved_OOV_Review.txt"
-    for path in (book_path, summary_path, stress_path, replacements_path):
+    occurrence_path = quality_dir / "WholeBook_RuVoice_AllOccurrences.tsv"
+    unique_path = quality_dir / "WholeBook_RuVoice_UniqueWords.tsv"
+    for path in (book_path, summary_path, stress_path, replacements_path, occurrence_path, unique_path):
         if not path.is_file():
             raise FileNotFoundError(f"Не найден обязательный файл: {path}")
     raw_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    expected_occurrences = int(raw_summary.get("occurrences_in_quality_ledger", -1))
+    required_columns = {
+        "baseline_status", "reviewed_status", "source_form", "ruvoice_output",
+        "reviewed_output", "context", "segment_index", "word_index",
+    }
+    ledger_rows = 0
+    seen_coordinates: set[tuple[str, str]] = set()
+    with occurrence_path.open("r", encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\\t")
+        columns = set(reader.fieldnames or [])
+        missing_columns = required_columns - columns
+        if missing_columns:
+            raise ValueError(f"Полный реестр не содержит обязательные колонки: {sorted(missing_columns)}")
+        for row in reader:
+            ledger_rows += 1
+            coordinate = (row["segment_index"], row["word_index"])
+            if coordinate in seen_coordinates:
+                raise ValueError(f"Полный реестр содержит повторное словоупотребление: {coordinate}")
+            seen_coordinates.add(coordinate)
+    if ledger_rows != expected_occurrences:
+        raise ValueError(
+            f"Количество строк полного реестра ({ledger_rows}) не совпадает со сводкой ({expected_occurrences})"
+        )
     book_sha = sha256_file(book_path)
     book_name = book_path.name
     stress = parse_stress_list(stress_path)
@@ -167,13 +197,19 @@ def package(
         archive.writestr(replacements_name, replacements_text)
         archive.writestr("IMPORT.txt", guide)
         archive.writestr("Book_Quality_Summary.json", safe_summary)
+        archive.write(occurrence_path, "WholeBook_RuVoice_AllOccurrences.tsv")
+        archive.write(unique_path, "WholeBook_RuVoice_UniqueWords.tsv")
     return {
         "output": str(output),
         "book_sha256": book_sha,
         "stress_entries": len(stress),
         "replacement_rules": len(replacements),
+        "ledger_rows": ledger_rows,
         "ledger_coverage_percent": summary["ledger_coverage_percent"],
-        "zip_members": [stress_name, replacements_name, "IMPORT.txt", "Book_Quality_Summary.json"],
+        "zip_members": [
+            stress_name, replacements_name, "IMPORT.txt", "Book_Quality_Summary.json",
+            "WholeBook_RuVoice_AllOccurrences.tsv", "WholeBook_RuVoice_UniqueWords.tsv",
+        ],
     }
 
 
