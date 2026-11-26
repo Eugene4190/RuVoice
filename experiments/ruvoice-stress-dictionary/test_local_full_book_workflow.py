@@ -137,8 +137,8 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
             def fail_after_worker_log(command, **kwargs):
                 env = kwargs["env"]
                 Path(env["RUVOICE_TORCH_BRIDGE_LOG"]).write_text(
-                    "TORCH_BRIDGE_DIAGNOSTIC=REQUEST_BEGIN line=1 op=accentor words=2\\n"
-                    "TORCH_BRIDGE_DIAGNOSTIC=REQUEST_ERROR line=1 RuntimeError: invalid input\\n",
+                    "TORCH_BRIDGE_DIAGNOSTIC=REQUEST_BEGIN line=1 op=accentor words=2\n"
+                    "TORCH_BRIDGE_DIAGNOSTIC=REQUEST_ERROR line=1 RuntimeError: invalid input\n",
                     encoding="utf-8",
                 )
                 return subprocess.CompletedProcess(command, 1, stdout="", stderr="")
