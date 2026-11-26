@@ -319,7 +319,10 @@ jobs:
           @'
           import json, subprocess, sys
           worker, accentor, homo = sys.argv[1:4]
-          singleton_words = ["произношение", "контекст", "ударение", "словарь"]
+          singleton_words = [
+              "строительство", "дома", "отражается", "глаза", "разуму", "руки", "инструмент", "культура",
+              "произношение", "контекст", "ударение", "словарь",
+          ]
           singleton_batches = [[word] for word in singleton_words]
           batches = [
               ["замок"],
@@ -350,13 +353,24 @@ jobs:
           records = [json.loads(line) for line in lines]
           if not records[0].get("ready"):
               raise SystemExit("Packaged Torch Lite worker did not send ready")
+          singleton_failures = []
+          batch_failures = []
           for index, words in enumerate(singleton_batches + batches, start=1):
               result = records[index]
               if "error" in result:
-                  label = words[0] if len(words) == 1 else "batch-" + str(index - len(singleton_batches))
-                  raise SystemExit("Torch Lite request " + str(index) + " (" + label + ") failed: " + result["error"])
+                  if index <= len(singleton_batches):
+                      singleton_failures.append(words[0])
+                  else:
+                      batch_failures.append("batch-" + str(index - len(singleton_batches)) +
+                                            " (" + str(len(words)) + " words)")
+                  continue
               if len(result.get("stress", [])) != len(words) or len(result.get("yo", [])) != len(words):
-                  raise SystemExit("Torch Lite output did not align with words in request " + str(index))
+                  batch_failures.append("request-" + str(index) + " output rows did not align")
+          if singleton_failures:
+              print("TORCH_LITE_SINGLETON_FAILURES=" + json.dumps(singleton_failures, ensure_ascii=False))
+              raise SystemExit("Torch Lite cannot infer the following individual words: " + ", ".join(singleton_failures))
+          if batch_failures:
+              raise SystemExit("Torch Lite batch inference failed: " + "; ".join(batch_failures))
           print("TORCH_LITE_SINGLETON_PREFLIGHT=PASS words=" + str(len(singleton_words)))
           print("TORCH_LITE_PACKAGED_WORKER_PREFLIGHT=PASS batches=" + str(len(batches)) +
                 " words=" + str(sum(map(len, batches))))
