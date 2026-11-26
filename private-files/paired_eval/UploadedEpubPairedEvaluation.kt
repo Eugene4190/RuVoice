@@ -721,7 +721,7 @@ class UploadedEpubPairedEvaluationTest {
         ) == 1) { "Reviewed phrase matcher must find a capital-Cyrillic phrase" }
         check(phraseOccurrenceCount(
             "сети значений",
-            "сети\\u00a0значений; сети\\tзначений"
+            "сети\u00a0значений; сети\tзначений"
         ) == 2) { "Reviewed phrase matcher must accept non-breaking and repeated whitespace" }
         check(phraseOccurrenceCount(
             "сети значений",
