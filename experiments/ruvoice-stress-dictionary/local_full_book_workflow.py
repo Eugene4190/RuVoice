@@ -330,6 +330,9 @@ def _run_third_model(paths: dict[str, Path], paired: Path, occurrences: Path, re
         "--output-dir", str(output),
         "--batch-size", "8",
         "--max-chars", "220",
+        # The full-book acceptance path must obtain an independent prediction for
+        # every segment, not only the subset already eligible for automatic fixes.
+        "--all-segments",
     ]
     completed = subprocess.run(command, cwd=ENGINE, text=True, capture_output=True, check=False)
     if completed.returncode != 0:
