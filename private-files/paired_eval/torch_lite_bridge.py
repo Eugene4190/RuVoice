@@ -48,36 +48,31 @@ def describe_tensor(value) -> str:
 accentor_batch_fallbacks = 0
 
 
-def concatenate_model_outputs(left, right):
-    """Join recursively inferred TorchScript outputs without changing their schema."""
-    if isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor):
-        return torch.cat((left, right), dim=0)
-    if left is None and right is None:
-        return None
-    if isinstance(left, tuple) and isinstance(right, tuple) and len(left) == len(right):
-        return tuple(concatenate_model_outputs(a, b) for a, b in zip(left, right))
-    if isinstance(left, list) and isinstance(right, list) and len(left) == len(right):
-        return [concatenate_model_outputs(a, b) for a, b in zip(left, right)]
-    raise RuntimeError(
-        "Torch Lite sub-batches returned incompatible output schemas: "
-        + type(left).__name__ + " vs " + type(right).__name__
-    )
-
-
 def accentor_predict(words):
-    """Retry a rejected batch as smaller batches; never hide a single-word failure."""
+    """Return per-word probability rows; split rejected batches without padding logits."""
     global accentor_batch_fallbacks
     try:
         output = accentor(words)
-        values = output if isinstance(output, (tuple, list)) else (output,)
-        for value in values:
-            if isinstance(value, torch.Tensor) and value.ndim > 0:
-                if int(value.shape[0]) != len(words):
-                    raise RuntimeError(
-                        "Accentor output rows do not align with input: "
-                        f"words={len(words)} rows={int(value.shape[0])}"
-                    )
-        return output
+        if isinstance(output, (tuple, list)):
+            stress_logits = output[0]
+            yo_logits = output[1] if len(output) > 1 else None
+        else:
+            stress_logits, yo_logits = output, None
+
+        if not isinstance(stress_logits, torch.Tensor):
+            raise RuntimeError("Accentor stress output is not a tensor")
+        stress = torch.softmax(stress_logits, dim=1).cpu().tolist()
+        yo = (
+            torch.softmax(yo_logits, dim=1).cpu().tolist()
+            if isinstance(yo_logits, torch.Tensor)
+            else [[] for _ in words]
+        )
+        if len(stress) != len(words) or len(yo) != len(words):
+            raise RuntimeError(
+                "Accentor output rows do not align with input words: "
+                f"words={len(words)} stress={len(stress)} yo={len(yo)}"
+            )
+        return stress, yo
     except Exception as error:
         if len(words) <= 1:
             raise
@@ -88,9 +83,11 @@ def accentor_predict(words):
                 " error=" + type(error).__name__ + ": " + str(error)
             )
         middle = len(words) // 2
-        left = accentor_predict(words[:middle])
-        right = accentor_predict(words[middle:])
-        return concatenate_model_outputs(left, right)
+        left_stress, left_yo = accentor_predict(words[:middle])
+        right_stress, right_yo = accentor_predict(words[middle:])
+        # Join Python rows after softmax. This also supports chunks whose output
+        # tensors have different padded widths; no artificial logits are introduced.
+        return left_stress + right_stress, left_yo + right_yo
 
 
 diagnostic("START python=" + sys.version.replace("\n", " ") + " torch=" + torch.__version__)
@@ -120,27 +117,12 @@ with torch.no_grad():
             if op == "accentor":
                 words = request["words"]
                 diagnostic("REQUEST_BEGIN line=" + str(line_number) + " op=accentor words=" + str(len(words)))
-                output = accentor_predict(words)
-                if isinstance(output, (tuple, list)):
-                    stress_logits = output[0]
-                    yo_logits = output[1] if len(output) > 1 else None
-                else:
-                    stress_logits, yo_logits = output, None
+                stress, yo = accentor_predict(words)
                 diagnostic(
-                    "ACCENTOR_OUTPUT stress=" + describe_tensor(stress_logits) +
-                    " yo=" + describe_tensor(yo_logits)
+                    "ACCENTOR_OUTPUT words=" + str(len(words)) +
+                    " stress_rows=" + str(len(stress)) +
+                    " yo_rows=" + str(len(yo))
                 )
-                stress = torch.softmax(stress_logits, dim=1).cpu().tolist()
-                yo = (
-                    torch.softmax(yo_logits, dim=1).cpu().tolist()
-                    if isinstance(yo_logits, torch.Tensor)
-                    else [[] for _ in words]
-                )
-                if len(stress) != len(words) or len(yo) != len(words):
-                    raise RuntimeError(
-                        "Accentor output rows do not align with input words: "
-                        f"words={len(words)} stress={len(stress)} yo={len(yo)}"
-                    )
                 emit({"stress": stress, "yo": yo})
                 diagnostic("REQUEST_OK line=" + str(line_number) + " op=accentor")
             elif op == "homo":
