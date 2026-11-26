@@ -66,7 +66,11 @@ private fun parseBookPhraseTargets(lines: List<String>): List<BookPhraseTarget> 
 }
 
 private fun phraseOccurrenceCount(phrase: String, text: String): Int {
-    val whitespaceFlexible = Regex.escape(phrase).replace(" ", "\\s+")
+    // Build the regex one escaped word at a time. Regex.escape(wholePhrase) quotes
+    // the entire string, so injecting \\s+ after escaping would make it literal text.
+    val words = phrase.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return 0
+    val whitespaceFlexible = words.joinToString("\\\\s+") { Regex.escape(it) }
     return Regex("(?i)(?<![а-яё])$whitespaceFlexible(?![а-яё])").findAll(text).count()
 }
 
