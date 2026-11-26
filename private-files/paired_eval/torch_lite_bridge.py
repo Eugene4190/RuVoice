@@ -45,12 +45,27 @@ def describe_tensor(value) -> str:
     return "Tensor(shape=" + repr(tuple(value.shape)) + ", dtype=" + str(value.dtype) + ")"
 
 
+MAX_ACCENTOR_BATCH_SIZE = 32
 accentor_batch_fallbacks = 0
+accentor_batch_chunks = 0
+
+
+def concatenate_rows(left_stress, left_yo, right_stress, right_yo):
+    # These are Python rows, not tensors: model batches can have different padded widths.
+    return left_stress + right_stress, left_yo + right_yo
 
 
 def accentor_predict(words):
-    """Return per-word probability rows; split rejected batches without padding logits."""
-    global accentor_batch_fallbacks
+    """Return per-word probability rows; bound batch size before entering Torch Lite."""
+    global accentor_batch_fallbacks, accentor_batch_chunks
+    # Do not first submit an oversized request: a failed Lite forward can leave its
+    # interpreter in a bad state, making every later retry fail too.
+    if len(words) > MAX_ACCENTOR_BATCH_SIZE:
+        accentor_batch_chunks += 1
+        middle = len(words) // 2
+        left_stress, left_yo = accentor_predict(words[:middle])
+        right_stress, right_yo = accentor_predict(words[middle:])
+        return concatenate_rows(left_stress, left_yo, right_stress, right_yo)
     try:
         output = accentor(words)
         if isinstance(output, (tuple, list)):
@@ -85,9 +100,7 @@ def accentor_predict(words):
         middle = len(words) // 2
         left_stress, left_yo = accentor_predict(words[:middle])
         right_stress, right_yo = accentor_predict(words[middle:])
-        # Join Python rows after softmax. This also supports chunks whose output
-        # tensors have different padded widths; no artificial logits are introduced.
-        return left_stress + right_stress, left_yo + right_yo
+        return concatenate_rows(left_stress, left_yo, right_stress, right_yo)
 
 
 diagnostic("START python=" + sys.version.replace("\n", " ") + " torch=" + torch.__version__)
@@ -161,6 +174,7 @@ with torch.no_grad():
             emit({"error": type(error).__name__ + ": " + str(error)})
 
 diagnostic("ACCENTOR_BATCH_FALLBACKS=" + str(accentor_batch_fallbacks))
+diagnostic("ACCENTOR_BATCH_CHUNKS=" + str(accentor_batch_chunks))
 diagnostic("BRIDGE_EXIT")
 if log_stream is not None:
     log_stream.close()
