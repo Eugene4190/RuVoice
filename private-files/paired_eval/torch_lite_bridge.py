@@ -12,6 +12,14 @@ from pathlib import Path
 import torch
 from torch.jit.mobile import _load_for_lite_interpreter
 
+TORCH_VERSION = torch.__version__.split("+", 1)[0]
+if TORCH_VERSION != "2.1.0":
+    raise RuntimeError(
+        "Official RuVoice 1.1.3 uses pytorch_android_lite 2.1.0; "
+        f"desktop TorchScript-Lite bridge must match it, got {torch.__version__}"
+    )
+torch.set_num_threads(1)
+
 accentor_path, homo_path = sys.argv[1:3]
 log_stream = None
 log_path = os.environ.get("RUVOICE_TORCH_BRIDGE_LOG")
