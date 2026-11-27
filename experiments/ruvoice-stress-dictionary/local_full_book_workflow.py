@@ -334,7 +334,15 @@ def _run_third_model(paths: dict[str, Path], paired: Path, occurrences: Path, re
         # every segment, not only the subset already eligible for automatic fixes.
         "--all-segments",
     ]
-    completed = subprocess.run(command, cwd=ENGINE, text=True, capture_output=True, check=False)
+    worker_env = os.environ.copy()
+    worker_env["PYTHONUTF8"] = "1"
+    worker_env["PYTHONIOENCODING"] = "utf-8"
+    # The frozen worker deliberately emits UTF-8 even on legacy Windows consoles.
+    # Decode explicitly here rather than relying on the host's CP1252 locale.
+    completed = subprocess.run(
+        command, cwd=ENGINE, env=worker_env, text=True,
+        encoding="utf-8", errors="replace", capture_output=True, check=False,
+    )
     if completed.returncode != 0:
         message = "\n".join(completed.stdout.splitlines()[-15:] + completed.stderr.splitlines()[-15:])
         raise RuntimeError("Независимая проверка ударений завершилась ошибкой.\n" + message[-3000:])

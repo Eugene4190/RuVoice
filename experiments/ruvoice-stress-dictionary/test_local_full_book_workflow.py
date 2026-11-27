@@ -218,5 +218,30 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
             self.assertFalse(_jar_contains(path, "anything.class"))
 
 
+class ThirdModelWorkerEncodingTests(unittest.TestCase):
+    def test_worker_output_is_decoded_as_utf8_on_windows(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            worker = root / "RuVoiceModelWorker.exe"
+            completed = subprocess.CompletedProcess(
+                args=[str(worker)], returncode=0,
+                stdout="📖 Loading Custom Accentor\nTHIRD_MODEL_SUMMARY={}\n",
+                stderr="",
+            )
+            with patch.object(workflow.subprocess, "run", return_value=completed) as run:
+                workflow._run_third_model(
+                    {"third_model": worker},
+                    root / "paired.json",
+                    root / "occurrences.tsv",
+                    root / "overrides.txt",
+                    root / "output",
+                )
+            kwargs = run.call_args.kwargs
+            self.assertEqual(kwargs["encoding"], "utf-8")
+            self.assertEqual(kwargs["errors"], "replace")
+            self.assertEqual(kwargs["env"]["PYTHONIOENCODING"], "utf-8")
+            self.assertEqual(kwargs["env"]["PYTHONUTF8"], "1")
+
+
 if __name__ == "__main__":
     unittest.main()
