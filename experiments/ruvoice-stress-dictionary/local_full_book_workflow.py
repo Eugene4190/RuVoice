@@ -320,6 +320,25 @@ def _run_quality_module(paths: dict[str, Path], work: Path, paired: Path, output
         raise RuntimeError("Контекстная проверка словоупотреблений завершилась ошибкой.")
 
 
+def _run_reviewed_second_pass(
+    paths: dict[str, Path], book: Path, paired: Path, work: Path, private_home: Path,
+    book_sha: str, replacements: Path, manual_overrides: Path, auto_overrides: Path,
+    context_rules: Path | None,
+) -> Path:
+    """Always repeat the entire production pass after the first full-book audit.
+
+    A zero-length automatic override file is still a valid outcome. The second pass
+    verifies that the reviewed state (manual overlays plus any safe automatic entries)
+    reproduces consistently and that the final per-occurrence ledger has no regressions.
+    """
+    _run_java(
+        paths, book, paired, work, private_home, book_sha, replacements,
+        manual_overrides, auto_overrides=auto_overrides,
+    )
+    final_quality = work / "final-quality"
+    _run_quality_module(paths, work, paired, final_quality, context_rules)
+    return final_quality
+
 def _run_third_model(paths: dict[str, Path], paired: Path, occurrences: Path, reviewed: Path, output: Path) -> None:
     command = [
         str(paths["third_model"]),
@@ -455,17 +474,13 @@ def process_book(book: Path, *, private_home: Path, book_name: str | None = None
         if not auto_overrides.is_file():
             raise RuntimeError("Независимая модель не создала список подтверждённых кандидатов.")
 
-        has_auto_stress = bool(read_stress_entries(auto_overrides))
-        if has_auto_stress:
-            # The first paired run already validates manual word/phrase overlays.
-            # Only newly generated automatic rules require another full production pass.
-            _run_java(paths, book, paired, work, private_home, digest, book_replacements, manual_overrides, auto_overrides)
-            final_quality = work / "final-quality"
-            _run_quality_module(paths, work, paired, final_quality, paths["context_rules"] if is_reference else None)
-        else:
-            # No new automatic correction was created. The reviewed stream in the first
-            # paired run is already the final state; do not repeat identical neural inference.
-            final_quality = first_quality
+        # Always run the whole book a second time with the final reviewed lists, even
+        # when the automatically confirmed file is empty. This checks repeatability and
+        # regressions for every occurrence, not just whether a list happened to change.
+        final_quality = _run_reviewed_second_pass(
+            paths, book, paired, work, private_home, digest, book_replacements,
+            manual_overrides, auto_overrides, paths["context_rules"] if is_reference else None,
+        )
         final_replacements = final_quality / "Book_Importable_Replacements.txt"
         shutil.copyfile(book_replacements, final_replacements)
 

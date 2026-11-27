@@ -12,6 +12,8 @@ on:
       - "private-files/paired_eval/full_book_ruvoice_quality.py"
       - "private-files/paired_eval/package_ruvoice_import.py"
       - "project/ruvoice-1.1.3-stage4.9/tools/data/ruaccent_yo_book_regressions.json"
+      - "experiments/ruvoice-stress-dictionary/local_full_book_workflow.py"
+      - "experiments/ruvoice-stress-dictionary/test_local_full_book_workflow.py"
   pull_request:
     branches:
       - main

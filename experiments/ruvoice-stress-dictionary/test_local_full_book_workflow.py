@@ -218,6 +218,38 @@ class DesktopRuntimeJarValidationTests(unittest.TestCase):
             self.assertFalse(_jar_contains(path, "anything.class"))
 
 
+class ReviewedSecondPassTests(unittest.TestCase):
+    def test_second_full_production_pass_runs_even_when_auto_file_is_empty(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = {"java": root / "java.exe"}
+            book = root / "book.epub"
+            paired = root / "paired.json"
+            work = root / "work"
+            work.mkdir()
+            private_home = root / "private-home"
+            replacements = root / "replacements.txt"
+            manual = root / "manual.txt"
+            auto = root / "auto-empty.txt"
+            auto.write_text("# no automatic overrides\\n", encoding="utf-8")
+            context_rules = root / "context.tsv"
+
+            with patch.object(workflow, "_run_java") as run_java, \\
+                 patch.object(workflow, "_run_quality_module") as run_quality:
+                result = workflow._run_reviewed_second_pass(
+                    paths, book, paired, work, private_home, "sha256",
+                    replacements, manual, auto, context_rules,
+                )
+
+            self.assertEqual(result, work / "final-quality")
+            run_java.assert_called_once_with(
+                paths, book, paired, work, private_home, "sha256",
+                replacements, manual, auto_overrides=auto,
+            )
+            run_quality.assert_called_once_with(
+                paths, work, paired, work / "final-quality", context_rules,
+            )
+
 class ThirdModelWorkerEncodingTests(unittest.TestCase):
     def test_worker_output_is_decoded_as_utf8_on_windows(self):
         with tempfile.TemporaryDirectory() as temp:
