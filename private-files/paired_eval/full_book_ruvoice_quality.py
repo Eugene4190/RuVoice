@@ -348,6 +348,25 @@ def non_russian_occurrence_row(
     ]
 
 
+def require_exact_occurrence_coordinates(
+    expected: set[tuple[int, int]],
+    actual: set[tuple[int, int]],
+    label: str,
+) -> None:
+    """Require an auxiliary production stream to align to the same token coordinates."""
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    if missing or unexpected:
+        raise SystemExit(
+            f"Неполное выравнивание {label}: expected={len(expected)}, actual={len(actual)}, "
+            f"missing={missing[:20]}, unexpected={unexpected[:20]}"
+        )
+
+
+def _text_value(value: Any) -> str:
+    return "" if value is None or str(value).strip().lower() in {"", "null"} else str(value)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--paired-json", type=Path, required=True)
@@ -389,13 +408,16 @@ def main() -> int:
             reviewed_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(
                 row.get("reviewed_output", "")
             )
-    if not reviewed_by_occurrence:
-        raise SystemExit("Третий прогон не содержит выровненных reviewed_tokens.")
-    if len(reviewed_by_occurrence) != len(tokens):
-        raise SystemExit(
-            f"Неполное выравнивание книжного оверлея: reviewed={len(reviewed_by_occurrence)}, "
-            f"baseline={len(tokens)}"
-        )
+    expected_occurrence_coords = {
+        (int(row["segment_index"]), int(row["word_index"]))
+        for row in tokens
+        if "segment_index" in row and "word_index" in row
+    }
+    if len(expected_occurrence_coords) != len(tokens):
+        raise SystemExit("Baseline содержит отсутствующие или повторяющиеся координаты словоупотреблений.")
+    require_exact_occurrence_coordinates(
+        expected_occurrence_coords, set(reviewed_by_occurrence), "книжного оверлея"
+    )
     is_reference_book = str(paired.get("book_sha256", "")) == "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
     override_entries = paired.get("book_reviewed_override_entries", [])
     expected_overrides = {
@@ -465,7 +487,7 @@ def main() -> int:
     ruaccent_by_occurrence: dict[tuple[int, int], str] = {}
     for row in paired.get("combined_tokens", []):
         if "segment_index" in row and "word_index" in row:
-            ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(
+            ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = _text_value(
                 row.get("ruaccent_merged_output", "")
             )
     # Backward-compatible fallback for an older paired report.
@@ -474,7 +496,7 @@ def main() -> int:
             if "segment_index" not in row or "word_index" not in row:
                 continue
             if row.get("type") in {"STRESS", "STRESS_AND_YO", "YO"}:
-                ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = str(row.get("after", ""))
+                ruaccent_by_occurrence[(int(row["segment_index"]), int(row["word_index"]))] = _text_value(row.get("after", ""))
 
     occurrence_rows: list[list[Any]] = []
     aggregate: dict[str, dict[str, Any]] = {}
@@ -492,10 +514,12 @@ def main() -> int:
         key = norm(source_word)
         segment_index = int(token.get("segment_index", -1))
         word_index = int(token.get("word_index", -1))
-        ruaccent_word = ruaccent_by_occurrence.get((segment_index, word_index), output_word)
+        # Never substitute the baseline output for missing independent model evidence.
+        # Doing so would make an unaligned RUAccent segment look like a model agreement.
+        ruaccent_word = ruaccent_by_occurrence.get((segment_index, word_index), "")
         if not ruaccent_word.strip():
             ruaccent_unaligned_occurrences += 1
-        reviewed_word = reviewed_by_occurrence.get((segment_index, word_index), output_word)
+        reviewed_word = _text_value(reviewed_by_occurrence.get((segment_index, word_index), ""))
         context = context_by_segment.get(segment_index, "")
         if not CYR.fullmatch(key):
             counts["NON_RUSSIAN_OR_SPECIAL"] += 1

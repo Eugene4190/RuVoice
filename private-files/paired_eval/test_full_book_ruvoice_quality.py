@@ -12,6 +12,30 @@ quality = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(quality)
 
 
+class WholeBookOccurrenceAlignmentTests(unittest.TestCase):
+    def test_exact_occurrence_coordinates_are_accepted(self) -> None:
+        coords = {(0, 0), (0, 1), (4, 7)}
+        quality.require_exact_occurrence_coordinates(coords, set(coords), "RUAccent")
+
+    def test_missing_auxiliary_model_coordinates_are_rejected(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "missing=.*\(4, 7\)"):
+            quality.require_exact_occurrence_coordinates(
+                {(0, 0), (4, 7)}, {(0, 0)}, "RUAccent"
+            )
+
+    def test_unexpected_auxiliary_model_coordinates_are_rejected(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "unexpected=.*\(9, 9\)"):
+            quality.require_exact_occurrence_coordinates(
+                {(0, 0)}, {(0, 0), (9, 9)}, "RUAccent"
+            )
+
+    def test_missing_model_output_is_not_replaced_with_baseline_text(self) -> None:
+        self.assertEqual(quality._text_value(None), "")
+        self.assertEqual(quality._text_value("null"), "")
+        self.assertEqual(quality._text_value(""), "")
+        self.assertEqual(quality._text_value("слово"), "слово")
+
+
 class WholeBookQualityVerdictTests(unittest.TestCase):
     def test_variant_supported_by_one_source_is_not_reported_as_error(self) -> None:
         status, _ = quality.verdict(

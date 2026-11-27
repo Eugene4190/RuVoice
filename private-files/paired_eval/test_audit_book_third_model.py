@@ -38,6 +38,22 @@ class ThirdModelAuditParsingTests(unittest.TestCase):
 
 
 
+class ThirdModelFullBookCoverageTests(unittest.TestCase):
+    def test_accepts_complete_multisyllabic_occurrence_alignment(self):
+        expected = {(0, 1), (0, 2), (4, 0)}
+        module.require_full_model_occurrence_coverage(expected, set(expected))
+
+    def test_rejects_missing_occurrences_in_full_book_mode(self):
+        expected = {(0, 1), (0, 2), (4, 0)}
+        with self.assertRaisesRegex(RuntimeError, "missing=.*\(4, 0\)"):
+            module.require_full_model_occurrence_coverage(expected, {(0, 1), (0, 2)})
+
+    def test_rejects_unexpected_coordinates_in_full_book_mode(self):
+        expected = {(0, 1)}
+        with self.assertRaisesRegex(RuntimeError, "unexpected=.*\(9, 9\)"):
+            module.require_full_model_occurrence_coverage(expected, {(0, 1), (9, 9)})
+
+
 class ThirdModelCandidateSelectionTests(unittest.TestCase):
     @staticmethod
     def occurrence(word="пример", base=0, ra=1, segment=0, index=0):

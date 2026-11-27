@@ -363,6 +363,21 @@ def build_three_model_overrides(
     return confirmed, oov_review, evidence, summary
 
 
+def require_full_model_occurrence_coverage(
+    expected_coords: set[tuple[int, int]],
+    actual_coords: set[tuple[int, int]],
+) -> None:
+    """Fail a full-book run rather than silently accepting skipped model occurrences."""
+    missing = sorted(expected_coords - actual_coords)
+    unexpected = sorted(actual_coords - expected_coords)
+    if missing or unexpected:
+        raise RuntimeError(
+            "Full-book third-model occurrence alignment is incomplete: "
+            f"expected={len(expected_coords)}, aligned={len(actual_coords)}, "
+            f"missing={missing[:20]}, unexpected={unexpected[:20]}"
+        )
+
+
 def write_tsv(path: Path, rows: list[list[Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
@@ -579,6 +594,8 @@ def main() -> int:
             expected_model_coords.add(coord)
             expected_occurrence_counts[key] += 1
     missing_model_coords = expected_model_coords - actual_coords
+    if args.all_segments:
+        require_full_model_occurrence_coverage(expected_model_coords, actual_coords)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output_path = args.output_dir / "Book_Third_Model_AllOccurrences.tsv"
