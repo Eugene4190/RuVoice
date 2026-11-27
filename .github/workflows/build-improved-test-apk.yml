@@ -3,9 +3,8 @@ name: Build RuVoice Improved test APK
 on:
   workflow_dispatch:
 
-
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -135,23 +134,6 @@ jobs:
           echo "Rust/NDK build exit code: $STATUS"
           exit "$STATUS"
 
-      - name: Preserve Rust/NDK diagnostic log after failure
-        if: failure()
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s "$RUNNER_TEMP/ruvoice-rust-android-build-final.log"
-          mkdir -p private-files
-          DIAGNOSTIC="private-files/ruvoice-build-diagnostics-${GITHUB_RUN_ID}.log"
-          cp "$RUNNER_TEMP/ruvoice-rust-android-build-final.log" "$DIAGNOSTIC"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$DIAGNOSTIC"
-          git commit -m "Save Rust Android build diagnostics for run ${GITHUB_RUN_ID}"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
-
       - name: Restore UTF-8 filenames and regenerate system dictionaries
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
@@ -173,125 +155,89 @@ jobs:
         run: |
           set +e
           LOG="$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
-          gradle --no-daemon --stacktrace :app:testFullDebugUnitTest :app:assembleFullDebug 2>&1 | tee "$LOG"
+          gradle --no-daemon --stacktrace \
+            :app:testFullDebugUnitTest \
+            :app:testLiteDebugUnitTest \
+            :app:assembleFullDebug \
+            :app:assembleLiteDebug 2>&1 | tee "$LOG"
           STATUS=${PIPESTATUS[0]}
           cp "$LOG" "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
           echo "Android Gradle build exit code: $STATUS"
           exit "$STATUS"
 
-      - name: Preserve Android Gradle diagnostics after failure
-        if: failure()
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
-          # Include the exact failing JUnit cases; Gradle's default console only links the HTML report.
-          python3 - <<'PY' >> "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log"
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-          root = Path("project/ruvoice-1.1.3-stage4.9/app/build/test-results/testFullDebugUnitTest")
-          print("\\n===== JUNIT FAILURE DETAILS =====")
-          if not root.exists():
-              print(f"No JUnit XML directory found: {root}")
-          else:
-              found = 0
-              for report in sorted(root.glob("TEST-*.xml")):
-                  try:
-                      suite = ET.parse(report).getroot()
-                  except Exception as error:
-                      print(f"Could not parse {report}: {error}")
-                      continue
-                  for case in suite.iter("testcase"):
-                      for failure in list(case.findall("failure")) + list(case.findall("error")):
-                          found += 1
-                          print(f"\\nFAIL {case.get('classname')}.{case.get('name')}")
-                          print(f"message: {failure.get('message', '')}")
-                          print(f"type: {failure.get('type', '')}")
-                          print(failure.text or "(no stack trace)")
-              if not found:
-                  print("No failure/error elements were found in JUnit XML.")
-          print("===== END JUNIT FAILURE DETAILS =====")
-          PY
-          mkdir -p private-files
-          DIAGNOSTIC="private-files/ruvoice-gradle-diagnostics-${GITHUB_RUN_ID}.log"
-          cp "$RUNNER_TEMP/ruvoice-android-gradle-build-final.log" "$DIAGNOSTIC"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$DIAGNOSTIC"
-          git commit -m "Save Android Gradle diagnostics for run ${GITHUB_RUN_ID}"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
-
-      - name: Verify APK package, TTS engine, and ARM64 native libraries
+      - name: Verify Full and Lite APKs, TTS package, and ARM64 native libraries
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
           set -euo pipefail
-          APK="app/build/outputs/apk/full/debug/app-full-debug.apk"
-          test -s "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/ruvoice-badging.txt
-          grep -q "package: name='ru.kost.ruvoice.improved.stage417'" /tmp/ruvoice-badging.txt
-          grep -q "versionCode='10111' versionName='1.1.3-improved-4.17'" /tmp/ruvoice-badging.txt
-          grep -q "application-label:'RuVoice Improved'" /tmp/ruvoice-badging.txt
-          unzip -tq "$APK"
-          python3 - "$APK" <<'PY'
+          FULL_APK="app/build/outputs/apk/full/debug/app-full-debug.apk"
+          LITE_APK="app/build/outputs/apk/lite/debug/app-lite-debug.apk"
+          test -s "$FULL_APK"
+          test -s "$LITE_APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$FULL_APK" | tee /tmp/ruvoice-full-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$LITE_APK" | tee /tmp/ruvoice-lite-badging.txt
+          grep -q "package: name='ru.kost.ruvoice.improved.stage417'" /tmp/ruvoice-full-badging.txt
+          grep -q "package: name='ru.kost.ruvoice.improved.stage417'" /tmp/ruvoice-lite-badging.txt
+          grep -q "versionCode='10111' versionName='1.1.3-improved-4.17'" /tmp/ruvoice-full-badging.txt
+          grep -q "versionCode='10111' versionName='1.1.3-improved-4.17-lite'" /tmp/ruvoice-lite-badging.txt
+          grep -q "application-label:'RuVoice Improved'" /tmp/ruvoice-full-badging.txt
+          grep -q "application-label:'RuVoice Improved'" /tmp/ruvoice-lite-badging.txt
+          unzip -tq "$FULL_APK"
+          unzip -tq "$LITE_APK"
+          python3 - "$FULL_APK" "$LITE_APK" <<'PY'
           import sys, zipfile
-          required = [
+
+          full_path, lite_path = sys.argv[1:3]
+          common = [
               "lib/arm64-v8a/libruvoice_tokenizers.so",
               "lib/arm64-v8a/libexecutorch.so",
               "lib/arm64-v8a/libpytorch_jni_lite.so",
+          ]
+          full_assets = [
               "assets/silero/tts_mel.ptl",
               "assets/silero/backbone.pte",
               "assets/silero/head.ptl",
               "assets/silero/accentor.ptl",
               "assets/silero/homo.ptl",
           ]
-          with zipfile.ZipFile(sys.argv[1]) as apk:
-              names = set(apk.namelist())
-              missing = [path for path in required if path not in names]
-              if missing:
-                  raise SystemExit(f"APK is missing required runtime files: {missing}")
-              onnx = [p for p in names if p.startswith("lib/arm64-v8a/") and "onnx" in p.lower()]
-              if not onnx:
-                  raise SystemExit("APK contains no ARM64 ONNX Runtime native library")
-              print("Verified required native/runtime assets:")
-              for path in required + onnx:
-                  print(" -", path)
+          lite_must_omit = [
+              "assets/silero/tts_mel.ptl",
+              "assets/silero/backbone.pte",
+              "assets/silero/head.ptl",
+          ]
+          for label, path in (("Full", full_path), ("Lite", lite_path)):
+              with zipfile.ZipFile(path) as apk:
+                  names = set(apk.namelist())
+                  missing = [item for item in common if item not in names]
+                  onnx = [item for item in names if item.startswith("lib/arm64-v8a/") and "onnx" in item.lower()]
+                  if missing:
+                      raise SystemExit(f"{label} APK is missing common runtime files: {missing}")
+                  if not onnx:
+                      raise SystemExit(f"{label} APK contains no ARM64 ONNX Runtime native library")
+                  print(f"{label} APK ARM64 native files verified: {len(common) + len(onnx)}")
+                  if label == "Full":
+                      missing_assets = [item for item in full_assets if item not in names]
+                      if missing_assets:
+                          raise SystemExit(f"Full APK is missing bundled Silero assets: {missing_assets}")
+                  else:
+                      unexpected = [item for item in lite_must_omit if item in names]
+                      if unexpected:
+                          raise SystemExit(f"Lite APK unexpectedly bundles Full Silero assets: {unexpected}")
           PY
           mkdir -p dist
-          cp "$APK" dist/ruvoice-improved-1.1.3.apk
-          sha256sum dist/ruvoice-improved-1.1.3.apk
-          ls -lh dist/ruvoice-improved-1.1.3.apk
-
-      - name: Download and verify official Ilya voice pack
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --location --retry 3 --silent --show-error \
-            https://github.com/kost-t-human/ruvoice-tts/releases/download/packs/ruvoice-pack-ru_voices.zip \
-            --output private-files/ruvoice-pack-ru_voices.zip
-          unzip -tq private-files/ruvoice-pack-ru_voices.zip
-          echo "6a1084e8693dbf581a9ee91b7376909aa9b5177efa9d760685d5315d430c1520  private-files/ruvoice-pack-ru_voices.zip" | sha256sum --check
-          python3 - <<'PY'
-          import json, zipfile
-          from pathlib import Path
-          p = Path("private-files/ruvoice-pack-ru_voices.zip")
-          with zipfile.ZipFile(p) as archive:
-              meta = json.loads(archive.read("pack.json"))
-              speakers = meta.get("speakers", {})
-              if meta.get("id") != "ru_voices" or "ilya" not in speakers:
-                  raise SystemExit("Official Ilya speaker pack failed validation")
-              print(f"Verified voice pack: {meta.get('title')} — Ilya speaker id {speakers['ilya']}")
-          PY
-
+          cp "$FULL_APK" dist/ruvoice-improved-1.1.3-full.apk
+          cp "$LITE_APK" dist/ruvoice-improved-1.1.3-lite.apk
+          sha256sum dist/ruvoice-improved-1.1.3-full.apk dist/ruvoice-improved-1.1.3-lite.apk
+          ls -lh dist/ruvoice-improved-1.1.3-full.apk dist/ruvoice-improved-1.1.3-lite.apk
       - name: Write Stage 4.17 build report and source ZIP
         working-directory: project/ruvoice-1.1.3-stage4.9
         shell: bash
         run: |
           set -euo pipefail
-          APK_SHA="$(sha256sum dist/ruvoice-improved-1.1.3.apk | awk '{print $1}')"
-          APK_SIZE="$(stat -c%s dist/ruvoice-improved-1.1.3.apk)"
+          FULL_APK_SHA="$(sha256sum dist/ruvoice-improved-1.1.3-full.apk | awk '{print $1}')"
+          FULL_APK_SIZE="$(stat -c%s dist/ruvoice-improved-1.1.3-full.apk)"
+          LITE_APK_SHA="$(sha256sum dist/ruvoice-improved-1.1.3-lite.apk | awk '{print $1}')"
+          LITE_APK_SIZE="$(stat -c%s dist/ruvoice-improved-1.1.3-lite.apk)"
           cat > PHASE4_14_STATUS_RU.md <<EOF
           # Этап 4.16 — явная диагностика RUAccent в «Разборе»
 
@@ -317,11 +263,11 @@ jobs:
 
           ## Сборка
 
-          - Variant: \`fullDebug\`, ARM64.
-          - Unit tests: \`:app:testFullDebugUnitTest\`.
-          - APK: \`ruvoice-improved-1.1.3.apk\`.
-          - APK bytes: $APK_SIZE.
-          - APK SHA-256: \`$APK_SHA\`.
+          - Variants: `fullDebug` and `liteDebug`, ARM64.
+          - Unit tests: `:app:testFullDebugUnitTest` and `:app:testLiteDebugUnitTest`.
+          - Full APK bytes: $FULL_APK_SIZE; SHA-256: `$FULL_APK_SHA`.
+          - Lite APK bytes: $LITE_APK_SIZE; SHA-256: `$LITE_APK_SHA`.
+          - Both variants use package id `ru.kost.ruvoice.improved.stage417`; Lite omits built-in Silero synthesis models.
 
           ## Установка и первый запуск
 
@@ -361,16 +307,18 @@ jobs:
             exit 1
           fi
 
-      - name: Publish private test release with APK and source archives
-        uses: softprops/action-gh-release@v2
+      - name: Upload Full/Lite APKs, source archive, test reports, and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ruvoice-improved-1.1.3-stage4.17
-          name: RuVoice Improved 1.1.3 — Stage 4.17 readable RUAccent comparison
-          prerelease: true
-          generate_release_notes: true
-          files: |
-            project/ruvoice-1.1.3-stage4.9/dist/ruvoice-improved-1.1.3.apk
+          name: ruvoice-stage4.17-full-lite-build
+          path: |
+            project/ruvoice-1.1.3-stage4.9/dist/ruvoice-improved-1.1.3-full.apk
+            project/ruvoice-1.1.3-stage4.9/dist/ruvoice-improved-1.1.3-lite.apk
             private-files/ruvoice-1.1.3-stage4.17.zip
-            private-files/ruvoice-pack-ru_voices.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            project/ruvoice-1.1.3-stage4.9/app/build/reports/tests/
+            project/ruvoice-1.1.3-stage4.9/app/build/test-results/
+            ${{ runner.temp }}/ruvoice-rust-android-build-final.log
+            ${{ runner.temp }}/ruvoice-android-gradle-build-final.log
+          if-no-files-found: warn
+          retention-days: 14

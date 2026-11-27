@@ -1,0 +1,4 @@
+# Reviewed stress overrides for collisions in the Stage 4.9 built-in list
+# Трёхгорка (Трёхгóрка): main stress is on о; ё carries secondary prominence.
+трёхгорке трёхг+орке
+трёхгорку трёхг+орку

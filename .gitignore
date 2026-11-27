@@ -1,0 +1,15 @@
+# This repository is public: do not add personal books or user-specific output.
+*.epub
+*.mobi
+*.fb2
+*.azw
+*.azw3
+
+# Local personal book workflow data and generated book packages.
+.ruvoice-book-workflow/
+**/.ruvoice-book-workflow/
+experiments/ruvoice-stress-dictionary/private-books/
+experiments/ruvoice-stress-dictionary/output/books/
+experiments/ruvoice-stress-dictionary/reports/book_scans/
+private-files/user-books/
+private-files/user-replacements/

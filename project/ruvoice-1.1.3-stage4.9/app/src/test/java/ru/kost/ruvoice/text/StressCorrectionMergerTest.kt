@@ -186,6 +186,36 @@ class StressCorrectionMergerTest {
         assertEquals("всё", result)
     }
 
+    @Test fun `user dictionary protection does not bleed across е and ё`() {
+        val result = StressCorrectionMerger.merge(
+            original = "берег",
+            ruVoice = "б+ерег",
+            prediction = IndependentStressPrediction(
+                "берё\u0301г",
+                listOf(StressDecision.STRESSED),
+                listOf(YoDecision.RESTORE_YO),
+                listOf(YoDecisionSource.FIXED_DICTIONARY),
+            ),
+            userDictionaryKeys = setOf("берёг"),
+        )
+        assertEquals("бер+ёг", result)
+    }
+
+    @Test fun `exact user dictionary key still protects its own spelling`() {
+        val result = StressCorrectionMerger.merge(
+            original = "берег",
+            ruVoice = "б+ерег",
+            prediction = IndependentStressPrediction(
+                "берё\u0301г",
+                listOf(StressDecision.STRESSED),
+                listOf(YoDecision.RESTORE_YO),
+                listOf(YoDecisionSource.FIXED_DICTIONARY),
+            ),
+            userDictionaryKeys = setOf("берег"),
+        )
+        assertEquals("б+ерег", result)
+    }
+
     @Test fun `user dictionary words are protected`() {
         val result = StressCorrectionMerger.merge(
             original = "замок",

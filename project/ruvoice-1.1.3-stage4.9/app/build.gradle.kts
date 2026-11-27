@@ -1,4 +1,6 @@
 import java.util.Properties
+import java.util.zip.ZipFile
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("com.android.application")
@@ -63,7 +65,12 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         // перезапись эталона RuPathSnapshotTest: ./gradlew … -Druvoice.snapshot.write=true
-        unitTests.all { t -> System.getProperty("ruvoice.snapshot.write")?.let { t.systemProperty("ruvoice.snapshot.write", it) } }
+        unitTests.all { t ->
+            // Whole-book paired evaluation retains per-token diagnostics until the JSON report is written.
+            // Give the test worker its own heap; org.gradle.jvmargs configures only the Gradle daemon.
+            t.maxHeapSize = "3g"
+            System.getProperty("ruvoice.snapshot.write")?.let { t.systemProperty("ruvoice.snapshot.write", it) }
+        }
     }
     // libfbjni/libc++_shared есть и в pytorch_android_lite, и в executorch; из lite годятся обоим
     packaging { jniLibs.useLegacyPackaging = false; jniLibs.pickFirsts += listOf("lib/*/libfbjni.so", "lib/*/libc++_shared.so") }
@@ -76,6 +83,57 @@ val stressBin = tasks.register<StressBinTask>("stressBin") {
     outDir.set(layout.buildDirectory.dir("generated/stressBin"))
 }
 androidComponents { onVariants { it.sources.assets?.addGeneratedSourceDirectory(stressBin, StressBinTask::outDir) } }
+
+/**
+ * Desktop runtime for the full-book audit. Android test configurations are created
+ * after the Android plugin finalizes variants, so register this task after evaluation.
+ */
+afterEvaluate {
+    // Runtime classpath already contains compile dependencies; resolving Android's compile
+    // configuration separately can be ambiguous because it exposes multiple app variants.
+    // Android Gradle Plugin adds its transformed mockable android.jar to the Test task's
+    // classpath, not to fullDebugUnitTestRuntimeClasspath. Package that exact classpath.
+    val fullDebugUnitTestTask = tasks.named<Test>("testFullDebugUnitTest")
+
+    tasks.register<Sync>("assembleDesktopAuditRuntime") {
+        dependsOn(
+            "compileFullDebugKotlin",
+            "compileFullDebugJavaWithJavac",
+            "compileFullDebugUnitTestKotlin",
+            "compileFullDebugUnitTestJavaWithJavac",
+        )
+        into(layout.buildDirectory.dir("desktop-audit"))
+        from(layout.buildDirectory.dir("tmp/kotlin-classes/fullDebug")) { into("classes") }
+        from(layout.buildDirectory.dir("intermediates/javac/fullDebug/compileFullDebugJavaWithJavac/classes")) { into("classes") }
+        from(layout.buildDirectory.dir("tmp/kotlin-classes/fullDebugUnitTest")) { into("classes") }
+        from(layout.buildDirectory.dir("intermediates/javac/fullDebugUnitTest/compileFullDebugUnitTestJavaWithJavac/classes")) { into("classes") }
+        from({
+            fullDebugUnitTestTask.get().classpath.files.filter { file ->
+                file.isFile && file.extension.equals("jar", ignoreCase = true) &&
+                    !file.absolutePath.contains("onnxruntime-android", ignoreCase = true)
+            }
+        }) { into("lib") }
+        duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
+        doLast {
+            val root = layout.buildDirectory.dir("desktop-audit/classes").get().asFile
+            check(root.resolve("ru/kost/ruvoice/text/UploadedEpubPairedEvaluationMain.class").isFile) {
+                "Desktop whole-book main entry point was not compiled"
+            }
+            check(root.resolve("ru/kost/ruvoice/text/UploadedEpubPairedEvaluationTest.class").isFile) {
+                "Desktop whole-book JUnit test class was not compiled"
+            }
+            val lib = layout.buildDirectory.dir("desktop-audit/lib").get().asFile
+            val jars = lib.listFiles()?.filter { it.extension == "jar" }.orEmpty()
+            check(jars.isNotEmpty()) { "Desktop whole-book audit dependencies were not packaged" }
+            fun contains(entry: String) = jars.any { jar ->
+                runCatching { ZipFile(jar).use { archive -> archive.getEntry(entry) != null } }.getOrDefault(false)
+            }
+            check(contains("org/junit/runner/JUnitCore.class")) { "JUnit runtime was not packaged" }
+            check(contains("org/json/JSONObject.class")) { "JSON runtime was not packaged" }
+            check(contains("android/util/Log.class")) { "Mockable Android API classes were not packaged" }
+        }
+    }
+}
 
 dependencies {
     implementation("org.pytorch:pytorch_android_lite:2.1.0")

@@ -1,0 +1,140 @@
+import csv
+import tempfile
+import unittest
+from pathlib import Path
+
+import evaluate_gold_set as tool
+
+
+class GoldSetEvaluatorTests(unittest.TestCase):
+    def test_repository_seed_is_valid_and_keeps_contextual_homographs_separate(self):
+        path = Path(__file__).parent / "data" / "gold" / "seed.tsv"
+        rows = tool.load_gold(path)
+        self.assertEqual(len(rows), 10)
+        marked = [row for row in rows if row["surface"] == "маркированный"]
+        self.assertEqual(len(marked), 2)
+        self.assertEqual({row["sense_id"] for row in marked}, {"linguistic_term", "labelled_goods"})
+        self.assertEqual({row["evaluation_scope"] for row in marked}, {"contextual"})
+
+    def test_review_queue_is_separate_and_awaits_independent_second_review(self):
+        gold_dir = Path(__file__).parent / "data" / "gold"
+        seed = tool.load_gold(gold_dir / "seed.tsv")
+        gold_ids = {row["gold_id"] for row in seed}
+        with (gold_dir / "review_queue.tsv").open(
+            "r", encoding="utf-8-sig", newline=""
+        ) as stream:
+            reader = csv.DictReader(stream, delimiter="\t")
+            queued = list(reader)
+
+        self.assertEqual(len(queued), 10)
+        self.assertTrue(all(row["review_status"] == "AWAITING_SECOND_LINGUIST_REVIEW" for row in queued))
+        self.assertEqual(len({row["candidate_id"] for row in queued}), len(queued))
+        self.assertTrue(all(row["candidate_id"] not in gold_ids for row in queued))
+        self.assertTrue(all(row["source_url"].startswith("https://") for row in queued))
+        self.assertTrue(all(row["context"] and row["evidence"] for row in queued))
+        self.assertTrue(all(not row["second_reviewer"] and not row["second_reviewed_on"] for row in queued))
+
+        e_yo = {row["surface"] for row in queued if row["candidate_id"] in {"P007", "P008"}}
+        self.assertEqual(e_yo, {"берег", "берёг"})
+        пахта = [row for row in queued if row["surface"] == "пахта"]
+        self.assertEqual(len(пахта), 2)
+        self.assertEqual({row["sense_id"] for row in пахта}, {"dairy_product", "raw_cotton"})
+        self.assertEqual({row["accepted_marked"] for row in пахта}, {"п+ахта", "пахт+а"})
+
+    def test_marked_form_requires_exact_surface_and_stress_before_vowel(self):
+        self.assertIsNone(tool.validate_marked("творог", "тв+орог"))
+        self.assertIsNotNone(tool.validate_marked("берег", "бер+ёг"))
+        self.assertIsNotNone(tool.validate_marked("творог", "тво+рог"))
+        self.assertIsNotNone(tool.validate_marked("творог", "тв+о+рог"))
+
+    def test_variants_count_as_correct_and_abstentions_reduce_coverage(self):
+        rows = [
+            {
+                "gold_id": "G1", "surface": "творог", "primary_marked": "",
+                "accepted_variants": ["тв+орог", "твор+ог"],
+                "evaluation_scope": "word", "category": "normative_variants",
+            },
+            {
+                "gold_id": "G2", "surface": "позвонит", "primary_marked": "позвон+ит",
+                "accepted_variants": ["позвон+ит"],
+                "evaluation_scope": "word", "category": "inflectional_form",
+            },
+            {
+                "gold_id": "G3", "surface": "маркированный", "primary_marked": "марк+ированный",
+                "accepted_variants": ["марк+ированный"],
+                "evaluation_scope": "contextual", "category": "semantic_stress",
+            },
+            {
+                "gold_id": "G4", "surface": "создана", "primary_marked": "создан+а",
+                "accepted_variants": ["создан+а", "с+оздана"],
+                "evaluation_scope": "word", "category": "short_participle",
+            },
+        ]
+        report = tool.evaluate(
+            rows,
+            {"G1": "твор+ог", "G2": "позв+онит", "G3": "", "G4": "с+оздана"},
+        )
+        overall = report["overall"]
+        self.assertEqual(overall["gold_rows"], 4)
+        self.assertEqual(overall["emitted_predictions"], 3)
+        self.assertEqual(overall["correct_predictions"], 2)
+        self.assertEqual(overall["incorrect_predictions"], 1)
+        self.assertEqual(overall["abstentions_or_missing"], 1)
+        self.assertEqual(overall["coverage_percent"], 75.0)
+        self.assertEqual(overall["exact_accuracy_among_emitted_percent"], 66.67)
+        self.assertEqual(overall["accuracy_over_all_gold_rows_percent"], 50.0)
+        self.assertEqual(overall["accepted_non_primary_predictions"], 1)
+        self.assertEqual(report["by_evaluation_scope"]["contextual"]["coverage_percent"], 0.0)
+        self.assertEqual(report["by_category"]["semantic_stress"]["abstentions_or_missing"], 1)
+
+    def test_primary_variant_must_be_in_accepted_variants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gold.tsv"
+            columns = [
+                "gold_id", "surface", "lemma", "part_of_speech", "morph_features",
+                "sense_id", "context", "primary_marked", "accepted_marked",
+                "evaluation_scope", "category", "source_title", "source_url",
+                "evidence", "reviewed_on",
+            ]
+            row = {
+                "gold_id": "X1", "surface": "творог", "lemma": "творог",
+                "part_of_speech": "существительное", "morph_features": "м.р.",
+                "sense_id": "food", "context": "Свежий творог.",
+                "primary_marked": "твор+ог", "accepted_marked": "тв+орог",
+                "evaluation_scope": "word", "category": "variant",
+                "source_title": "Test dictionary", "source_url": "https://example.org/dict",
+                "evidence": "Test evidence", "reviewed_on": "2026-11-25",
+            }
+            with path.open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=columns, delimiter="\t")
+                writer.writeheader()
+                writer.writerow(row)
+            with self.assertRaisesRegex(tool.GoldSetError, "primary_marked"):
+                tool.load_gold(path)
+
+    def test_predictions_reject_duplicate_and_unknown_ids(self):
+        rows = [
+            {
+                "gold_id": "G1", "surface": "творог", "primary_marked": "",
+                "accepted_variants": ["тв+орог", "твор+ог"],
+                "evaluation_scope": "word", "category": "variant",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "predictions.tsv"
+            path.write_text(
+                "gold_id\tpredicted_marked\nG1\tтв+орог\nG1\tтвор+ог\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(tool.GoldSetError, "повторный prediction"):
+                tool.load_predictions(path, rows)
+            path.write_text(
+                "gold_id\tpredicted_marked\nUNKNOWN\tтв+орог\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(tool.GoldSetError, "неизвестный gold_id"):
+                tool.load_predictions(path, rows)
+
+
+if __name__ == "__main__":
+    unittest.main()

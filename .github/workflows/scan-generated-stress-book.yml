@@ -1,0 +1,117 @@
+name: Scan generated RuVoice dictionary against book
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - stress-dictionary-pipeline
+    paths:
+      - "experiments/ruvoice-stress-dictionary/RUN_BOOK_DICTIONARY_SCAN.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ruvoice-auto-dictionary-book-scan
+  cancel-in-progress: false
+
+jobs:
+  scan-generated-dictionary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out pipeline branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compare generated dictionary coverage with Stage 4.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import sys
+          from collections import Counter
+          from pathlib import Path
+
+          root = Path("experiments/ruvoice-stress-dictionary")
+          sys.path.insert(0, str(root))
+          from analyze_book import analyze, extract_text, parse_dictionary
+
+          book = Path("private-files/8.Iskusstvo..epub")
+          base_path = root / "output/RuVoice_Stage4.9_ExistingFixes.txt"
+          auto_path = root / "output/RuVoice_AutoStress.txt"
+          curated_path = root / "data/curated/reviewed_overrides.txt"
+          for path in (book, base_path, auto_path, curated_path):
+              if not path.is_file():
+                  raise SystemExit("Required scan input is missing: " + str(path))
+
+          base, base_conflicts = parse_dictionary(base_path)
+          auto, auto_conflicts = parse_dictionary(auto_path)
+          curated = {}
+          for line in curated_path.read_text(encoding="utf-8-sig").splitlines():
+              line = line.split("#", 1)[0].strip()
+              if "=" in line:
+                  word, marked = (part.strip().lower() for part in line.split("=", 1))
+                  curated[word] = marked
+
+          text = extract_text(book)
+          base_summary, counts, _, _, _ = analyze(text, base, context_radius=0, max_contexts=0)
+          auto_summary, _, _, _, _ = analyze(text, auto, context_radius=0, max_contexts=0)
+
+          added = {
+              word: marked for word, marked in auto.items()
+              if word not in base and word not in curated
+          }
+          added_hits = {word: counts[word] for word in added if word in counts}
+          added_tokens = sum(added_hits.values())
+          top_added = sorted(added_hits.items(), key=lambda item: (-item[1], item[0]))[:50]
+
+          book_sha = hashlib.sha256(book.read_bytes()).hexdigest()
+          dictionary_sha = hashlib.sha256(auto_path.read_bytes()).hexdigest()
+          result = {
+              "book": book.name,
+              "book_sha256": book_sha,
+              "dictionary": auto_path.name,
+              "dictionary_sha256": dictionary_sha,
+              "total_word_tokens": auto_summary["total_word_tokens"],
+              "unique_word_forms": auto_summary["unique_word_forms"],
+              "stage49": base_summary,
+              "combined_auto_dictionary": auto_summary,
+              "additional_automatic_entries": len(added),
+              "additional_automatic_word_forms_found_in_book": len(added_hits),
+              "additional_automatic_word_tokens_matched": added_tokens,
+              "top_automatic_hits_word_and_count_only": [
+                  {"word": word, "count": count} for word, count in top_added
+              ],
+              "dictionary_conflicts": {
+                  "stage49": len(base_conflicts),
+                  "combined_auto_dictionary": len(auto_conflicts)
+              },
+              "interpretation": "Exact stress-dictionary lookup coverage only. This is not a stress-accuracy score; missing words may still be handled by the model or replacement rules. No book excerpts or paragraph contexts are included."
+          }
+          out = root / "reports/8-Iskusstvo-auto-dictionary-scan.json"
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print("AUTO_DICTIONARY_BOOK_SCAN=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+          PY
+
+      - name: Commit aggregate scan report
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git add experiments/ruvoice-stress-dictionary/reports/8-Iskusstvo-auto-dictionary-scan.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record generated stress dictionary book coverage"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

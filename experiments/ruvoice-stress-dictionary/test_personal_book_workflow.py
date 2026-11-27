@@ -1,0 +1,268 @@
+import json
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+from analyze_book import parse_dictionary
+import personal_book_workflow as workflow
+from personal_book_workflow import process_book
+
+
+class PersonalBookWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.private = self.root / "private"
+        self.system = self.root / "system.txt"
+        self.pool = self.root / "pool.txt"
+        self.audit = self.root / "audit.tsv"
+        self.rules = self.root / "rules.tsv"
+        self.system.write_text("# empty system dictionary\n", encoding="utf-8")
+        self.pool.write_text(
+            "молоко мол+око\n"
+            "творог твор+ог\n",
+            encoding="utf-8",
+        )
+        self.audit.write_text(
+            "word\tstress\tsource\n"
+            "молоко\tмол+око\taot_wiktionary_silero_consensus\n"
+            "творог\tтвор+ог\taot_wiktionary_silero_consensus\n",
+            encoding="utf-8",
+        )
+        self.rules.write_text("word\taction\treason\tsource\n", encoding="utf-8")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def make_epub(self, path, text):
+        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("mimetype", "application/epub+zip")
+            archive.writestr(
+                "OEBPS/chapter.xhtml",
+                f'<html xmlns="http://www.w3.org/1999/xhtml"><body><p>{text}</p></body></html>',
+            )
+
+    def run_book(self, path, replacements=None):
+        return process_book(
+            path,
+            private_home=self.private,
+            system_dictionary=self.system,
+            candidate_dictionary=self.pool,
+            candidate_audit=self.audit,
+            candidate_rules=self.rules,
+            replacements=replacements,
+        )
+
+    def test_epub_a_then_b_then_repeat_b_keeps_cumulative_master_and_replacements(self):
+        book_a = self.root / "A.epub"
+        book_b = self.root / "B.epub"
+        self.make_epub(book_a, "молоко")
+        # B also contains A's already-approved word; it must not enter B's delta,
+        # but provenance should record that the word appeared in both books.
+        self.make_epub(book_b, "творог молоко PRIVATE_BOOK_SENTINEL_DO_NOT_EXPORT")
+        replacement_file = self.root / "B_replacements.txt"
+        replacement_file.write_text("# Правила только для B\nшелка и = шелк+а и\n", encoding="utf-8")
+
+        result_a = self.run_book(book_a)
+        self.assertEqual(result_a["new_entry_count"], 1)
+        self.assertFalse(result_a["already_processed"])
+
+        master = self.private / "RuVoice_Accumulated_Approved.txt"
+        entries_a, conflicts_a = parse_dictionary(master)
+        self.assertFalse(conflicts_a)
+        self.assertEqual(entries_a, {"молоко": "мол+око"})
+
+        result_b = self.run_book(book_b, replacements=replacement_file)
+        self.assertEqual(result_b["new_entry_count"], 1)
+        entries_b, conflicts_b = parse_dictionary(master)
+        self.assertFalse(conflicts_b)
+        self.assertEqual(entries_b, {"молоко": "мол+око", "творог": "твор+ог"})
+
+        # A repeat without re-uploading the replacement TXT must retain B's rules.
+        result_b_repeat = self.run_book(book_b)
+        self.assertTrue(result_b_repeat["already_processed"])
+        self.assertEqual(result_b_repeat["new_entry_count"], 0)
+        entries_repeat, conflicts_repeat = parse_dictionary(master)
+        self.assertFalse(conflicts_repeat)
+        self.assertEqual(entries_repeat, entries_b)
+
+        with zipfile.ZipFile(result_b_repeat["archive"]) as archive:
+            names = archive.namelist()
+            exported_bytes = b"".join(archive.read(name) for name in names)
+            self.assertNotIn(b"PRIVATE_BOOK_SENTINEL_DO_NOT_EXPORT", exported_bytes)
+            delta = archive.read(f"B_{result_b['book_sha256'][:8]}_New_Stress_Delta.txt").decode("utf-8")
+            snapshot = archive.read("MyBooks_Cumulative.txt").decode("utf-8")
+            replacements = archive.read(f"B_{result_b['book_sha256'][:8]}_Replacements.txt").decode("utf-8")
+            history = json.loads(archive.read("MyBooks_History.json"))
+            report = json.loads(archive.read("Book_Report.json"))
+            self.assertIn("повторная сборка", delta.lower())
+            self.assertIn("творог твор+ог", delta)
+            self.assertNotIn("молоко мол+око", delta)
+            self.assertIn("молоко мол+око", snapshot)
+            self.assertIn("творог твор+ог", snapshot)
+            self.assertIn("шелка и = шелк+а и", replacements)
+            self.assertIn("A.epub", [row["book_name"] for row in history["books"].values()])
+            self.assertIn("B.epub", [row["book_name"] for row in history["books"].values()])
+            b_record = history["books"][result_b["book_sha256"]]
+            self.assertEqual(b_record["new_entries"][0]["source"], "aot_wiktionary_silero_consensus")
+            self.assertTrue(b_record["replacements"]["has_rules"])
+            milk_history = history["entries"]["молоко"]
+            self.assertEqual(milk_history["first_added_in"], "A.epub")
+            self.assertEqual(
+                {item["book_name"] for item in milk_history["books_seen_in"]},
+                {"A.epub", "B.epub"},
+            )
+            self.assertEqual(
+                {row["word"] for row in b_record["encountered_master_entries"]},
+                {"молоко", "творог"},
+            )
+            self.assertTrue(report["workflow"]["append_only"])
+            self.assertEqual(report["workflow"]["newly_approved_count"], 0)
+            self.assertEqual(report["workflow"]["book_delta_entry_count"], 1)
+            self.assertFalse(report["workflow"]["book_text_included_in_package"])
+            self.assertNotIn("A.epub", names)
+            self.assertNotIn("B.epub", names)
+            self.assertIn("IMPORT.txt", names)
+            guide = archive.read("IMPORT.txt").decode("utf-8")
+            self.assertIn(f"B_{result_b['book_sha256'][:8]}_New_Stress_Delta.txt", guide)
+            self.assertIn(f"B_{result_b['book_sha256'][:8]}_Replacements.txt", guide)
+            self.assertIn("меню ⋮", guide)
+            self.assertIn("Импорт…", guide)
+            self.assertIn("сделает его текущим", guide)
+            self.assertIn("не импортируйте его второй раз", guide.lower())
+
+    def test_reviewed_override_overlay_is_hash_scoped_and_filters_absent_forms(self):
+        book = self.root / "reviewed-reference.epub"
+        self.make_epub(book, "Несчастлив герой, рядом арбайт и неизвестное слово.")
+        overrides = self.root / "reviewed-overrides.txt"
+        overrides.write_text(
+            "несчастлив несчастл+ив\n"
+            "арбайт +арбайт\n"
+            "отнята отнят+а\n",
+            encoding="utf-8",
+        )
+
+        original_hash = workflow.REFERENCE_BOOK_SHA256
+        try:
+            workflow.REFERENCE_BOOK_SHA256 = "a" * 64
+            content, count = workflow._build_reviewed_stress_overrides(
+                book, "a" * 64, source_path=overrides
+            )
+            self.assertEqual(count, 2)
+            self.assertIn("несчастлив несчастл+ив", content)
+            self.assertIn("арбайт +арбайт", content)
+            self.assertNotIn("отнята отнят+а", content)
+
+            other_content, other_count = workflow._build_reviewed_stress_overrides(
+                book, "b" * 64, source_path=overrides
+            )
+            self.assertEqual(other_count, 0)
+            self.assertNotIn("несчастлив несчастл+ив", other_content)
+        finally:
+            workflow.REFERENCE_BOOK_SHA256 = original_hash
+
+    def test_incomplete_pending_transaction_recovers_append_only_master_once(self):
+        private = self.root / "recovery-private"
+        master, state_dir, _ = workflow._ensure_private_store(private)
+        system = self.root / "system-recovery.txt"
+        system.write_text("# empty system dictionary\n", encoding="utf-8")
+        work = private / "work" / ("a" * 64)
+        work.mkdir(parents=True)
+        candidate_file = work / "Book_AutoStress_Candidates.txt"
+        candidate_file.write_text("молоко мол+око\n", encoding="utf-8")
+        selected_file = work / "approve_words.txt"
+        selected_file.write_text("молоко\n", encoding="utf-8")
+        pending_path = state_dir / workflow.PENDING_NAME
+        workflow._atomic_json(pending_path, {
+            "book_sha256": "a" * 64,
+            "book_name": "Interrupted.epub",
+            "created_utc": "2026-11-25T00:00:00+00:00",
+            "new_entries": [{
+                "word": "молоко",
+                "stress": "мол+око",
+                "source": "aot_wiktionary_silero_consensus",
+                "frequency_in_book": 3,
+            }],
+            "work_dir": str(work),
+            "candidate_file": str(candidate_file),
+            "selected_file": str(selected_file),
+        })
+
+        workflow._recover_pending(private, master, system)
+        entries, conflicts = parse_dictionary(master)
+        self.assertFalse(conflicts)
+        self.assertEqual(entries, {"молоко": "мол+око"})
+        self.assertFalse(pending_path.exists())
+        history = json.loads((state_dir / workflow.STATE_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(
+            history["books"]["a" * 64]["new_entries"][0]["source"],
+            "aot_wiktionary_silero_consensus",
+        )
+
+        # Calling recovery again is a no-op: no second copy of the entry.
+        workflow._recover_pending(private, master, system)
+        rows = [
+            line for line in master.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(rows, ["молоко мол+око"])
+
+    def test_reviewed_phrase_rule_is_selected_only_when_exact_phrase_occurs(self):
+        contains_phrase = self.root / "contains-phrase.epub"
+        unrelated = self.root / "unrelated.epub"
+        self.make_epub(contains_phrase, "шелка и платья")
+        self.make_epub(unrelated, "платья и шарфы")
+
+        result = self.run_book(contains_phrase)
+        with zipfile.ZipFile(result["archive"]) as archive:
+            replacement_name = f"contains-phrase_{result['book_sha256'][:8]}_Replacements.txt"
+            replacements = archive.read(replacement_name).decode("utf-8")
+            report = json.loads(archive.read("Book_Report.json"))
+            review = archive.read("Book_Replacements_Review.tsv").decode("utf-8-sig")
+            self.assertIn("шелка и = шелк+а и", replacements)
+            self.assertEqual(report["workflow"]["auto_selected_reviewed_phrase_rules"], 1)
+            self.assertIn("curated_reviewed_phrase", review)
+            self.assertIn("INCLUDED", review)
+
+        unrelated_result = self.run_book(unrelated)
+        with zipfile.ZipFile(unrelated_result["archive"]) as archive:
+            replacements = archive.read(f"unrelated_{unrelated_result['book_sha256'][:8]}_Replacements.txt").decode("utf-8")
+            report = json.loads(archive.read("Book_Report.json"))
+            self.assertNotIn("шелка и = шелк+а и", replacements)
+            self.assertEqual(report["workflow"]["auto_selected_reviewed_phrase_rules"], 0)
+
+    def test_import_list_filenames_fit_ruvoice_60_character_limit(self):
+        long_title = "оченьдлинноеназваниекнигидляпроверкиограниченияRuVoice"
+        book = self.root / f"{long_title}.epub"
+        self.make_epub(book, "незнакомое слово")
+        result = self.run_book(book)
+        with zipfile.ZipFile(result["archive"]) as archive:
+            delta_name = next(name for name in archive.namelist() if name.endswith("_New_Stress_Delta.txt"))
+            replacement_name = next(name for name in archive.namelist() if name.endswith("_Replacements.txt"))
+            self.assertLessEqual(len(Path(delta_name).stem), 60)
+            self.assertLessEqual(len(Path(replacement_name).stem), 60)
+            self.assertIn(result["book_sha256"][:8], Path(delta_name).stem)
+            self.assertIn(result["book_sha256"][:8], Path(replacement_name).stem)
+            guide = archive.read("IMPORT.txt").decode("utf-8")
+            self.assertIn(Path(delta_name).name, guide)
+            self.assertIn(Path(replacement_name).name, guide)
+
+    def test_different_book_with_same_word_does_not_duplicate_master_rows(self):
+        book_a = self.root / "same-content-a.epub"
+        book_b = self.root / "same-content-b.epub"
+        self.make_epub(book_a, "молоко")
+        self.make_epub(book_b, "молоко ")
+        self.run_book(book_a)
+        result = self.run_book(book_b)
+        self.assertEqual(result["new_entry_count"], 0)
+        rows = [
+            line for line in (self.private / "RuVoice_Accumulated_Approved.txt")
+            .read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(rows, ["молоко мол+око"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,676 @@
+name: Build RuVoice Book Tool for Windows
+
+on:
+  push:
+    branches:
+      - stress-dictionary-pipeline
+    paths:
+      - ".github/workflows/build-ruvoice-book-tool-windows.yml"
+      - "private-files/paired_eval/UploadedEpubPairedEvaluation.kt"
+      - "private-files/paired_eval/book_context_acceptances.tsv"
+      - "private-files/paired_eval/audit_book_third_model.py"
+      - "private-files/paired_eval/full_book_ruvoice_quality.py"
+      - "private-files/paired_eval/package_ruvoice_import.py"
+      - "project/ruvoice-1.1.3-stage4.9/tools/data/ruaccent_yo_book_regressions.json"
+      - "experiments/ruvoice-stress-dictionary/local_full_book_workflow.py"
+      - "experiments/ruvoice-stress-dictionary/test_local_full_book_workflow.py"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-ruvoice-book-tool-windows.yml"
+      - "private-files/8.Iskusstvo..epub"
+      - "private-files/paired_eval/package_ruvoice_import.py"
+      - "private-files/paired_eval/test_package_ruvoice_import.py"
+      - "private-files/paired_eval/**"
+      - "experiments/ruvoice-stress-dictionary/local_full_book_workflow.py"
+      - "experiments/ruvoice-stress-dictionary/private_book_server.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-portable-windows:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select the reviewed reference EPUB for the real-book processing run
+        shell: pwsh
+        run: |
+          $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\8.Iskusstvo..epub"
+          $useReference = "false"
+          if (Test-Path -LiteralPath $epub -PathType Leaf) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+            if ($hash -ne "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119") {
+              throw "The reference EPUB does not match its reviewed SHA-256 manifest: $hash"
+            }
+            $useReference = "true"
+          }
+          "RUVOICE_REFERENCE_BOOK_PRIVATE=$useReference" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "RUVOICE_REFERENCE_BOOK_SELECTED=$useReference"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Install Android SDK platform and build tools
+        shell: pwsh
+        run: |
+          $sdkRoot = Join-Path $env:RUNNER_TEMP "android-sdk"
+          $zip = Join-Path $env:RUNNER_TEMP "android-command-line-tools.zip"
+          $unpack = Join-Path $env:RUNNER_TEMP "android-cli-unpack"
+          $latest = Join-Path $sdkRoot "cmdline-tools\latest"
+          New-Item -ItemType Directory -Force -Path $unpack, $latest | Out-Null
+          Invoke-WebRequest -Uri "https://dl.google.com/android/repository/commandlinetools-win-15859902_latest.zip" -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
+          Copy-Item -Path (Join-Path $unpack "cmdline-tools\*") -Destination $latest -Recurse -Force
+
+          "ANDROID_HOME=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          (Join-Path $latest "bin") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $sdkRoot "platform-tools") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          $sdkmanager = Join-Path $latest "bin\sdkmanager.bat"
+          $licenseAnswers = ("y" + [Environment]::NewLine) * 100
+          $licenseAnswers | & $sdkmanager "--sdk_root=$sdkRoot" --licenses
+          if ($LASTEXITCODE -ne 0) { throw "Android SDK licence acceptance failed" }
+          & $sdkmanager "--sdk_root=$sdkRoot" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed" }
+
+      - name: Set up Rust for the Windows tokenizer JNI
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Restore official UTF-8 dictionary filenames and stage the paired evaluator
+        shell: pwsh
+        run: |
+          # Cyrillic asset names must be printable on GitHub's Windows cp1252 console.
+          $env:PYTHONUTF8 = "1"
+          $env:PYTHONIOENCODING = "utf-8"
+          $project = Join-Path $env:GITHUB_WORKSPACE "project\ruvoice-1.1.3-stage4.9"
+          python (Join-Path $project "tools\restore_unicode_asset_names.py")
+          $target = Join-Path $project "app\src\test\java\ru\kost\ruvoice\text"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "private-files\paired_eval\UploadedEpubPairedEvaluation.kt") -Destination (Join-Path $target "UploadedEpubPairedEvaluation.kt") -Force
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "private-files\paired_eval\RuAccentBridge.kt") -Destination (Join-Path $target "RuAccentBridge.kt") -Force
+
+      - name: Download ExecuTorch Android runtime AAR required by the Gradle test variant
+        shell: pwsh
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          New-Item -ItemType Directory -Force -Path app\libs | Out-Null
+          Invoke-WebRequest -Uri "https://ossci-android.s3.amazonaws.com/executorch/release/1.5.0-xnnpack/executorch.aar" -OutFile "app\libs\executorch-1.5.0-xnnpack.aar"
+          python -c "import zipfile; z=zipfile.ZipFile(r'app\libs\executorch-1.5.0-xnnpack.aar'); assert 'classes.jar' in z.namelist()"
+
+      - name: Assemble the real production Kotlin desktop runtime
+        shell: pwsh
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          gradle --no-daemon --stacktrace :app:assembleDesktopAuditRuntime
+          $runtime = Join-Path (Get-Location) "app\build\desktop-audit"
+          $classes = Join-Path $runtime "classes"
+          foreach ($class in @(
+            "ru\kost\ruvoice\text\UploadedEpubPairedEvaluationMain.class",
+            "ru\kost\ruvoice\text\UploadedEpubPairedEvaluationTest.class",
+            "ru\kost\ruvoice\text\RuAccentBridgeKt.class"
+          )) {
+            if (-not (Test-Path -LiteralPath (Join-Path $classes $class) -PathType Leaf)) {
+              throw "Desktop evaluator class is missing: $class"
+            }
+          }
+          python -c "from pathlib import Path; from zipfile import ZipFile; d=Path(r'app/build/desktop-audit/lib'); j=list(d.glob('*.jar')); required={'org/junit/runner/JUnitCore.class','org/json/JSONObject.class','android/util/Log.class'}; found=set(); [found.update(required.intersection(ZipFile(p).namelist())) for p in j]; missing=required-found; assert not missing, sorted(missing); print('DESKTOP_RUNTIME_JARS='+str(len(j)))"
+
+      - name: Run the phrase matcher regression without processing a book
+        shell: pwsh
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          gradle --no-daemon --stacktrace :app:testFullDebugUnitTest --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest.reviewedPhraseMatcherHandlesCapitalCyrillicAndUnicodeWhitespace"
+
+      - name: Run the StressBin JSON serialization regression
+        shell: pwsh
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          gradle --no-daemon --stacktrace :app:testFullDebugUnitTest --tests "ru.kost.ruvoice.bin.StressBinTest"
+
+      - name: Prepare portable engine directory
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $sourceProject = Join-Path $root "project\ruvoice-1.1.3-stage4.9"
+          $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          $engine = Join-Path $stage "engine"
+          New-Item -ItemType Directory -Force -Path $engine | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $engine "desktop-audit") | Out-Null
+          Copy-Item -Path (Join-Path $sourceProject "app\build\desktop-audit\*") -Destination (Join-Path $engine "desktop-audit") -Recurse -Force
+
+          $onnx = Join-Path $engine "desktop-audit\lib\onnxruntime-1.32.0.jar"
+          Invoke-WebRequest -Uri "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime/1.32.0/onnxruntime-1.32.0.jar" -OutFile $onnx
+          python -c "from zipfile import ZipFile; z=ZipFile(r'$onnx'); assert 'ai/onnxruntime/OrtEnvironment.class' in z.namelist()"
+
+          $assets = Join-Path $sourceProject "app\src\main\assets"
+          $projectOut = Join-Path $engine "project"
+          $assetOut = Join-Path $projectOut "app\src\main\assets"
+          $dataOut = Join-Path $projectOut "tools\data"
+          New-Item -ItemType Directory -Force -Path (Join-Path $assetOut "silero"), (Join-Path $assetOut "dicts\stress"), (Join-Path $assetOut "dicts\replace"), $dataOut | Out-Null
+          foreach ($file in @("morph.bin", "hard_e.txt")) {
+            Copy-Item -LiteralPath (Join-Path $assets $file) -Destination (Join-Path $assetOut $file) -Force
+          }
+          Copy-Item -LiteralPath (Join-Path $assets "silero\silero_ru.json") -Destination (Join-Path $assetOut "silero\silero_ru.json") -Force
+          Copy-Item -LiteralPath (Join-Path $assets "dicts\stress\Системный.txt") -Destination (Join-Path $assetOut "dicts\stress\Системный.txt") -Force
+          Copy-Item -LiteralPath (Join-Path $assets "dicts\replace\Системный.txt") -Destination (Join-Path $assetOut "dicts\replace\Системный.txt") -Force
+          foreach ($file in @("ruvoice_stress_book_regressions.json", "ruaccent_yo_book_regressions.json")) {
+            Copy-Item -LiteralPath (Join-Path $sourceProject "tools\data\$file") -Destination (Join-Path $dataOut $file) -Force
+          }
+
+          $reference = Join-Path $root "private-files\paired_eval"
+          $referenceOut = Join-Path $engine "reference"
+          $auditOut = Join-Path $engine "audit-scripts"
+          $bridgeOut = Join-Path $engine "bridges"
+          New-Item -ItemType Directory -Force -Path $referenceOut, $auditOut, $bridgeOut, (Join-Path $engine "silero-models"), (Join-Path $engine "aot\data\Russian"), (Join-Path $engine "ruaccent-native") | Out-Null
+          if ($env:RUVOICE_REFERENCE_BOOK_PRIVATE -eq "true") {
+            Copy-Item -LiteralPath (Join-Path $reference "book_context_acceptances.tsv") -Destination (Join-Path $referenceOut "book_context_acceptances.tsv") -Force
+            Copy-Item -LiteralPath (Join-Path $reference "book_reviewed_overrides.txt") -Destination (Join-Path $referenceOut "book_reviewed_overrides.txt") -Force
+            Copy-Item -LiteralPath (Join-Path $reference "book_reviewed_replacements.txt") -Destination (Join-Path $referenceOut "book_reviewed_replacements.txt") -Force
+            Write-Host "PRIVATE_BOOK_RULES=STAGED"
+          } else {
+            "# Reference-book rules are intentionally omitted from public builds." |
+              Set-Content -Encoding UTF8 (Join-Path $referenceOut "book_context_acceptances.tsv")
+            "# No reference-book overrides are bundled in public builds." |
+              Set-Content -Encoding UTF8 (Join-Path $referenceOut "book_reviewed_overrides.txt")
+            "# No reference-book replacements are bundled in public builds." |
+              Set-Content -Encoding UTF8 (Join-Path $referenceOut "book_reviewed_replacements.txt")
+            Write-Host "PRIVATE_BOOK_RULES=OMITTED"
+          }
+          Copy-Item -LiteralPath (Join-Path $reference "full_book_ruvoice_quality.py") -Destination (Join-Path $auditOut "full_book_ruvoice_quality.py") -Force
+          Copy-Item -LiteralPath (Join-Path $reference "package_ruvoice_import.py") -Destination (Join-Path $auditOut "package_ruvoice_import.py") -Force
+          Copy-Item -LiteralPath (Join-Path $reference "torch_lite_bridge.py") -Destination (Join-Path $bridgeOut "torch_lite_bridge.py") -Force
+
+          $aotRepo = Join-Path $env:RUNNER_TEMP "morph_dict"
+          git clone --depth 1 https://github.com/sokirko74/morph_dict.git $aotRepo
+          $aotSource = Join-Path $aotRepo "data\Russian"
+          $aotTarget = Join-Path $engine "aot\data\Russian"
+          Copy-Item -Path (Join-Path $aotSource "*") -Destination $aotTarget -Recurse -Force
+          foreach ($file in @("morphs.json", "gramtab.json")) {
+            if (-not (Test-Path -LiteralPath (Join-Path $aotTarget $file) -PathType Leaf)) {
+              throw "AOT reference file is missing: $file"
+            }
+          }
+
+      - name: Download and verify official RuVoice 1.1.3 models and EYO list
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine"
+          $apk = Join-Path $env:RUNNER_TEMP "ruvoice-tts-1.1.3.apk"
+          Invoke-WebRequest -Uri "https://github.com/kost-t-human/ruvoice-tts/releases/download/v1.1.3/ruvoice-tts-1.1.3.apk" -OutFile $apk
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $apk).Hash.ToLowerInvariant()
+          if ($hash -ne "b67e64ec05749032c8edfd746b4e039e6f261ac9801ff17c6ccdfc8e7c4d6acb") {
+            throw "Official RuVoice 1.1.3 APK SHA-256 mismatch: $hash"
+          }
+          $models = Join-Path $engine "silero-models"
+          @'
+          import sys
+          from pathlib import Path
+          from zipfile import ZipFile
+          apk, out = Path(sys.argv[1]), Path(sys.argv[2])
+          out.mkdir(parents=True, exist_ok=True)
+          required = ["accentor.ptl", "backbone.pte", "head.ptl", "homo.ptl", "stress.bin", "tts_mel.ptl"]
+          with ZipFile(apk) as archive:
+              for name in required:
+                  data = archive.read("assets/silero/" + name)
+                  if not data:
+                      raise SystemExit("Empty model asset: " + name)
+                  (out / name).write_bytes(data)
+                  print(name + ": " + str(len(data)) + " bytes")
+          '@ | python - $apk $models
+
+          $eyo = Join-Path $engine "eyo_safe.txt"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/kost-t-human/ruvoice-tts/v1.1.3/app/src/main/assets/eyo_safe.txt" -OutFile $eyo
+          $eyoBlob = (git hash-object $eyo).Trim().ToLowerInvariant()
+          if ($eyoBlob -ne "7d36a88a29cae298ad4507d4ec1f87e19d826d51") {
+            throw "Official EYO list Git blob SHA mismatch: $eyoBlob"
+          }
+
+      - name: Build the Windows tokenizer JNI DLL
+        shell: pwsh
+        run: |
+          $native = Join-Path $env:GITHUB_WORKSPACE "project\ruvoice-1.1.3-stage4.9\native"
+          Push-Location $native
+          cargo build --release --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw "Windows tokenizer JNI build failed" }
+          Pop-Location
+          $dll = Join-Path $native "target\x86_64-pc-windows-msvc\release\ruvoice_tokenizers.dll"
+          if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) { throw "ruvoice_tokenizers.dll was not produced" }
+          Copy-Item -LiteralPath $dll -Destination (Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine\ruaccent-native\ruvoice_tokenizers.dll") -Force
+
+      - name: Create portable Java runtime
+        shell: pwsh
+        run: |
+          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine"
+          $jlink = Join-Path $env:JAVA_HOME "bin\jlink.exe"
+          $jlinkArgs = @(
+            "--add-modules", "java.se,jdk.unsupported,jdk.crypto.ec",
+            "--strip-debug", "--no-man-pages", "--no-header-files",
+            "--compress=2", "--output", (Join-Path $engine "jre")
+          )
+          & $jlink @jlinkArgs
+          if ($LASTEXITCODE -ne 0) { throw "jlink failed with exit code $LASTEXITCODE" }
+          & (Join-Path $engine "jre\bin\java.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "The bundled Java runtime did not start" }
+
+      - name: Install the portable PyTorch and independent stress model
+        shell: pwsh
+        run: |
+          python -m pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir numpy==1.26.4 pandas==2.2.3 tqdm==4.67.1 ruaccent-predictor==1.2.0 pyinstaller
+          python -c "import torch; from ruaccent import load_accentor; from torch.jit.mobile import _load_for_lite_interpreter; v=tuple(int(x) for x in torch.__version__.split('+')[0].split('.')[:2]); assert v >= (2,4), 'RuVoice Silero exporter requires torch>=2.4, got '+torch.__version__; print('PYTORCH='+torch.__version__); print('RUACCENT_WORKER_IMPORT=OK')"
+
+      - name: Build the shared portable Silero and third-model worker
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $tool = Join-Path $root "experiments\ruvoice-stress-dictionary\desktop_runtime"
+          $reference = Join-Path $root "private-files\paired_eval"
+          $out = Join-Path $env:RUNNER_TEMP "ruvoice-worker-build"
+          $workerArgs = @(
+            "--noconfirm", "--clean", "--onedir", "--console",
+            "--name", "RuVoiceModelWorker",
+            "--distpath", (Join-Path $out "dist"),
+            "--workpath", (Join-Path $out "work"),
+            "--specpath", $out,
+            "--paths", $tool,
+            # portable_stdio.py lives in the parent tool directory, not desktop_runtime.
+            # Add both search roots so PyInstaller bundles the UTF-8 bootstrap module.
+            "--paths", (Split-Path -Parent $tool),
+            "--collect-all", "torch",
+            "--collect-all", "ruaccent",
+            "--collect-all", "numpy",
+            "--collect-all", "pandas",
+            "--collect-all", "transformers",
+            "--collect-all", "tokenizers",
+            "--add-data", ((Join-Path $reference "torch_lite_bridge.py") + ";."),
+            "--add-data", ((Join-Path $reference "audit_book_third_model.py") + ";."),
+            (Join-Path $tool "ruvoice_model_worker.py")
+          )
+          & python -m PyInstaller @workerArgs
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the shared model worker" }
+          $worker = Join-Path $out "dist\RuVoiceModelWorker"
+          if (-not (Test-Path -LiteralPath (Join-Path $worker "RuVoiceModelWorker.exe"))) {
+            throw "RuVoiceModelWorker.exe is missing from the onedir build"
+          }
+          $workerTarget = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine\bridges\worker"
+          New-Item -ItemType Directory -Force -Path $workerTarget | Out-Null
+          Copy-Item -Path (Join-Path $worker "*") -Destination $workerTarget -Recurse -Force
+
+      - name: Preflight the packaged Torch Lite worker with official RuVoice models
+        shell: pwsh
+        run: |
+          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine"
+          $worker = Join-Path $engine "bridges\worker\RuVoiceModelWorker.exe"
+          $accentor = Join-Path $engine "silero-models\accentor.ptl"
+          $homo = Join-Path $engine "silero-models\homo.ptl"
+          $log = Join-Path $env:RUNNER_TEMP "torch-lite-preflight.log"
+          $env:RUVOICE_TORCH_BRIDGE_LOG = $log
+          @'
+          import json, subprocess, sys
+          worker, accentor, homo = sys.argv[1:4]
+          singleton_words = [
+              "строительство", "дома", "отражается", "глаза", "разуму", "руки", "инструмент", "культура",
+              "произношение", "контекст", "ударение", "словарь",
+          ]
+          singleton_batches = [[word] for word in singleton_words]
+          batches = [
+              ["замок"],
+              ["строительство", "дома", "отражается", "глаза", "разуму", "руки", "инструмент", "культура"],
+              ["пример", "человек", "книга", "говорить"] * 8,
+              ["произношение", "контекст", "ударение", "словарь"] * 16,
+          ]
+          requests = [{"op": "accentor", "words": words} for words in singleton_batches + batches]
+          requests.append({"op": "quit"})
+          payload = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in requests)
+          completed = subprocess.run(
+              [worker, accentor, homo], input=payload, text=True, encoding="utf-8",
+              capture_output=True, timeout=300, check=False,
+          )
+          print("TORCH_LITE_WORKER_EXIT=" + str(completed.returncode))
+          print("TORCH_LITE_WORKER_STDOUT_BEGIN")
+          print(completed.stdout)
+          print("TORCH_LITE_WORKER_STDOUT_END")
+          print("TORCH_LITE_WORKER_STDERR_BEGIN")
+          print(completed.stderr[-12000:])
+          print("TORCH_LITE_WORKER_STDERR_END")
+          if completed.returncode != 0:
+              raise SystemExit("Packaged Torch Lite worker exited abnormally")
+          lines = [line for line in completed.stdout.splitlines() if line.strip()]
+          expected_requests = len(singleton_batches) + len(batches)
+          if len(lines) != expected_requests + 1:
+              raise SystemExit(f"Expected ready plus {expected_requests} replies, got {len(lines)}")
+          records = [json.loads(line) for line in lines]
+          if not records[0].get("ready"):
+              raise SystemExit("Packaged Torch Lite worker did not send ready")
+          singleton_failures = []
+          batch_failures = []
+          for index, words in enumerate(singleton_batches + batches, start=1):
+              result = records[index]
+              if "error" in result:
+                  if index <= len(singleton_batches):
+                      singleton_failures.append(words[0])
+                  else:
+                      batch_failures.append("batch-" + str(index - len(singleton_batches)) +
+                                            " (" + str(len(words)) + " words)")
+                  continue
+              if len(result.get("stress", [])) != len(words) or len(result.get("yo", [])) != len(words):
+                  batch_failures.append("request-" + str(index) + " output rows did not align")
+          if singleton_failures:
+              print("TORCH_LITE_SINGLETON_FAILURES=" + json.dumps(singleton_failures, ensure_ascii=False))
+              raise SystemExit("Torch Lite cannot infer the following individual words: " + ", ".join(singleton_failures))
+          if batch_failures:
+              raise SystemExit("Torch Lite batch inference failed: " + "; ".join(batch_failures))
+          print("TORCH_LITE_SINGLETON_PREFLIGHT=PASS words=" + str(len(singleton_words)))
+          print("TORCH_LITE_PACKAGED_WORKER_PREFLIGHT=PASS batches=" + str(len(batches)) +
+                " words=" + str(sum(map(len, batches))))
+          '@ | python - $worker $accentor $homo
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Tail 100 }
+            throw "Packaged Torch Lite worker preflight failed"
+          }
+          if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Tail 100 }
+
+      - name: Validate all full-book desktop runtime components
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $engine = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64\engine"
+          $desktop = Join-Path $engine "desktop-audit"
+          $lib = Join-Path $desktop "lib"
+          $required = @(
+            (Join-Path $engine "jre\bin\java.exe"),
+            (Join-Path $desktop "classes\ru\kost\ruvoice\text\UploadedEpubPairedEvaluationMain.class"),
+            (Join-Path $desktop "classes\ru\kost\ruvoice\text\UploadedEpubPairedEvaluationTest.class"),
+            (Join-Path $desktop "classes\ru\kost\ruvoice\text\RuAccentBridgeKt.class"),
+            (Join-Path $engine "ruaccent-native\ruvoice_tokenizers.dll"),
+            (Join-Path $engine "bridges\worker\RuVoiceModelWorker.exe"),
+            (Join-Path $engine "bridges\torch_lite_bridge.py"),
+            (Join-Path $engine "silero-models\accentor.ptl"),
+            (Join-Path $engine "silero-models\homo.ptl"),
+            (Join-Path $engine "eyo_safe.txt"),
+            (Join-Path $engine "project\app\src\main\assets\morph.bin"),
+            (Join-Path $engine "project\app\src\main\assets\hard_e.txt"),
+            (Join-Path $engine "project\tools\data\ruvoice_stress_book_regressions.json"),
+            (Join-Path $engine "project\tools\data\ruaccent_yo_book_regressions.json"),
+            (Join-Path $engine "aot\data\Russian\morphs.json"),
+            (Join-Path $engine "aot\data\Russian\gramtab.json"),
+            (Join-Path $engine "reference\book_reviewed_overrides.txt"),
+            (Join-Path $engine "reference\book_reviewed_replacements.txt"),
+            (Join-Path $engine "audit-scripts\full_book_ruvoice_quality.py"),
+            (Join-Path $engine "audit-scripts\package_ruvoice_import.py")
+          )
+          $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+          if ($missing.Count -gt 0) { throw ("Missing engine files: " + ($missing -join "; ")) }
+          python -c "from pathlib import Path; from zipfile import ZipFile; p=Path(r'$lib'); j=list(p.glob('*.jar')); req={'org/junit/runner/JUnitCore.class','org/json/JSONObject.class','android/util/Log.class','ai/onnxruntime/OrtEnvironment.class'}; got=set(); [got.update(req.intersection(ZipFile(x).namelist())) for x in j]; assert not req-got, sorted(req-got); assert not any('onnxruntime-android' in x.name.lower() for x in j); print('DESKTOP_JARS='+str(len(j)))"
+
+      - name: Verify the portable audit preserves the first JUnit failure
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = Join-Path $env:GITHUB_WORKSPACE "experiments\ruvoice-stress-dictionary"
+          @'
+          from local_full_book_workflow import _java_failure_summary
+          log = "prefix\nRUVOICE_AUDIT_FAILURE=syntheticTest :: expected diagnostic\n" + "\n".join(
+              f"\tat synthetic.Frame({index})" for index in range(40)
+          )
+          summary = _java_failure_summary(log)
+          assert "RUVOICE_AUDIT_FAILURE=syntheticTest :: expected diagnostic" in summary, summary
+          assert "synthetic.Frame(39)" not in summary, summary
+          print("PORTABLE_JUNIT_FAILURE_DIAGNOSTIC=PASS")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "JUnit failure diagnostic test failed" }
+
+      - name: Build the local browser application executable
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $tool = Join-Path $root "experiments\ruvoice-stress-dictionary"
+          $out = Join-Path $env:RUNNER_TEMP "ruvoice-server-build"
+          $serverArgs = @(
+            "--noconfirm", "--clean", "--onefile", "--console",
+            "--name", "RuVoiceBookTool",
+            "--distpath", (Join-Path $out "dist"),
+            "--workpath", (Join-Path $out "work"),
+            "--specpath", $out,
+            "--paths", $tool,
+            (Join-Path $tool "private_book_server.py")
+          )
+          & python -m PyInstaller @serverArgs
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller could not build RuVoiceBookTool.exe" }
+          $exe = Join-Path $out "dist\RuVoiceBookTool.exe"
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "RuVoiceBookTool.exe was not produced" }
+          $portableRoot = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $portableRoot "RuVoiceBookTool.exe") -Force
+          Copy-Item -LiteralPath (Join-Path $tool "Start_RuVoice_Book_Tool_Windows.bat") -Destination (Join-Path $portableRoot "Start_RuVoice_Book_Tool_Windows.bat") -Force
+          # Keep a working Python-source fallback for users who intentionally remove the EXE.
+          foreach ($module in @("private_book_server.py", "local_full_book_workflow.py", "book_tool_paths.py")) {
+            Copy-Item -LiteralPath (Join-Path $tool $module) -Destination (Join-Path $portableRoot $module) -Force
+          }
+
+      - name: Run an end-to-end upload smoke test without exposing a personal book
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          $exe = Join-Path $stage "RuVoiceBookTool.exe"
+          $privateHome = Join-Path $env:RUNNER_TEMP "ruvoice-smoke-private"
+          $port = 18765
+          $zip = Join-Path $env:RUNNER_TEMP "ruvoice-smoke-result.zip"
+          $bookOutput = Join-Path $env:RUNNER_TEMP "ruvoice-smoke-package-copy.zip"
+
+          if ($env:RUVOICE_REFERENCE_BOOK_PRIVATE -eq "true") {
+            $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\8.Iskusstvo..epub"
+            if (-not (Test-Path -LiteralPath $epub -PathType Leaf)) { throw "The private reference EPUB is missing: $epub" }
+            $bookHashBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+            if ($bookHashBefore -ne "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119") {
+              throw "The private reference EPUB does not match its reviewed manifest: $bookHashBefore"
+            }
+            Write-Host "SMOKE_BOOK_TYPE=PRIVATE_REFERENCE"
+          } else {
+            $epub = Join-Path $env:RUNNER_TEMP "ruvoice-synthetic-smoke.epub"
+            @'
+          import sys
+          from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+
+          path = sys.argv[1]
+          container = """<?xml version="1.0" encoding="UTF-8"?>
+          <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+            <rootfiles><rootfile full-path="OPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles>
+          </container>"""
+          opf = """<?xml version="1.0" encoding="UTF-8"?>
+          <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book">
+            <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book">synthetic-ruvoice-smoke</dc:identifier><dc:title>RuVoice synthetic smoke test</dc:title><dc:language>ru</dc:language></metadata>
+            <manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
+            <spine><itemref idref="chapter"/></spine>
+          </package>"""
+          xhtml = """<?xml version="1.0" encoding="UTF-8"?>
+          <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Smoke test</title></head>
+          <body>
+          <p>Это короткая проверочная книга. В начале истории человек читает простые предложения, чтобы проверить произношение русских слов в контексте. Затем программа сохраняет исходный текст и формирует список пользовательских правил.</p>
+          <p>Вторая часть проверки нужна для того, чтобы убедиться: каждое слово проходит через настоящий движок RuVoice, а результат можно собрать в отдельный архив.</p>
+          </body></html>"""
+          with ZipFile(path, "w") as archive:
+              archive.writestr("mimetype", "application/epub+zip", compress_type=ZIP_STORED)
+              archive.writestr("META-INF/container.xml", container, compress_type=ZIP_DEFLATED)
+              archive.writestr("OPS/package.opf", opf, compress_type=ZIP_DEFLATED)
+              archive.writestr("OPS/chapter.xhtml", xhtml, compress_type=ZIP_DEFLATED)
+          print("SYNTHETIC_EPUB_CREATED=" + path)
+          '@ | python - $epub
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the synthetic smoke-test EPUB" }
+            Write-Host "SMOKE_BOOK_TYPE=SYNTHETIC"
+          }
+
+          $bookHashBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+          Write-Host "SMOKE_EPUB_SHA256=$bookHashBefore"
+          $process = Start-Process -FilePath $exe -ArgumentList @(
+            "--no-browser", "--port", "$port", "--private-home", "$privateHome"
+          ) -PassThru -WindowStyle Hidden
+          try {
+            $page = $null
+            for ($i = 0; $i -lt 90; $i++) {
+              $process.Refresh()
+              if ($process.HasExited) { throw "RuVoiceBookTool.exe exited early with code $($process.ExitCode)" }
+              try {
+                $page = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -TimeoutSec 3
+                if ($page.StatusCode -eq 200 -and $page.Content.Contains("Дополнение словаря RuVoice")) { break }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if ($null -eq $page -or $page.StatusCode -ne 200) { throw "The portable EXE did not serve the upload page" }
+            $tokenMatch = [regex]::Match($page.Content, 'name="token" value="([^"]+)"')
+            if (-not $tokenMatch.Success) { throw "The local upload form has no token" }
+            $uploadFile = Get-Item -LiteralPath $epub
+            Write-Host "SMOKE_UPLOAD_FILE=$($uploadFile.Name) bytes=$($uploadFile.Length)"
+            $form = @{ token = $tokenMatch.Groups[1].Value; book = $uploadFile }
+            $upload = Invoke-WebRequest -Uri "http://127.0.0.1:$port/upload" -Method Post -Form $form -TimeoutSec 1800 -SkipHttpErrorCheck
+            if ($upload.StatusCode -ne 200 -or -not $upload.Content.Contains("ZIP готов")) {
+              $messageMatch = [regex]::Match($upload.Content, '</form>\s*<p>(.*?)</p>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+              $message = if ($messageMatch.Success) { [System.Net.WebUtility]::HtmlDecode($messageMatch.Groups[1].Value) } else { "No server feedback paragraph was returned" }
+              Write-Host "SMOKE_UPLOAD_STATUS=$($upload.StatusCode)"
+              Write-Host "SMOKE_UPLOAD_ERROR=$message"
+              throw "The original RuVoice audit did not return a ZIP (HTTP $($upload.StatusCode))."
+            }
+            $downloadMatch = [regex]::Match($upload.Content, 'href="(/download/[^"]+)"')
+            if (-not $downloadMatch.Success) { throw "The result page has no ZIP download link" }
+            Invoke-WebRequest -Uri ("http://127.0.0.1:$port" + $downloadMatch.Groups[1].Value) -OutFile $zip -TimeoutSec 120
+
+            @'
+          import csv, json, sys, zipfile
+          path = sys.argv[1]
+          with zipfile.ZipFile(path) as z:
+              names = set(z.namelist())
+              required = {
+                  "IMPORT.txt", "Book_Quality_Summary.json",
+                  "WholeBook_RuVoice_AllOccurrences.tsv", "WholeBook_RuVoice_UniqueWords.tsv",
+              }
+              assert required.issubset(names), sorted(names)
+              stress = [n for n in names if n.endswith("_Stress.txt")]
+              replacements = [n for n in names if n.endswith("_Replacements.txt")]
+              assert len(stress) == 1 and len(replacements) == 1, sorted(names)
+              required_third_model = {
+                  "Third_Model_Summary.json", "Third_Model_AllOccurrences.tsv",
+                  "Third_Model_Disagreements.tsv", "Three_Model_Confirmed_Overrides.txt",
+                  "Three_Model_OOV_Review.txt", "Three_Model_Override_Evidence.tsv",
+                  "Three_Model_Override_Summary.json",
+              }
+              assert required_third_model.issubset(names), sorted(names)
+              assert len(names) == 13, sorted(names)
+              third = json.loads(z.read("Third_Model_Summary.json"))
+              assert third["all_segments_mode"] is True, third
+              assert third["missing_multisyllabic_occurrences"] == 0, third
+              assert third["multisyllabic_occurrence_coverage_percent"] == 100.0, third
+              assert not any(n.lower().endswith(".epub") for n in names)
+              summary = json.loads(z.read("Book_Quality_Summary.json"))
+              assert summary["ledger_coverage_percent"] == 100.0, summary
+              expected = summary["tokens_from_original_ruvoice"]
+              assert expected == summary["occurrences_in_full_context_ledger"], summary
+              ledger = z.open("WholeBook_RuVoice_AllOccurrences.tsv")
+              rows = list(csv.DictReader((line.decode("utf-8-sig") for line in ledger), delimiter="\t"))
+              assert len(rows) == expected, (len(rows), expected)
+              assert len({(r["segment_index"], r["word_index"]) for r in rows}) == expected
+              print("SMOKE_ZIP_VALIDATED=" + json.dumps({
+                  "tokens": expected,
+                  "wordforms": summary["unique_russian_wordforms"],
+                  "ledger_coverage_percent": summary["ledger_coverage_percent"],
+                  "stress_entries": summary["total_imported_stress_overrides"],
+                  "replacement_rules": summary["imported_context_replacement_rules"],
+              }, ensure_ascii=False))
+          '@ | python - $zip
+            if ($LASTEXITCODE -ne 0) { throw "Smoke-test ZIP validation failed" }
+
+            $bookHashAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+            if ($bookHashAfter -ne $bookHashBefore) { throw "The source EPUB changed during processing" }
+            Copy-Item -LiteralPath $zip -Destination $bookOutput -Force
+            if (-not (Test-Path -LiteralPath (Join-Path $privateHome "state\book_history.json") -PathType Leaf)) {
+              throw "The local history file was not created"
+            }
+            if ((Get-ChildItem -Path (Join-Path $privateHome "incoming") -File | Measure-Object).Count -ne 0) {
+              throw "The uploaded EPUB was not removed from the incoming folder"
+            }
+            if ((Get-ChildItem -Path (Join-Path $privateHome "packages") -Filter "*.zip" -File | Measure-Object).Count -lt 1) {
+              throw "The result ZIP was not saved in the local packages folder"
+            }
+            Write-Host "PASS: the upload, original RuVoice processing, full occurrence ledger, and import ZIP smoke test completed"
+          } finally {
+            if ($process -and -not $process.HasExited) { & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null }
+          }
+
+      - name: Write portable package instructions
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          @'
+          RuVoice Book Tool — Windows x64
+
+          1. Распакуйте весь архив в отдельную папку.
+          2. Дважды щёлкните Start_RuVoice_Book_Tool_Windows.bat.
+          3. Дождитесь открытия страницы в браузере. Адрес доступен только на этом компьютере (127.0.0.1).
+          4. Выберите EPUB и дождитесь ZIP. Первая проверка может быть дольше: RUAccent загружает модели в локальный кэш.
+          5. Не закрывайте чёрное окно до скачивания ZIP. Ctrl+C останавливает локальную страницу.
+
+          Python, Java и Rust отдельно устанавливать не требуется.
+          Личные ZIP и книжные списки сохраняются в:
+          %USERPROFILE%\.ruvoice-book-workflow
+
+          Для каждой книги ZIP содержит отдельные списки «Ударения» и «Замены» и краткую сводку проверки.
+          Оригинальная EPUB-книга в ZIP не включается и не изменяется.
+          '@ | Set-Content -Encoding UTF8 (Join-Path $stage "START_HERE.txt")
+
+      - name: Create portable Windows ZIP
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "RuVoiceBookTool-Windows-x64"
+          $archive = Join-Path $env:GITHUB_WORKSPACE "RuVoiceBookTool-Windows-x64.zip"
+          @'
+          import sys
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+          root, archive_path = Path(sys.argv[1]), Path(sys.argv[2])
+          count = 0
+          with ZipFile(archive_path, "w", compression=ZIP_DEFLATED, compresslevel=1, allowZip64=True) as z:
+              for path in root.rglob("*"):
+                  if path.is_file():
+                      z.write(path, path.relative_to(root.parent))
+                      count += 1
+          print("PORTABLE_PACKAGE_FILES=" + str(count))
+          print("PORTABLE_PACKAGE_BYTES=" + str(Path(archive_path).stat().st_size))
+          '@ | python - $stage $archive
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "Portable ZIP was not created" }
+
+      - name: Upload generated book-specific RuVoice dictionaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-book-dictionaries
+          path: ${{ runner.temp }}/ruvoice-smoke-package-copy.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload portable Windows ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: RuVoiceBookTool-Windows-x64
+          path: |
+            RuVoiceBookTool-Windows-x64.zip
+            RuVoiceBookOutput.zip
+          if-no-files-found: error
+          retention-days: 30

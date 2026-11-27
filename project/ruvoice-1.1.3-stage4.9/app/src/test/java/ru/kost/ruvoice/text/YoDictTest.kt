@@ -52,7 +52,7 @@ class YoDictTest {
     @Test fun accentorPassUsesDict() {
         val s = Stress(d, firstVowel, yo = yo)
         assertEquals("+ёжик ш+ёл", s.apply("ежик шел"))           // «ё» из словаря, ударение на неё
-        assertEquals("об+ъём", s.apply("объем"))                       // словарь восстанавливает и ударяет базовую форму
+        assertEquals("объ+ём", s.apply("объем"))                       // маркер ставится непосредственно перед ударной «ё»
         assertEquals("+ёлки-п+алки", s.apply("елки-палки"))         // часть через дефис ищется без дефиса
         assertEquals("м+ама", s.apply("мама"))                     // не словарное — как было
         assertEquals("+ежик", Stress(d, firstVowel, yo = yo, rules = Rules(off = setOf("yo"))).apply("ежик"))

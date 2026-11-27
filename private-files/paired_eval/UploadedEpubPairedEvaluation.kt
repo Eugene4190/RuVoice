@@ -11,6 +11,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Test
+import org.junit.runner.JUnitCore
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import ru.kost.ruvoice.Pipeline
@@ -18,6 +19,7 @@ import ru.kost.ruvoice.DictLines
 import ru.kost.ruvoice.SileroData
 import ru.kost.ruvoice.bin.StressBin
 
+private const val REFERENCE_BOOK_SHA256 = "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119"
 private const val ACUTE = '\u0301'
 private const val VOWELS = "аеёиоуыэюя"
 private val wordRegex = Regex("[\\p{L}\\u0301]+")
@@ -35,7 +37,47 @@ private val reviewHomographs = setOf(
 )
 
 private data class Paragraph(val chapter: String, val number: Int, val text: String)
-private data class BookSegment(val chapter: String, val paragraph: Int, val part: Int, val text: String)
+private data class BookSegment(val chapter: String, val paragraph: Int, val part: Int, val text: String, val sourceContext: String = text)
+private data class BookPhraseTarget(
+    val phrase: String,
+    val sourceWord: String,
+    val targetWord: String,
+)
+
+private fun parseBookPhraseTargets(lines: List<String>): List<BookPhraseTarget> {
+    val result = ArrayList<BookPhraseTarget>()
+    for (line in lines) {
+        val (rawKey, rawValue) = Replacements.split(line) ?: continue
+        val key = rawKey.trim()
+        val value = rawValue.trim()
+        val sourceWords = Regex("[а-яё+]+", RegexOption.IGNORE_CASE).findAll(key)
+            .map { it.value.replace("+", "").lowercase(Locale.ROOT) }.toList()
+        val targetWords = Regex("[а-яё+]+", RegexOption.IGNORE_CASE).findAll(value)
+            .map { it.value.lowercase(Locale.ROOT) }.toList()
+        if (sourceWords.size < 2 || sourceWords.size != targetWords.size) continue
+        for (index in sourceWords.indices) {
+            val target = targetWords[index]
+            if ('+' in target && target.replace("+", "") == sourceWords[index]) {
+                result += BookPhraseTarget(key, sourceWords[index], target)
+            }
+        }
+    }
+    return result.distinct()
+}
+
+private fun phraseOccurrenceCount(phrase: String, text: String): Int {
+    // Normalize case explicitly: Java's default regex case rules are not a safe
+    // dependency for Cyrillic. Escape each word separately so whitespace operators
+    // remain active; \\p{Z} also covers NBSP and typographic separators.
+    val normalizedPhrase = phrase.lowercase(Locale.ROOT)
+    val normalizedText = text.lowercase(Locale.ROOT)
+    val spaces = Regex("[\\s\\p{Z}]+")
+    val words = normalizedPhrase.trim().split(spaces).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return 0
+    val whitespaceFlexible = words.joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
+    return Regex("(?<![\\p{L}])$whitespaceFlexible(?![\\p{L}])")
+        .findAll(normalizedText).count()
+}
 
 private fun localName(node: Node): String =
     (node.localName ?: node.nodeName.substringAfter(':')).lowercase(Locale.ROOT)
@@ -214,19 +256,53 @@ private fun makeSegments(paragraphs: List<Paragraph>): List<BookSegment> {
     return result
 }
 
+private fun makeProductionSegments(
+    paragraphs: List<Paragraph>,
+    data: SileroData,
+    replacements: Replacements,
+    rules: Rules,
+): List<BookSegment> {
+    val result = ArrayList<BookSegment>()
+    for (paragraph in paragraphs) {
+        // Use the exact public planner used by SileroTtsService: replacements happen before
+        // paragraph/sentence splitting, not in a parallel BreakIterator approximation.
+        val planned = Pipeline.plan(paragraph.text, data, 0, 0, replacements, rules)
+        for ((index, segment) in planned.withIndex()) {
+            result += BookSegment(
+                paragraph.chapter,
+                paragraph.number,
+                index + 1,
+                segment.text,
+                paragraph.text,
+            )
+        }
+    }
+    return result
+}
+
 private fun plain(word: String): String =
     word.replace(ACUTE.toString(), "").lowercase(Locale.ROOT)
 
 private fun stressPosition(word: String): Int? {
     var vowelIndex = 0
+    var yoStress: Int? = null
     val lower = word.lowercase(Locale.ROOT)
     for (index in lower.indices) {
         if (lower[index] in VOWELS) {
             if (index + 1 < lower.length && lower[index + 1] == ACUTE) return vowelIndex
+            if (lower[index] == 'ё' && yoStress == null) yoStress = vowelIndex
             vowelIndex++
         }
     }
-    return null
+    // Ё is inherently stressed in Russian orthography and normally carries no acute mark.
+    return yoStress
+}
+
+private fun reviewedVariantPosition(variant: String): Int? {
+    val marker = variant.indexOf('+')
+    if (marker < 0 || marker + 1 >= variant.length) return null
+    if (variant[marker + 1].lowercaseChar() !in VOWELS) return null
+    return variant.substring(0, marker).count { it.lowercaseChar() in VOWELS }
 }
 
 private fun shortContext(text: String, match: MatchResult, radius: Int = 54): String {
@@ -239,6 +315,10 @@ fun main(args: Array<String>) {
     require(args.size >= 1) { "Usage: <book.epub> [report.json]" }
     val epub = File(args[0]).absoluteFile
     require(epub.isFile && epub.length() > 0) { "EPUB не найден или пуст: " + epub }
+    // This standalone entry point shares the paired-report schema with the JUnit runner.
+    // Keep book identity in this scope too, so both launch paths compile independently.
+    val bookSha256 = pairedSha256(epub)
+    val isReferenceBook = bookSha256 == REFERENCE_BOOK_SHA256
     val reportFile = args.getOrNull(1)?.let { File(it).absoluteFile }
     val modelRoot = Files.createTempDirectory("ruvoice-real-book-ruaccent").toFile()
     val downloader = RuAccentHttpDownloader(connectTimeoutMillis = 30_000, readTimeoutMillis = 120_000)
@@ -326,7 +406,7 @@ fun main(args: Array<String>) {
                                 .put("paragraph", segment.paragraph)
                                 .put("source_word", sourceWord)
                                 .put("ruaccent_word", outputWord)
-                                .put("context", shortContext(segment.text, sourceWords[wordIndex], 40)))
+                                )
                         }
                     }
                     if (normalizedSource.replace('ё', 'е') == normalizedOutput.replace('ё', 'е') && sourceWord.lowercase(Locale.ROOT).contains('е') &&
@@ -354,7 +434,7 @@ fun main(args: Array<String>) {
                                 .put("chapter", segment.chapter)
                                 .put("source_word", sourceWord)
                                 .put("ruaccent_word", outputWord)
-                                .put("context", shortContext(segment.text, sourceWords[wordIndex], 40)))
+                                )
                         }
                     }
                     if (normalizedSource in reviewHomographs && homographSamples.length() < 50) {
@@ -367,7 +447,7 @@ fun main(args: Array<String>) {
                                 .put("source_word", sourceWord)
                                 .put("ruaccent_word", outputWord)
                                 .put("decision", prediction.decisions.getOrNull(wordIndex)?.name ?: "UNKNOWN")
-                                .put("context", shortContext(segment.text, sourceWords[wordIndex], 50)))
+                                )
                         }
                     }
                 }
@@ -375,8 +455,11 @@ fun main(args: Array<String>) {
                 if (!segmentHasStress) segmentsWithNoStress++
             }
 
+
             val summary = JSONObject()
                 .put("book_file", epub.name)
+                .put("book_sha256", bookSha256)
+                .put("is_reference_book", isReferenceBook)
                 .put("model_revision", RuAccentInt8ModelManifest.revision)
                 .put("model_files", RuAccentInt8ModelManifest.files.size)
                 .put("model_bytes", downloaded)
@@ -404,7 +487,7 @@ fun main(args: Array<String>) {
 
             if (reportFile != null) {
                 reportFile.parentFile?.mkdirs()
-                reportFile.writeText(summary.toString(2), Charsets.UTF_8)
+                reportFile.bufferedWriter(Charsets.UTF_8).use { writer -> summary.write(writer) }
                 println("REPORT_FILE=" + reportFile.path + " REPORT_BYTES=" + reportFile.length())
             }
 
@@ -423,8 +506,7 @@ fun main(args: Array<String>) {
                 val item = homographSamples.getJSONObject(i)
                 if (item.optString("type") == "HOMOGRAPH_REVIEW") {
                     println(item.optString("chapter") + " | " + item.optString("source_word") + " -> " +
-                        item.optString("ruaccent_word") + " | " + item.optString("decision") + " | " +
-                        item.optString("context"))
+                        item.optString("ruaccent_word") + " | " + item.optString("decision"))
                 }
             }
             println("BOOK_EVAL_HOMOGRAPH_SAMPLES_END")
@@ -432,7 +514,7 @@ fun main(args: Array<String>) {
             for (i in 0 until functionSamples.length()) {
                 val item = functionSamples.getJSONObject(i)
                 println(item.optString("chapter") + " | " + item.optString("source_word") + " -> " +
-                    item.optString("ruaccent_word") + " | " + item.optString("context"))
+                    item.optString("ruaccent_word"))
             }
             println("BOOK_EVAL_FUNCTION_WORD_SAMPLES_END")
             check(alignmentErrors == 0 && lexicalChanges == 0) {
@@ -455,7 +537,12 @@ private class PairedTorchLiteStressModels(
     private val padId: Int,
 ) : StressModels, AutoCloseable {
     private val process = ProcessBuilder(
-        "python3", bridgeScript.absolutePath, accentorFile.absolutePath, homoFile.absolutePath
+        System.getenv("RUVOICE_TORCH_BRIDGE_EXE")?.takeIf { it.isNotBlank() }?.let { exe ->
+            listOf(exe, accentorFile.absolutePath, homoFile.absolutePath)
+        } ?: listOf(
+            System.getenv("RUVOICE_PYTHON")?.takeIf { it.isNotBlank() } ?: "python3",
+            bridgeScript.absolutePath, accentorFile.absolutePath, homoFile.absolutePath
+        )
     ).redirectError(ProcessBuilder.Redirect.INHERIT).start()
     private val writer = process.outputStream.bufferedWriter(Charsets.UTF_8)
     private val reader = process.inputStream.bufferedReader(Charsets.UTF_8)
@@ -473,7 +560,12 @@ private class PairedTorchLiteStressModels(
         writer.write(value.toString())
         writer.newLine()
         writer.flush()
-        val line = reader.readLine() ?: error("Torch Lite bridge closed stdout")
+        val line = reader.readLine() ?: run {
+            val exit = if (process.isAlive) "still_running" else runCatching { process.exitValue().toString() }.getOrDefault("unknown")
+            val operation = value.optString("op")
+            error("Torch Lite bridge closed stdout (process_exit=$exit, request=$operation)")
+        }
+
         val result = JSONObject(line)
         if (result.has("error")) error(result.getString("error"))
         return result
@@ -538,7 +630,9 @@ private class PairedRemoteRuAccentCorrector(
     nativeDirectory: String,
 ) : IndependentStressCorrector, AutoCloseable {
     private val process = ProcessBuilder(
-        "java", "-Xmx4g", "-Djava.library.path=" + nativeDirectory, "-cp", bridgeClasspath,
+        System.getenv("RUVOICE_JAVA")?.takeIf { it.isNotBlank() }
+            ?: File(System.getProperty("java.home"), "bin/java").absolutePath,
+        "-Xmx4g", "-Djava.library.path=" + nativeDirectory, "-cp", bridgeClasspath,
         "ru.kost.ruvoice.text.RuAccentBridgeKt", modelDirectory.absolutePath
     ).redirectError(ProcessBuilder.Redirect.INHERIT).start()
     private val writer = process.outputStream.bufferedWriter(Charsets.UTF_8)
@@ -611,7 +705,76 @@ private fun pairedSha256(file: File): String {
     return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
+private fun pairedGitBlobSha(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-1")
+    digest.update(("blob " + file.length() + "\u0000").toByteArray(Charsets.UTF_8))
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+private data class ProductionTokenAlignment(
+    val sourceTokens: Int,
+    val baselineTokens: Int,
+    val reviewedTokens: Int,
+    val mergedTokens: Int,
+) {
+    // Pipeline.accent can expand or normalize text before the spoken token stream is emitted.
+    // Source-to-output count differences affect source mapping, not comparison of production runs.
+    val sourceMappingAvailable: Boolean
+        get() = sourceTokens == baselineTokens
+
+    val reviewedOutputAligned: Boolean
+        get() = baselineTokens == reviewedTokens
+
+    val ruaccentEvidenceAligned: Boolean
+        get() = baselineTokens == mergedTokens
+}
+
 class UploadedEpubPairedEvaluationTest {
+    @Test
+    fun sourceExpansionIsTrackedSeparatelyFromProductionOutputAlignment() {
+        val expanded = ProductionTokenAlignment(
+            sourceTokens = 3,
+            baselineTokens = 4,
+            reviewedTokens = 4,
+            mergedTokens = 4,
+        )
+        check(!expanded.sourceMappingAvailable)
+        check(expanded.reviewedOutputAligned)
+        check(expanded.ruaccentEvidenceAligned)
+
+        // An unsafe auxiliary stream is recorded as missing evidence, not dropped tokens.
+        val ruaccentPartial = expanded.copy(mergedTokens = 5)
+        check(ruaccentPartial.reviewedOutputAligned)
+        check(!ruaccentPartial.ruaccentEvidenceAligned)
+
+        val unsafeOverlay = expanded.copy(reviewedTokens = 5)
+        check(!unsafeOverlay.reviewedOutputAligned)
+    }
+
+    @Test
+    fun reviewedPhraseMatcherHandlesCapitalCyrillicAndUnicodeWhitespace() {
+        check(phraseOccurrenceCount(
+            "сети значений",
+            "Сети значений в потоке энергии сознания"
+        ) == 1) { "Reviewed phrase matcher must find a capital-Cyrillic phrase" }
+        check(phraseOccurrenceCount(
+            "сети значений",
+            "сети\u00a0значений; сети\tзначений"
+        ) == 2) { "Reviewed phrase matcher must accept non-breaking and repeated whitespace" }
+        check(phraseOccurrenceCount(
+            "сети значений",
+            "подсети значений и сети значенийx"
+        ) == 0) { "Reviewed phrase matcher must enforce whole-word boundaries" }
+    }
+
     @Test
     fun compareOriginalRuVoiceWithRuAccentMergedAcrossTheWholeBook() {
         val projectDir = File(checkNotNull(System.getenv("RUVOICE_PROJECT_DIR"))).canonicalFile
@@ -623,31 +786,64 @@ class UploadedEpubPairedEvaluationTest {
         val nativeDir = checkNotNull(System.getenv("RUACCENT_NATIVE_DIR"))
 
         require(epub.isFile && epub.length() > 0L) { "Uploaded EPUB is missing" }
+        val bookSha256 = pairedSha256(epub)
+        val isReferenceBook = bookSha256 == REFERENCE_BOOK_SHA256
+        println("RUVOICE_BOOK_SHA256=$bookSha256 reference_book=$isReferenceBook")
         require(File(projectDir, "app/src/main/assets/morph.bin").isFile) { "morph.bin is missing" }
         require(File(sileroDir, "accentor.ptl").isFile && File(sileroDir, "homo.ptl").isFile) {
             "Official Silero stress models are missing"
         }
 
-        val modelRoot = Files.createTempDirectory("ruvoice-paired-ruaccent").toFile()
+        val modelCachePath = System.getenv("RUVOICE_RUACCENT_MODEL_CACHE")?.takeIf { it.isNotBlank() }
+        val persistentModelCache = modelCachePath != null
+        val modelRoot = if (modelCachePath != null) {
+            File(modelCachePath).canonicalFile.apply { mkdirs() }
+        } else {
+            Files.createTempDirectory("ruvoice-paired-ruaccent").toFile()
+        }
         val downloader = RuAccentHttpDownloader(connectTimeoutMillis = 30_000, readTimeoutMillis = 120_000)
         var downloaded = 0L
         for ((index, relative) in RuAccentInt8ModelManifest.files.withIndex()) {
             val destination = File(modelRoot, relative)
             destination.parentFile?.mkdirs()
-            downloader.download(RuAccentInt8ModelManifest.downloadUrl(relative), destination) { bytes ->
-                if (bytes == 0L) println("RUAccent model " + (index + 1) + "/" + RuAccentInt8ModelManifest.files.size + ": " + relative)
+            val expectedHash = RuAccentInt8ModelManifest.expectedSha256.getValue(relative)
+            val cacheHit = destination.isFile && destination.length() > 0L &&
+                pairedSha256(destination) == expectedHash
+            if (!cacheHit) {
+                destination.delete()
+                downloader.download(RuAccentInt8ModelManifest.downloadUrl(relative), destination) { bytes ->
+                    if (bytes == 0L) println("RUAccent model " + (index + 1) + "/" + RuAccentInt8ModelManifest.files.size + ": " + relative)
+                }
+            } else {
+                println("RUACCENT_MODEL_CACHE_HIT=$relative")
             }
             check(destination.isFile && destination.length() > 0L) { "RUAccent model download failed: " + relative }
-            val expectedHash = RuAccentInt8ModelManifest.expectedSha256.getValue(relative)
             check(pairedSha256(destination) == expectedHash) { "RUAccent SHA-256 mismatch: " + relative }
             downloaded += destination.length()
         }
 
         val json = File(projectDir, "app/src/main/assets/silero/silero_ru.json").readText(Charsets.UTF_8)
-        val yoLines = File(projectDir, "app/src/main/assets/eyo_safe.txt").readLines(Charsets.UTF_8).asSequence()
-        val data = SileroData(StressBin.File(ByteBuffer.wrap(StressBin.write(json, yoLines))))
+        val baselineJsonFile = File(checkNotNull(System.getenv("RUVOICE_BASELINE_SILERO_JSON"))).canonicalFile
+        check(baselineJsonFile.isFile && baselineJsonFile.length() > 0L) {
+            "Missing pre-override Silero phrase data: $baselineJsonFile"
+        }
+        val baselineJson = baselineJsonFile.readText(Charsets.UTF_8)
+        val yoAsset = File(checkNotNull(System.getenv("RUVOICE_OFFICIAL_EYO_ASSET"))).canonicalFile
+        check(yoAsset.isFile && pairedGitBlobSha(yoAsset) == "7d36a88a29cae298ad4507d4ec1f87e19d826d51") {
+            "The baseline must use the exact official RuVoice 1.1.3 eyo_safe.txt asset"
+        }
+        val baselineData = SileroData(StressBin.File(ByteBuffer.wrap(
+            StressBin.write(baselineJson, yoAsset.readLines(Charsets.UTF_8).asSequence())
+        )))
+        // The current JSON has exactly one book-reviewed phrase hint applied by the isolated helper.
+        val data = baselineData
+        // The Silero phrase table remains byte-for-byte original. Book-specific phrase stress is
+        // expressed through the native user replacement list and verified below.
+        check(baselineData.phrases["сети"].orEmpty().none {
+            it.first == "сети значений" && it.second == "с+ети"
+        }) { "A book-only phrase rule leaked into the baseline Silero phrase table" }
         val morph = Morph.open(File(projectDir, "app/src/main/assets/morph.bin"))
-        val yo = YoDict(data.yo)
+        val yo = YoDict(baselineData.yo)
         val hardE = HardE(File(projectDir, "app/src/main/assets/hard_e.txt").readLines(Charsets.UTF_8))
         Normalizer.morph = morph
         YoDict.shared = yo
@@ -664,31 +860,175 @@ class UploadedEpubPairedEvaluationTest {
             val (word, variant) = DictLines.parseStress(line) ?: continue
             systemStressDict[word.lowercase(Locale.ROOT)] = variant.lowercase(Locale.ROOT)
         }
-        check(systemStressDict["снято"] == "сн+ято") {
-            "System stress dictionary does not contain the normative сня́то entry"
+        check(systemStressDict["снято"] != "сн+ято") {
+            "Book-specific снято correction must not be injected into the original system dictionary"
         }
+
+        // The Android service applies the installed system replacement table in Pipeline.plan
+        // before accentuation. The paired audit must use that exact layer too, or it will report
+        // false positives for entries such as всего-навсего, по-своему, сложена из and шелка и.
+        val systemReplacementFile = File(projectDir, "app/src/main/assets/dicts/replace/Системный.txt")
+        check(systemReplacementFile.isFile && systemReplacementFile.length() > 0L) {
+            "Missing generated RuVoice system replacement dictionary: $systemReplacementFile"
+        }
+        val systemReplacements = Replacements.parse(systemReplacementFile.readLines(Charsets.UTF_8))
+        val requiredReplacementRules = listOf(
+            "всего-навсего = всего-н+авсего",
+            "по-своему = по-св+оему",
+            "сложена из = сл+ожена из",
+            "окружающими средами = окружающими ср+едами",
+            "шелка и = ш+елка и",
+        )
+        val replacementLines = systemReplacementFile.readLines(Charsets.UTF_8).map { it.trim() }.toSet()
+        check(requiredReplacementRules.all { it in replacementLines }) {
+            "System replacement dictionary is missing book-relevant production rules"
+        }
+        // Book-specific replacement overrides are applied only in the reviewed stream.
+        val bookReplacementFile = File(checkNotNull(System.getenv("RUVOICE_BOOK_REPLACEMENTS"))).canonicalFile
+        check(bookReplacementFile.isFile) {
+            "Missing book-only replacement overlay: $bookReplacementFile"
+        }
+        val bookReplacementLines = bookReplacementFile.readLines(Charsets.UTF_8)
+        val requiredBookReplacements = setOf(
+            "шелка и = шелк+а и",
+            "сети значений = с+ети значений",
+        )
+        if (isReferenceBook) {
+            check(bookReplacementLines.map { it.trim() }.toSet().containsAll(requiredBookReplacements)) {
+                "The reviewed reference EPUB must retain its two native phrase replacement rules"
+            }
+        }
+        val bookReplacements = Replacements.parse(systemReplacementFile.readLines(Charsets.UTF_8) + bookReplacementLines)
+        if ("шелка и = шелк+а и" in bookReplacementLines.map { it.trim() }) {
+            check(bookReplacements.apply("шелка и") == "шелк+а и") {
+                "The supported RuVoice replacement parser did not apply the book-only шелка rule"
+            }
+        }
+        if ("сети значений = с+ети значений" in bookReplacementLines.map { it.trim() }) {
+            check(bookReplacements.apply("сети значений") == "с+ети значений") {
+                "The supported RuVoice replacement parser did not apply the book-only сети значений rule"
+            }
+        }
+        val bookPhraseTargets = parseBookPhraseTargets(bookReplacementLines)
+        val phraseTargetHits = LinkedHashMap<String, Int>()
+
+        // Book-specific dictionaries are optional. The known reference book has a curated
+        // manual set; any other EPUB may supply its own corrections without inheriting those.
+        val bookOverrideFile = File(checkNotNull(System.getenv("RUVOICE_BOOK_OVERRIDES"))).canonicalFile
+        check(bookOverrideFile.isFile) {
+            "Missing book-specific stress overlay file: $bookOverrideFile"
+        }
+        val bookOverrides = LinkedHashMap<String, String>()
+        for (line in bookOverrideFile.readLines(Charsets.UTF_8)) {
+            val (word, variant) = DictLines.parseStress(line) ?: continue
+            val key = word.lowercase(Locale.ROOT)
+            val value = variant.lowercase(Locale.ROOT)
+            val builtIn = systemStressDict[key]
+            check(builtIn == null || builtIn == value) {
+                "Book override conflicts with built-in system dictionary: $key ($builtIn vs $value)"
+            }
+            val previous = bookOverrides.putIfAbsent(key, value)
+            check(previous == null || previous == value) {
+                "Conflicting duplicate book override: $key ($previous vs $value)"
+            }
+        }
+        val expectedBookOverrides = mapOf(
+            "снято" to "сн+ято",
+            "несчастлив" to "несчастл+ив",
+            "отнята" to "отнят+а",
+            "шумы" to "ш+умы",
+            "двадцать" to "дв+адцать",
+            "десять" to "д+есять",
+            "издревле" to "издр+евле",
+            "утолщилась" to "утолщ+илась",
+            "арбайт" to "+арбайт",
+            "средами" to "ср+едами",
+            "сапинс" to "с+апинс",
+            "взаимовымогательства" to "взаимовымог+ательства",
+            "взаимовымогающим" to "взаимовымог+ающим",
+            "внутриличностных" to "внутрил+ичностных",
+            "неприспособление" to "неприспособл+ение",
+            "нетелесного" to "нетел+есного",
+            "религиообразовании" to "религиообразов+ании",
+            "самосуществования" to "самосуществов+ания",
+            "биополя" to "биопол+я",
+            "призывного" to "приз+ывного",
+            "рефлекторное" to "рефл+екторное",
+        )
+        if (isReferenceBook) {
+            check(bookOverrides == expectedBookOverrides) {
+                "Reference book override set differs from reviewed manifest: $bookOverrides"
+            }
+        }
+        val autoBookOverrides = LinkedHashMap<String, String>()
+        val autoOverridePath = System.getenv("RUVOICE_AUTO_BOOK_OVERRIDES")
+        if (!autoOverridePath.isNullOrBlank()) {
+            val autoOverrideFile = File(autoOverridePath).canonicalFile
+            check(autoOverrideFile.isFile) {
+                "Configured automatic book override file does not exist: $autoOverrideFile"
+            }
+            for (line in autoOverrideFile.readLines(Charsets.UTF_8)) {
+                val (word, variant) = DictLines.parseStress(line) ?: continue
+                val key = word.lowercase(Locale.ROOT)
+                val value = variant.lowercase(Locale.ROOT)
+                val builtIn = systemStressDict[key]
+                check(builtIn == null || builtIn == value) {
+                    "Automatic book override conflicts with built-in system dictionary: $key ($builtIn vs $value)"
+                }
+                val manual = bookOverrides[key]
+                check(manual == null || manual == value) {
+                    "Automatic book override conflicts with manually reviewed book override: $key ($manual vs $value)"
+                }
+                val previous = autoBookOverrides.putIfAbsent(key, value)
+                check(previous == null || previous == value) {
+                    "Conflicting duplicate automatic book override: $key ($previous vs $value)"
+                }
+            }
+        }
+        val allBookOverrides = LinkedHashMap(bookOverrides).apply { putAll(autoBookOverrides) }
+        val reviewedStressDict = LinkedHashMap(systemStressDict).apply { putAll(allBookOverrides) }
 
         val rules = Rules()
         val torchModels = PairedTorchLiteStressModels(
             File(sileroDir, "accentor.ptl"), File(sileroDir, "homo.ptl"), bridgeScript, data.bertPad
         )
-        val baselineStress = Stress(data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
+        // Three independent full-book passes: the same production system replacements + untouched
+        // baseline; reviewed book phrase and twenty-one book-only dictionary corrections; and
+        // RUAccent on top of the same baseline. This isolates RuVoice-specific stress fixes.
+        val baselineStress = Stress(baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE)
+        val reviewedStress = Stress(data, torchModels, userDict = reviewedStressDict, morph = morph, yo = yo, hardE = hardE)
         val corrector = PairedRemoteRuAccentCorrector(modelRoot, bridgeClasspath, nativeDir)
         val combinedStress = Stress(
-            data, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE,
+            baselineData, torchModels, userDict = systemStressDict, morph = morph, yo = yo, hardE = hardE,
             independentCorrector = corrector
         )
 
         try {
-            fun readable(text: String, stress: Stress): String =
-                StressDiagnosticFormatter.readable(Pipeline.accent(text, data, stress, data.allowed, rules))
+            fun readable(
+                text: String,
+                stress: Stress,
+                inputData: SileroData = baselineData,
+                replacements: Replacements = systemReplacements,
+            ): String {
+                val replaced = replacements.apply(text)
+                return StressDiagnosticFormatter.readable(Pipeline.accent(replaced, inputData, stress, inputData.allowed, rules))
+            }
             val sanity = JSONObject()
-            val genitiveHouse = readable("строительство дома", baselineStress)
-            val genitiveHouseCombined = readable("строительство дома", combinedStress)
-            val genitiveEye = readable("отражается от глаза", baselineStress)
-            val genitiveEyeCombined = readable("отражается от глаза", combinedStress)
-            val handsBaseline = readable("дать разуму в руки инструмент", baselineStress)
-            val handsCombined = readable("дать разуму в руки инструмент", combinedStress)
+            val genitiveHouse = readable("строительство дома", baselineStress, baselineData)
+            val genitiveHouseCombined = readable("строительство дома", combinedStress, baselineData)
+            val genitiveEye = readable("отражается от глаза", baselineStress, baselineData)
+            val genitiveEyeCombined = readable("отражается от глаза", combinedStress, baselineData)
+            val handsBaseline = readable("дать разуму в руки инструмент", baselineStress, baselineData)
+            val handsCombined = readable("дать разуму в руки инструмент", combinedStress, baselineData)
+            val networkBaseline = readable("Сети значений в потоке энергии сознания", baselineStress, baselineData)
+            val networkCombined = readable("Сети значений в потоке энергии сознания", combinedStress, baselineData)
+            val utramBaseline = readable("Фигура появляется по утрам", baselineStress, baselineData)
+            val utramReviewed = readable("Фигура появляется по утрам", reviewedStress, data)
+            val twentyReviewed = readable("двадцать", reviewedStress, data)
+            val izdrevleReviewed = readable(
+                "Вот, к примеру, человек издревле искал способы продления жизни.",
+                reviewedStress, data
+            )
             sanity.put("строительство дома_baseline", genitiveHouse)
             sanity.put("строительство дома_combined", genitiveHouseCombined)
             sanity.put("строительство дома_expected", "до́ма")
@@ -704,6 +1044,88 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("дать разуму в руки инструмент_expected", "ру́ки")
             sanity.put("дать разуму в руки инструмент_baseline_matches_expected", handsBaseline.contains("ру́ки"))
             sanity.put("дать разуму в руки инструмент_combined_matches_expected", handsCombined.contains("ру́ки"))
+            if (isReferenceBook) {
+                val networkReviewed = readable(
+                    "Сети значений в потоке энергии сознания", reviewedStress, data, bookReplacements
+                )
+                check(networkBaseline.contains("сети́", ignoreCase = true)) {
+                    "Untouched production baseline did not reproduce the reference 'сети' stress: $networkBaseline"
+                }
+                check(networkReviewed.contains("се́ти", ignoreCase = true)) {
+                    "Native phrase replacement failed for 'сети значений': $networkReviewed"
+                }
+                val utramReviewedWithBookRules = readable(
+                    "Фигура появляется по утрам", reviewedStress, data, bookReplacements
+                )
+                check(utramBaseline.contains("утра́м", ignoreCase = true) &&
+                    utramReviewedWithBookRules.contains("утра́м", ignoreCase = true)) {
+                    "The normative adverbial variant 'по утра́м' must remain unchanged"
+                }
+                check(twentyReviewed.contains("два́дцать", ignoreCase = true)) {
+                    "Reference override must stress 'двадцать' on а: $twentyReviewed"
+                }
+                check(izdrevleReviewed.contains("издре́вле", ignoreCase = true)) {
+                    "Reference override must stress 'издревле' on е: $izdrevleReviewed"
+                }
+                val utolshilasReviewed = readable(
+                    "Ветвь системы значений утолщилась? Утолщилась.",
+                    reviewedStress, data, bookReplacements
+                )
+                check(Regex("(?i)утолщи́лась").findAll(utolshilasReviewed).count() == 2) {
+                    "Reference override must accent both occurrences of утолщилась: $utolshilasReviewed"
+                }
+            }
+
+            // These corpora contain exact occurrences from the reviewed reference EPUB,
+            // not general-purpose test sentences. Do not apply their book-specific expectations
+            // to unrelated uploads or to the synthetic smoke-test EPUB.
+            if (isReferenceBook) {
+            // Run the five manually reviewed stress cases before the separate ё suite.
+            // This makes a failure in spelling alignment unable to hide the stress-only result.
+            val earlyStressFile = File(projectDir, "tools/data/ruvoice_stress_book_regressions.json")
+            check(earlyStressFile.isFile) { "Missing stress regression corpus: $earlyStressFile" }
+            val earlyStressCases = JSONObject(earlyStressFile.readText(Charsets.UTF_8)).getJSONArray("cases")
+            var earlyStressPassed = 0
+            for (caseIndex in 0 until earlyStressCases.length()) {
+                val item = earlyStressCases.getJSONObject(caseIndex)
+                val caseId = item.getString("id")
+                val sourceText = item.getString("text")
+                val targetWord = item.getString("word")
+                val accepted = item.getJSONArray("accepted_vowel_indices")
+                val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
+                val checkedWithBookOverlay = caseId == "silks-plural-01" && bookReplacementLines.any { it.trim() == "шелка и = шелк+а и" }
+                val checkedWithManualStress = plain(targetWord) in bookOverrides
+                val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
+                val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
+                val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
+                check(targetIndex >= 0) { "Stress precheck $caseId: target '$targetWord' is missing" }
+                val baselineText = readable(sourceText, baselineStress)
+                val mergedText = readable(sourceText, combinedStress)
+                val checkedText = when {
+                    checkedWithBookOverlay -> readable(sourceText, reviewedStress, data, bookReplacements)
+                    checkedWithManualStress -> readable(sourceText, reviewedStress, data)
+                    else -> mergedText
+                }
+                val baselineTokens = wordRegex.findAll(baselineText).toList()
+                val mergedTokens = wordRegex.findAll(mergedText).toList()
+                val checkedTokens = wordRegex.findAll(checkedText).toList()
+                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size &&
+                    checkedTokens.size == sourceTokens.size) {
+                    "Stress precheck $caseId: token alignment changed (source=${sourceTokens.size}, " +
+                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size}, checked=${checkedTokens.size})"
+                }
+                val baselineWord = baselineTokens[targetIndex].value
+                val mergedWord = mergedTokens[targetIndex].value
+                val checkedWord = checkedTokens[targetIndex].value
+                val actualPosition = stressPosition(checkedWord)
+                println("STRESS_PRECHECK_CASE=$caseId baseline='$baselineWord' merged='$mergedWord' checked='$checkedWord' actual=$actualPosition accepted=$acceptedPositions")
+                check(actualPosition != null && actualPosition in acceptedPositions) {
+                    "Stress precheck $caseId: expected one of $acceptedPositions, " +
+                        "baseline='$baselineWord', merged='$mergedWord', checked='$checkedWord', actual=$actualPosition"
+                }
+                earlyStressPassed++
+            }
+            println("BOOK_STRESS_PRECHECK=PASS cases=$earlyStressPassed/${earlyStressCases.length()}")
 
             // End-to-end spelling regressions: the real Silero + RUAccent + production merge
             // must preserve safe book spellings and reject the 28 known contextual ё mistakes.
@@ -729,12 +1151,24 @@ class UploadedEpubPairedEvaluationTest {
                 val mergedText = readable(sourceText, combinedStress)
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
                 val mergedTokens = wordRegex.findAll(mergedText).toList()
-                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
-                    "Ё regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
-                        "baseline=${baselineTokens.size}, merged=${mergedTokens.size})"
-                }
-                val baselineWord = baselineTokens[targetIndex].value
-                val mergedWord = mergedTokens[targetIndex].value
+                // Pipeline normalization can expand abbreviations (e.g. ДНК → «дэ эн ка»),
+                // so whole-sentence token counts are not a valid alignment invariant.
+                // Match the same occurrence ordinal of the target word in each stream instead.
+                val targetKey = plain(targetWord).replace('ё', 'е')
+                val targetOccurrenceOrdinal = sourceTokens.take(targetIndex + 1).count {
+                    plain(it.value).replace('ё', 'е') == targetKey
+                } - 1
+                fun findTargetOccurrence(tokens: List<MatchResult>): String? =
+                    tokens.asSequence()
+                        .map { it.value }
+                        .filter { plain(it).replace('ё', 'е') == targetKey }
+                        .drop(targetOccurrenceOrdinal)
+                        .firstOrNull()
+                val baselineWord = findTargetOccurrence(baselineTokens)
+                    ?: error("Ё regression $caseId: target occurrence missing from baseline")
+                val mergedWord = findTargetOccurrence(mergedTokens)
+                    ?: error("Ё regression $caseId: target occurrence missing from merged output")
+                println("YO_REGRESSION_CASE=$caseId source_tokens=${sourceTokens.size} baseline_tokens=${baselineTokens.size} merged_tokens=${mergedTokens.size} target_occurrence=$targetOccurrenceOrdinal baseline_target='$baselineWord' merged_target='$mergedWord'")
                 val actualLabel = if (mergedWord.any { it == 'ё' || it == 'Ё' }) "YO" else "NO_YO"
                 check(actualLabel == expectedLabel) {
                     "Ё regression $caseId: expected $expectedLabel, baseline='$baselineWord', " +
@@ -770,30 +1204,45 @@ class UploadedEpubPairedEvaluationTest {
                 val targetWord = item.getString("word")
                 val accepted = item.getJSONArray("accepted_vowel_indices")
                 val acceptedPositions = (0 until accepted.length()).map { accepted.getInt(it) }.toSet()
-                val sourceTokens = wordRegex.findAll(sourceText).toList()
+                val checkedWithBookOverlay = caseId == "silks-plural-01" &&
+                    bookReplacementLines.any { it.trim() == "шелка и = шелк+а и" }
+                val checkedWithManualStress = plain(targetWord).lowercase(Locale.ROOT) in bookOverrides
+                val sourceReplacement = if (checkedWithBookOverlay) bookReplacements else systemReplacements
+                val sourceTokens = wordRegex.findAll(sourceReplacement.apply(sourceText).replace("+", "")).toList()
                 val targetIndex = sourceTokens.indexOfFirst { plain(it.value) == plain(targetWord) }
                 check(targetIndex >= 0) { "Stress regression $caseId: target '$targetWord' is missing" }
 
                 val baselineText = readable(sourceText, baselineStress)
-                val mergedText = readable(sourceText, combinedStress)
+                val checkedSource = when {
+                    checkedWithBookOverlay -> "book_phrase_overlay"
+                    checkedWithManualStress -> "manual_book_override"
+                    else -> "ruaccent_merged"
+                }
+                val checkedText = when {
+                    checkedWithBookOverlay -> readable(sourceText, reviewedStress, data, bookReplacements)
+                    checkedWithManualStress -> readable(sourceText, reviewedStress, data)
+                    else -> readable(sourceText, combinedStress)
+                }
                 val baselineTokens = wordRegex.findAll(baselineText).toList()
-                val mergedTokens = wordRegex.findAll(mergedText).toList()
-                check(baselineTokens.size == sourceTokens.size && mergedTokens.size == sourceTokens.size) {
-                    "Stress regression $caseId: token alignment changed"
+                val checkedTokens = wordRegex.findAll(checkedText).toList()
+                check(baselineTokens.size == sourceTokens.size && checkedTokens.size == sourceTokens.size) {
+                    "Stress regression $caseId: token alignment changed (source=${sourceTokens.size}, " +
+                        "baseline=${baselineTokens.size}, checked=${checkedTokens.size})"
                 }
                 val baselineWord = baselineTokens[targetIndex].value
-                val mergedWord = mergedTokens[targetIndex].value
-                val actualPosition = stressPosition(mergedWord)
+                val checkedWord = checkedTokens[targetIndex].value
+                val actualPosition = stressPosition(checkedWord)
                 check(actualPosition != null && actualPosition in acceptedPositions) {
                     "Stress regression $caseId: expected one of $acceptedPositions, " +
-                        "baseline='$baselineWord', merged='$mergedWord', actual=$actualPosition"
+                        "baseline='$baselineWord', checked='$checkedWord' source=$checkedSource actual=$actualPosition"
                 }
                 stressRegressionPassed++
                 stressRegressionResults.put(JSONObject()
                     .put("id", caseId)
                     .put("accepted_vowel_indices", JSONArray(acceptedPositions.toList()))
                     .put("baseline", baselineWord)
-                    .put("merged", mergedWord)
+                    .put("checked", checkedWord)
+                    .put("checked_source", checkedSource)
                     .put("actual_vowel_index", actualPosition)
                     .put("result", "PASS"))
             }
@@ -805,9 +1254,24 @@ class UploadedEpubPairedEvaluationTest {
             sanity.put("book_stress_regression_results", stressRegressionResults)
             println("BOOK_STRESS_END_TO_END=PASS cases=$stressRegressionPassed/${stressCases.length()}")
 
+            } else {
+                println("BOOK_REFERENCE_REGRESSION_CORPORA=SKIPPED_NON_REFERENCE_BOOK")
+            }
+
             val paragraphs = epubParagraphs(epub)
-            val segments = makeSegments(paragraphs)
-            require(segments.isNotEmpty()) { "No text segments extracted from EPUB" }
+            val segments = makeProductionSegments(paragraphs, baselineData, systemReplacements, rules)
+            val reviewedSegments = makeProductionSegments(paragraphs, data, bookReplacements, rules)
+            require(segments.isNotEmpty()) { "No text segments extracted from EPUB by the original RuVoice planner" }
+            check(segments.size == reviewedSegments.size) {
+                "Book-only replacement overlay changed production segmentation: baseline=${segments.size}, reviewed=${reviewedSegments.size}"
+            }
+            for (index in segments.indices) {
+                val before = segments[index]
+                val after = reviewedSegments[index]
+                check(before.chapter == after.chapter && before.paragraph == after.paragraph && before.part == after.part) {
+                    "Production segment alignment changed at index $index"
+                }
+            }
             var wordCount = 0
             var baselineMarked = 0
             var combinedMarked = 0
@@ -820,23 +1284,210 @@ class UploadedEpubPairedEvaluationTest {
             var yoChanges = 0
             var lexicalMismatches = 0
             var alignmentMismatches = 0
+            var sourceOutputCountMismatchSegments = 0
+            var sourceOutputCountDelta = 0
+            val alignmentMismatchSamples = JSONArray()
+            val sourceOutputCountMismatchSamples = JSONArray()
             val changeRows = JSONArray()
+            val reviewCandidates = JSONArray()
+            val baselineTokens = JSONArray()
+            val reviewedTokens = JSONArray()
+            val combinedTokens = JSONArray()
+            val segmentContexts = JSONArray()
+            val reviewedOverrideSeen = LinkedHashMap<String, Int>()
+            var reviewedPhraseOverrideHits = 0
+            val reviewedPhrasePattern = Regex("(?<![а-яё])сети\\s+значений(?![а-яё])")
+            // For ordinary books there is no review overlay. Reuse the baseline output
+            // instead of running the identical production neural pipeline a second time.
+            val hasReviewedBookOverlay = allBookOverrides.isNotEmpty() ||
+                bookReplacementLines.any { it.isNotBlank() && !it.trimStart().startsWith("#") }
 
             for ((segmentIndex, segment) in segments.withIndex()) {
+                // Pipeline.plan has already applied system replacements and split this source
+                // paragraph exactly as the production TTS path does. The reviewed stream was
+                // independently planned with the book overlay before sentence splitting.
+                val reviewedSegment = reviewedSegments[segmentIndex]
+                val baselineSource = segment.text
+                val reviewedSource = reviewedSegment.text
+                val combinedSource = segment.text
                 val baseline = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, data, baselineStress, data.allowed, rules)
+                    Pipeline.accent(baselineSource, baselineData, baselineStress, baselineData.allowed, rules)
                 )
+                val reviewed = if (hasReviewedBookOverlay) {
+                    StressDiagnosticFormatter.readable(
+                        Pipeline.accent(reviewedSource, data, reviewedStress, data.allowed, rules)
+                    )
+                } else {
+                    baseline
+                }
                 val combined = StressDiagnosticFormatter.readable(
-                    Pipeline.accent(segment.text, data, combinedStress, data.allowed, rules)
+                    Pipeline.accent(combinedSource, baselineData, combinedStress, baselineData.allowed, rules)
                 )
                 val oldWords = wordRegex.findAll(baseline).toList()
+                val reviewedWords = wordRegex.findAll(reviewed).toList()
                 val newWords = wordRegex.findAll(combined).toList()
-                if (oldWords.size != newWords.size) {
-                    alignmentMismatches++
-                    continue
+                val sourceWords = wordRegex.findAll(baselineSource.replace("+", "")).toList()
+                val tokenAlignment = ProductionTokenAlignment(
+                    sourceTokens = sourceWords.size,
+                    baselineTokens = oldWords.size,
+                    reviewedTokens = reviewedWords.size,
+                    mergedTokens = newWords.size,
+                )
+                // RUAccent is auxiliary evidence. Attach it only if every token is in the
+                // same position and the complete lexical sequence matches the baseline.
+                val ruaccentEvidenceAligned = tokenAlignment.ruaccentEvidenceAligned &&
+                    oldWords.indices.all { index ->
+                        plain(oldWords[index].value).replace('ё', 'е') ==
+                            plain(newWords[index].value).replace('ё', 'е')
+                    }
+
+                // The book overlay is deliberately narrow: only its reviewed wordforms and
+                // two explicit contextual phrases may change. This catches accidental loading
+                // of the experimental phrases_extra.txt collection.
+                check(oldWords.size == reviewedWords.size) {
+                    "Reviewed pipeline changed token alignment in segment " + segmentIndex
                 }
-                var segmentChanged = false
+                for (reviewIndex in oldWords.indices) {
+                    val beforeWord = oldWords[reviewIndex].value
+                    val reviewedWord = reviewedWords[reviewIndex].value
+                    val beforeKey = plain(beforeWord).lowercase(Locale.ROOT)
+                    val reviewedKey = plain(reviewedWord).lowercase(Locale.ROOT)
+                    check(beforeKey == reviewedKey) {
+                        "Book review changed token spelling in segment " + segmentIndex + ": '" + beforeWord + "' -> '" + reviewedWord + "'"
+                    }
+                    val beforePosition = stressPosition(beforeWord)
+                    val reviewedPosition = stressPosition(reviewedWord)
+                    val expectedVariant = allBookOverrides[beforeKey]
+                    // A paragraph may contain other uses of the same word outside the reviewed
+                    // phrase. The phrase's presence is necessary, but not sufficient: below we
+                    // accept this occurrence only when the reviewed stream has the exact approved
+                    // stress position. Any other changed occurrence must still equal baseline.
+                    val phraseTarget = bookPhraseTargets.firstOrNull { target ->
+                        target.sourceWord == beforeKey &&
+                            phraseOccurrenceCount(target.phrase, segment.sourceContext) > 0
+                    }
+                    if (expectedVariant != null) {
+                        val expectedPosition = checkNotNull(reviewedVariantPosition(expectedVariant)) {
+                            "Invalid reviewed dictionary marker for " + beforeKey + ": " + expectedVariant
+                        }
+                        check(reviewedPosition == expectedPosition) {
+                            "Book overlay failed for " + beforeKey + " in segment " + segmentIndex +
+                                ": expected=" + expectedPosition + " actual=" + reviewedPosition +
+                                " context='" + segment.text + "'"
+                        }
+                        reviewedOverrideSeen[beforeKey] = (reviewedOverrideSeen[beforeKey] ?: 0) + 1
+                    } else if (phraseTarget != null && run {
+                        val expectedPhrasePosition = checkNotNull(reviewedVariantPosition(phraseTarget.targetWord)) {
+                            "Invalid phrase stress marker: ${phraseTarget.targetWord}"
+                        }
+                        reviewedPosition == expectedPhrasePosition
+                    }) {
+                        reviewedPhraseOverrideHits++
+                        phraseTargetHits[phraseTarget.phrase] = (phraseTargetHits[phraseTarget.phrase] ?: 0) + 1
+                    } else {
+                        check(beforePosition == reviewedPosition) {
+                            "Unapproved stress change in reviewed output, segment=" + segmentIndex +
+                                " word=" + beforeWord + " reviewed=" + reviewedWord +
+                                " context='" + segment.text + "'"
+                        }
+                    }
+                }
+
+                segmentContexts.put(JSONObject()
+                    .put("segment_index", segmentIndex)
+                    .put("chapter", segment.chapter)
+                    .put("paragraph", segment.paragraph)
+                    .put("part", segment.part)
+                    .put("context", segment.text)
+                    .put("source_paragraph", segment.sourceContext))
+                for (wordIndex in oldWords.indices) {
+                    val outputWord = oldWords[wordIndex].value
+                    val sourceWord = if (sourceWords.size == oldWords.size) {
+                        sourceWords[wordIndex].value
+                    } else {
+                        JSONObject.NULL
+                    }
+                    baselineTokens.put(JSONObject()
+                        .put("segment_index", segmentIndex)
+                        .put("word_index", wordIndex)
+                        .put("chapter", segment.chapter)
+                        .put("paragraph", segment.paragraph)
+                        .put("source_word", sourceWord)
+                        .put("ruvoice_output", outputWord)
+                        .put("ruvoice_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL)
+                        .put("vowel_count", outputWord.count { it.lowercaseChar() in VOWELS }))
+                }
+                for (wordIndex in reviewedWords.indices) {
+                    val outputWord = reviewedWords[wordIndex].value
+                    val sourceWord = if (sourceWords.size == reviewedWords.size) {
+                        sourceWords[wordIndex].value
+                    } else {
+                        JSONObject.NULL
+                    }
+                    reviewedTokens.put(JSONObject()
+                        .put("segment_index", segmentIndex)
+                        .put("word_index", wordIndex)
+                        .put("chapter", segment.chapter)
+                        .put("paragraph", segment.paragraph)
+                        .put("source_word", sourceWord)
+                        .put("reviewed_output", outputWord)
+                        .put("reviewed_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
+                }
+                // Keep one evidence row for every original RuVoice token. A partial or shifted
+                // RUAccent stream is not mapped heuristically: its slots are explicitly empty.
+                for (wordIndex in oldWords.indices) {
+                    val outputWord = if (ruaccentEvidenceAligned) newWords[wordIndex].value else ""
+                    val sourceWord = if (sourceWords.size == oldWords.size) {
+                        sourceWords[wordIndex].value
+                    } else {
+                        JSONObject.NULL
+                    }
+                    combinedTokens.put(JSONObject()
+                        .put("segment_index", segmentIndex)
+                        .put("word_index", wordIndex)
+                        .put("chapter", segment.chapter)
+                        .put("paragraph", segment.paragraph)
+                        .put("source_word", sourceWord)
+                        .put("ruaccent_merged_output", outputWord)
+                        .put("ruaccent_evidence_aligned", ruaccentEvidenceAligned)
+                        .put("ruaccent_stress_vowel_index", stressPosition(outputWord) ?: JSONObject.NULL))
+                }
+                if (!tokenAlignment.sourceMappingAvailable) {
+                    sourceOutputCountMismatchSegments++
+                    sourceOutputCountDelta += kotlin.math.abs(sourceWords.size - oldWords.size)
+                    if (sourceOutputCountMismatchSamples.length() < 20) {
+                        sourceOutputCountMismatchSamples.put(JSONObject()
+                            .put("segment_index", segmentIndex)
+                            .put("source_tokens", sourceWords.size)
+                            .put("baseline_tokens", oldWords.size)
+                            .put("source_chars", baselineSource.length)
+                            .put("baseline_chars", baseline.length))
+                    }
+                }
+                if (!tokenAlignment.reviewedOutputAligned) {
+                    error("Reviewed book overlay changed production token count in segment $segmentIndex")
+                }
+                if (!ruaccentEvidenceAligned) {
+                    alignmentMismatches++
+                    if (alignmentMismatchSamples.length() < 20) {
+                        alignmentMismatchSamples.put(JSONObject()
+                            .put("segment_index", segmentIndex)
+                            .put("source_tokens", sourceWords.size)
+                            .put("baseline_tokens", oldWords.size)
+                            .put("reviewed_tokens", reviewedWords.size)
+                            .put("merged_tokens", newWords.size)
+                            .put("source_chars", baselineSource.length)
+                            .put("baseline_chars", baseline.length)
+                            .put("reviewed_chars", reviewed.length)
+                            .put("merged_chars", combined.length))
+                    }
+                }
+                // The occurrence ledger is anchored to the original production RuVoice pass.
                 wordCount += oldWords.size
+                baselineMarked += oldWords.count { stressPosition(it.value) != null }
+                if (!ruaccentEvidenceAligned) continue
+
+                var segmentChanged = false
                 for (wordIndex in oldWords.indices) {
                     val before = oldWords[wordIndex].value
                     val after = newWords[wordIndex].value
@@ -846,7 +1497,6 @@ class UploadedEpubPairedEvaluationTest {
                     val afterCanonical = afterPlain.replace('ё', 'е')
                     val beforeStress = stressPosition(before)
                     val afterStress = stressPosition(after)
-                    if (beforeStress != null) baselineMarked++
                     if (afterStress != null) combinedMarked++
                     if (beforeCanonical != afterCanonical) {
                         lexicalMismatches++
@@ -855,12 +1505,13 @@ class UploadedEpubPairedEvaluationTest {
                         if (changeRows.length() < 15000) {
                             changeRows.put(JSONObject()
                                 .put("type", "TOKEN_ALIGNMENT_OR_LEXICAL_CHANGE")
+                                .put("segment_index", segmentIndex)
                                 .put("chapter", segment.chapter)
                                 .put("paragraph", segment.paragraph)
                                 .put("part", segment.part)
                                 .put("before", before)
                                 .put("after", after)
-                                .put("context", segment.text.take(500)))
+                                )
                         }
                         continue
                     }
@@ -871,10 +1522,42 @@ class UploadedEpubPairedEvaluationTest {
                     segmentChanged = true
                     if (stressChanged) {
                         stressChanges++
+                        val beforeVowels = before.count { it.lowercaseChar() in VOWELS }
+                        val afterVowels = after.count { it.lowercaseChar() in VOWELS }
                         when {
                             beforeStress == null && afterStress != null -> stressAdded++
                             beforeStress != null && afterStress == null -> stressRemoved++
                             else -> stressMoved++
+                        }
+                        // Keep all potentially meaningful multisyllabic changes for a
+                        // context-first audit. Monosyllabic stress-mark removal is not a
+                        // dictionary correction candidate and is intentionally excluded.
+                        val candidateType = when {
+                            beforeStress != null && afterStress != null && beforeStress != afterStress ->
+                                "STRESS_MOVED"
+                            beforeStress != null && afterStress == null && beforeVowels >= 2 ->
+                                "MULTISYLLABIC_STRESS_REMOVED"
+                            beforeStress == null && afterStress != null && afterVowels >= 2 ->
+                                "MULTISYLLABIC_STRESS_ADDED"
+                            else -> null
+                        }
+                        if (candidateType != null) {
+                            reviewCandidates.put(JSONObject()
+                                .put("segment_index", segmentIndex)
+                                .put("type", candidateType)
+                                .put("chapter", segment.chapter)
+                                .put("paragraph", segment.paragraph)
+                                .put("part", segment.part)
+                                .put("word_index", wordIndex)
+                                .put("word", beforePlain)
+                                .put("before", before)
+                                .put("after", after)
+                                .put("stress_before_vowel_index", beforeStress ?: JSONObject.NULL)
+                                .put("stress_after_vowel_index", afterStress ?: JSONObject.NULL)
+                                .put("before_vowels", beforeVowels)
+                                .put("after_vowels", afterVowels)
+                                .put("context", segment.text)
+                                )
                         }
                     }
                     if (yoChanged) yoChanges++
@@ -885,6 +1568,7 @@ class UploadedEpubPairedEvaluationTest {
                                 stressChanged -> "STRESS"
                                 else -> "YO"
                             })
+                            .put("segment_index", segmentIndex)
                             .put("chapter", segment.chapter)
                             .put("paragraph", segment.paragraph)
                             .put("part", segment.part)
@@ -893,7 +1577,7 @@ class UploadedEpubPairedEvaluationTest {
                             .put("after", after)
                             .put("stress_before_vowel_index", beforeStress ?: JSONObject.NULL)
                             .put("stress_after_vowel_index", afterStress ?: JSONObject.NULL)
-                            .put("context", segment.text.take(500)))
+                            )
                     }
                 }
                 if (segmentChanged) changedSegments++
@@ -902,13 +1586,47 @@ class UploadedEpubPairedEvaluationTest {
                 }
             }
 
+            // Unaligned RUAccent segments remain visible as missing independent evidence.
+            // Original RuVoice and the reviewed overlay still cover every production token.
+            println("PAIRED_RUACCENT_EVIDENCE_ALIGNMENT=" +
+                (if (alignmentMismatches == 0) "COMPLETE" else "PARTIAL") +
+                " unaligned_segments=" + alignmentMismatches + "/" + segments.size +
+                " samples=" + alignmentMismatchSamples)
+            check(lexicalMismatches == 0) {
+                "The baseline/reviewed/merged streams changed lexical tokens in $lexicalMismatches occurrences"
+            }
+            check(wordCount == baselineTokens.length() &&
+                wordCount == reviewedTokens.length() &&
+                wordCount == combinedTokens.length()) {
+                "Incomplete per-occurrence ledger: compared=$wordCount baseline=${baselineTokens.length()} " +
+                    "reviewed=${reviewedTokens.length()} merged=${combinedTokens.length()}"
+            }
+            check(segmentContexts.length() == segments.size) {
+                "Context ledger does not cover every production segment"
+            }
+
+            check(reviewedOverrideSeen.keys.containsAll(allBookOverrides.keys)) {
+                "Not every reviewed book override was exercised: expected=" + allBookOverrides.keys + " seen=" + reviewedOverrideSeen
+            }
+            if (isReferenceBook) {
+                check(reviewedPhraseOverrideHits > 0) {
+                    "The reviewed phrase rules for the reference EPUB were not exercised"
+                }
+            }
+            println("BOOK_REVIEWED_OVERLAY_GUARD=PASS wordforms=" + reviewedOverrideSeen +
+                " manual=" + bookOverrides.size + " automatic=" + autoBookOverrides.size +
+                " phrase_occurrences=" + reviewedPhraseOverrideHits)
+
+
             val summary = JSONObject()
                 .put("book_file", epub.name)
+                .put("book_sha256", bookSha256)
+                .put("is_reference_book", isReferenceBook)
                 .put("model_revision", RuAccentInt8ModelManifest.revision)
                 .put("ruaccent_model_files", RuAccentInt8ModelManifest.files.size)
                 .put("ruaccent_model_bytes", downloaded)
                 .put("silero_models", "Official RuVoice 1.1.3 accentor.ptl and homo.ptl; pack ru_voices uses the shared Russian stress models")
-                .put("pipeline", "Production Pipeline.accent + Stress; baseline without independentCorrector; merged result with production RUAccent ONNX and current protected gram/BERT merge")
+                .put("pipeline", "Production Replacements.apply -> Pipeline.accent + Stress; baseline without independentCorrector; merged result with production RUAccent ONNX and current protected gram/BERT merge")
                 .put("paragraphs", paragraphs.size)
                 .put("segments", segments.size)
                 .put("words_compared", wordCount)
@@ -923,6 +1641,12 @@ class UploadedEpubPairedEvaluationTest {
                 .put("yo_word_changes", yoChanges)
                 .put("lexical_or_alignment_mismatches", lexicalMismatches)
                 .put("segment_alignment_mismatches", alignmentMismatches)
+                .put("ruaccent_evidence_unaligned_segments", alignmentMismatches)
+                .put("ruaccent_evidence_alignment_samples", alignmentMismatchSamples)
+                .put("source_output_token_count_mismatch_segments", sourceOutputCountMismatchSegments)
+                .put("source_output_token_count_delta", sourceOutputCountDelta)
+                .put("source_output_token_count_mismatch_samples", sourceOutputCountMismatchSamples)
+                .put("alignment_mismatch_samples", alignmentMismatchSamples)
                 .put("ruaccent_sentences_called", corrector.calls)
                 .put("ruaccent_decisions_stressed", corrector.stressed)
                 .put("ruaccent_decisions_unstressed", corrector.unstressed)
@@ -930,6 +1654,38 @@ class UploadedEpubPairedEvaluationTest {
                 .put("sanity_examples", sanity)
                 .put("accuracy_claim", "NOT_MEASURED: this is a paired output comparison; the EPUB has no gold stress annotations, so changes are not automatically labelled corrections.")
                 .put("changes", changeRows)
+                .put("review_candidates", reviewCandidates)
+                .put("book_reviewed_override_entries", JSONArray().apply {
+                    bookOverrides.forEach { (word, variant) ->
+                        put(JSONObject().put("word", word).put("variant", variant))
+                    }
+                })
+                .put("book_auto_override_entries", JSONArray().apply {
+                    autoBookOverrides.forEach { (word, variant) ->
+                        put(JSONObject().put("word", word).put("variant", variant))
+                    }
+                })
+                .put("book_all_override_entries", JSONArray().apply {
+                    allBookOverrides.forEach { (word, variant) ->
+                        put(JSONObject().put("word", word).put("variant", variant))
+                    }
+                })
+                .put("book_reviewed_phrase_overrides", JSONArray().apply {
+                    bookPhraseTargets.forEach { target ->
+                        put(JSONObject().put("phrase", target.phrase)
+                            .put("word", target.sourceWord).put("variant", target.targetWord))
+                    }
+                })
+                .put("book_phrase_target_hits", JSONObject().apply {
+                    phraseTargetHits.forEach { (phrase, hits) -> put(phrase, hits) }
+                })
+                .put("book_replacement_overlay_entries", bookReplacementLines.count {
+                    it.isNotBlank() && !it.trimStart().startsWith("#")
+                })
+                .put("baseline_tokens", baselineTokens)
+                .put("reviewed_tokens", reviewedTokens)
+                .put("combined_tokens", combinedTokens)
+                .put("segment_contexts", segmentContexts)
 
             reportFile.parentFile?.mkdirs()
             reportFile.writeText(summary.toString(2), Charsets.UTF_8)
@@ -937,13 +1693,33 @@ class UploadedEpubPairedEvaluationTest {
                 " words=" + wordCount + " changed_segments=" + changedSegments + " changed_tokens=" + changedTokens +
                 " stress_changes=" + stressChanges + " added=" + stressAdded + " removed=" + stressRemoved +
                 " moved=" + stressMoved + " yo_changes=" + yoChanges)
-            println("PAIRED_BOOK_SAFETY lexical_mismatches=" + lexicalMismatches + " alignment_mismatches=" + alignmentMismatches)
+            println("PAIRED_BOOK_SAFETY lexical_mismatches=" + lexicalMismatches +
+                " ruaccent_evidence_unaligned_segments=" + alignmentMismatches +
+                " source_output_count_mismatch_segments=" + sourceOutputCountMismatchSegments +
+                " source_output_count_delta=" + sourceOutputCountDelta)
             println("PAIRED_BOOK_ACCURACY=NOT_MEASURED")
             println("PAIRED_BOOK_REPORT=" + reportFile.absolutePath + " bytes=" + reportFile.length())
         } finally {
             corrector.close()
             torchModels.close()
-            modelRoot.deleteRecursively()
+            if (!persistentModelCache) modelRoot.deleteRecursively()
         }
+    }
+}
+
+
+/** Desktop entry point: run the same full-book JVM audit without Android Gradle on the user's PC. */
+object UploadedEpubPairedEvaluationMain {
+    @JvmStatic
+    fun main(args: Array<String>) {
+        val result = JUnitCore.runClasses(UploadedEpubPairedEvaluationTest::class.java)
+        for (failure in result.failures) {
+            System.err.println("RUVOICE_AUDIT_FAILURE=" + failure.testHeader + " :: " + failure.message)
+            failure.exception.printStackTrace(System.err)
+        }
+        if (!result.wasSuccessful()) {
+            throw IllegalStateException("RuVoice whole-book audit failed: " + result.failureCount + " test failures")
+        }
+        println("RUVOICE_WHOLE_BOOK_AUDIT=PASS")
     }
 }

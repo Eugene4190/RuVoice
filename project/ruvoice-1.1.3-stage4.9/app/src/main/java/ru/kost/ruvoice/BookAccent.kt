@@ -270,10 +270,14 @@ object BookAccent {
             fun Set<String>.set(key: String, on: Boolean) = if (on == (key in Rules.DEFAULT_OFF)) this + key else this - key
             // без аббревиатур «КП» не читается по буквам и доходит до книги как есть (сокращения «г.», «т. е.» — правило abbrev — раскрываются)
             val rules = Rules(r.off.set("hard_e", hardE).let { if (abbr) it else it.set("spell_cyr", false).set("spell_lat", false) }, r.maxLen, r.focus)
-            val stress = Stress(d, models, prefs.userDict(lang), rules, layer = layer)
-            val replacements = prefs.replacements(lang)
-            // модели — до первого абзаца: иначе 10–30 с загрузки висят на «0 %», будто всё застыло
+            // Модели загружаем до создания Stress: книга должна использовать тот же независимый RUAccent-корректор,
+            // что и обычное чтение вслух. Раньше здесь строился только штатный Silero-конвейер без корректора.
             models.ensureStress(speaker?.pack)
+            val stress = Stress(
+                d, models, prefs.userDict(lang), rules, layer = layer,
+                independentCorrector = if (lang == "ru") models.independentStressCorrector else null,
+            )
+            val replacements = prefs.replacements(lang)
             // омографы — слова, которым конвейер выбирает ударение по контексту: BERT, грамматика, фразы. Это русские
             // словари: у голоса другого языка галочку не применяем, иначе в книге не осталось бы ни одного ударения
             val homo = if (!prefs.accentBookHomoOnly || lang != "ru") null else { w: String ->

@@ -1,0 +1,94 @@
+name: Build automatic RuVoice stress dictionary
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - stress-dictionary-pipeline
+    paths:
+      - "experiments/ruvoice-stress-dictionary/RUN_FULL_PIPELINE.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ruvoice-full-stress-dictionary
+  cancel-in-progress: false
+
+jobs:
+  build-dictionary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout pipeline branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run official AOT + Wiktionary consensus pipeline
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          set -euo pipefail
+          bash experiments/ruvoice-stress-dictionary/run_pipeline.sh
+
+      - name: Summarize generated dictionary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("experiments/ruvoice-stress-dictionary")
+          manifest = json.loads((root / "reports/run_manifest.json").read_text(encoding="utf-8"))
+          versions = json.loads((root / "reports/source_versions.json").read_text(encoding="utf-8"))
+          wikt = json.loads((root / "reports/wiktionary_source.json").read_text(encoding="utf-8"))
+          print("AUTO_STRESS_DICTIONARY=" + json.dumps(manifest, ensure_ascii=False, sort_keys=True))
+          print("UPSTREAM_PROVENANCE=" + json.dumps(versions, ensure_ascii=False, sort_keys=True))
+          print("WIKTIONARY_PROVENANCE=" + json.dumps(wikt, ensure_ascii=False, sort_keys=True))
+          PY
+          test -s experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt
+
+      - name: Commit generated dictionary and reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The long dictionary run may finish after other commits land on this branch.
+          # Rebase onto its latest head so the push only adds generated outputs and
+          # does not try to rewrite workflow files without the workflows permission.
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git add \
+            experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt \
+            experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_review.tsv \
+            experiments/ruvoice-stress-dictionary/reports/run_manifest.json \
+            experiments/ruvoice-stress-dictionary/reports/source_versions.json \
+            experiments/ruvoice-stress-dictionary/reports/wiktionary_source.json
+          if git diff --cached --quiet; then
+            echo "Generated dictionary and reports are unchanged."
+          else
+            git commit -m "Generate AOT Wiktionary consensus stress dictionary"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Upload generated dictionary and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-auto-stress-dictionary
+          path: |
+            experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt
+            experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_review.tsv
+            experiments/ruvoice-stress-dictionary/reports/run_manifest.json
+            experiments/ruvoice-stress-dictionary/reports/source_versions.json
+            experiments/ruvoice-stress-dictionary/reports/wiktionary_source.json
+          if-no-files-found: warn
+          retention-days: 21

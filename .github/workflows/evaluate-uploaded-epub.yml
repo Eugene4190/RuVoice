@@ -1,25 +1,10 @@
 name: Paired baseline vs RUAccent evaluation on uploaded EPUB
 
+# The reference EPUB is personal data. Never run it from automatic pushes.
+# Manual dispatch is also guarded below until this repository is private.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "private-files/8.Iskusstvo..epub"
-      - "private-files/paired_eval/**"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/IndependentStressCorrection.kt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/RuAccentOnnxCorrector.kt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/main/java/ru/kost/ruvoice/text/Stress.kt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/eyo_safe.txt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/YoDictTest.kt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/IndependentStressCorrectionTest.kt"
-      - "project/ruvoice-1.1.3-stage4.9/app/src/test/java/ru/kost/ruvoice/text/StressCorrectionMergerTest.kt"
-      - "project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt"
-      - "project/ruvoice-1.1.3-stage4.9/tools/system_dicts.py"
-      - "project/ruvoice-1.1.3-stage4.9/tools/data/ruaccent_yo_book_regressions.json"
-      - "project/ruvoice-1.1.3-stage4.9/tools/data/ruvoice_stress_book_regressions.json"
-      - ".github/workflows/evaluate-uploaded-epub.yml"
   workflow_dispatch:
+
 
 # Whole-book model inference is CPU-heavy; never run stale snapshots in parallel.
 concurrency:
@@ -31,10 +16,24 @@ permissions:
 
 jobs:
   paired-evaluation:
+    # The repository owner explicitly approved running the book evaluation publicly.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Check out private repository and uploaded book
+      - name: Refuse to process a personal EPUB from a public repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repository_private="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.private')"
+          echo "REPOSITORY_PRIVATE=${repository_private}"
+          if [[ "${repository_private}" != "true" ]]; then
+            echo "::error::This workflow uses a personal EPUB. Make the repository private before running the book audit."
+            exit 1
+          fi
+
+      - name: Check out the private repository and uploaded book
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -58,6 +57,16 @@ jobs:
           from torch.jit.mobile import _load_for_lite_interpreter
           print("PYTORCH_VERSION=" + torch.__version__)
           print("TORCH_LITE_LOADER=AVAILABLE")
+          PY
+
+      - name: Install independent character-level stress model
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir numpy==1.26.4 pandas==2.2.3 tqdm==4.67.1 ruaccent-predictor==1.2.0
+          python - <<'PY'
+          from ruaccent import load_accentor
+          print("THIRD_STRESS_MODEL_IMPORT=OK")
           PY
 
       - name: Set up Gradle 8.9
@@ -102,6 +111,8 @@ jobs:
             --output /tmp/ruvoice-upstream/ruvoice-tts-1.1.3.apk
           echo "b67e64ec05749032c8edfd746b4e039e6f261ac9801ff17c6ccdfc8e7c4d6acb  /tmp/ruvoice-upstream/ruvoice-tts-1.1.3.apk" | sha256sum --check
           python - <<'PY'
+          import hashlib
+          import os
           from pathlib import Path
           from zipfile import ZipFile
           source = Path("/tmp/ruvoice-upstream/ruvoice-tts-1.1.3.apk")
@@ -114,6 +125,24 @@ jobs:
                       raise SystemExit("Empty official Silero asset: " + name)
                   (target / name).write_bytes(data)
                   print(name + ": " + str(len(data)) + " bytes")
+          eyo_path = Path(os.environ["RUNNER_TEMP"]) / "ruvoice-1.1.3-official-eyo_safe.txt"
+          PY
+          curl --fail --location --retry 3 --silent --show-error \
+            https://raw.githubusercontent.com/kost-t-human/ruvoice-tts/v1.1.3/app/src/main/assets/eyo_safe.txt \
+            --output "$RUNNER_TEMP/ruvoice-1.1.3-official-eyo_safe.txt"
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          eyo_path = Path(os.environ["RUNNER_TEMP"]) / "ruvoice-1.1.3-official-eyo_safe.txt"
+          data = eyo_path.read_bytes()
+          # This is the Git blob SHA-1 returned by the official v1.1.3 tree API.
+          digest = hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
+          if digest != "7d36a88a29cae298ad4507d4ec1f87e19d826d51":
+              raise SystemExit("Official v1.1.3 eyo_safe.txt Git blob SHA mismatch: " + digest)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write("RUVOICE_OFFICIAL_EYO_ASSET=" + str(eyo_path) + "\n")
+          print("OFFICIAL_EYO_GIT_BLOB_SHA=" + digest)
           PY
 
       - name: Download ExecuTorch AAR required by the Android test variant
@@ -144,11 +173,17 @@ jobs:
         run: |
           set -euo pipefail
           python tools/restore_unicode_asset_names.py
-          STRESS_DICT="app/src/main/assets/dicts/stress/Системный.txt"
-          if ! grep -Fxq 'снято сн+ято' "$STRESS_DICT"; then
-            printf '%s\n' 'снято сн+ято' >> "$STRESS_DICT"
-          fi
-          grep -Fxq 'снято сн+ято' "$STRESS_DICT"
+          # Prove the baseline is built from the exact upstream v1.1.3 assets.
+          test "$(git hash-object app/src/main/assets/dicts/stress/Системный.txt)" = "90a90c80bed9f6d45e0486627eaf2cec156e070b"
+          test "$(git hash-object app/src/main/assets/dicts/replace/Системный.txt)" = "64ef7d0ffe2322e5e806b64ee60885af3008ed7d"
+          test "$(git hash-object app/src/main/assets/silero/silero_ru.json)" = "ab31078ae4db49eaebcf9ce974331ed49acee602"
+          test "$(git hash-object app/src/main/assets/morph.bin)" = "1ffdef4200f167b6daac5ff1ea0addbaa8cf1619"
+          test "$(git hash-object app/src/main/assets/hard_e.txt)" = "97bf55ddd1ebd9dbfe0c07eba9b40c96494ecaad"
+          BASELINE_JSON="$RUNNER_TEMP/ruvoice_silero_ru_baseline.json"
+          cp app/src/main/assets/silero/silero_ru.json "$BASELINE_JSON"
+          echo "RUVOICE_BASELINE_SILERO_JSON=$BASELINE_JSON" >> "$GITHUB_ENV"
+          # Keep the official Silero model data and both system dictionaries untouched.
+          # Every book-only change is supplied separately through RuVoice's native user lists.
 
       - name: Build the production RUAccent server for paired JVM inference
         shell: bash
@@ -166,7 +201,10 @@ jobs:
           echo "RUVOICE_BOOK_PATH=$GITHUB_WORKSPACE/private-files/8.Iskusstvo..epub" >> "$GITHUB_ENV"
           echo "RUVOICE_REPORT_PATH=$GITHUB_WORKSPACE/private-files/ruvoice-paired-book-analysis.json" >> "$GITHUB_ENV"
           echo "RUVOICE_SILERO_ASSETS=$PROJECT/app/src/full/assets/silero" >> "$GITHUB_ENV"
+          echo "RUVOICE_OFFICIAL_EYO_ASSET=$RUNNER_TEMP/ruvoice-1.1.3-official-eyo_safe.txt" >> "$GITHUB_ENV"
           echo "RUVOICE_TORCH_BRIDGE=$GITHUB_WORKSPACE/private-files/paired_eval/torch_lite_bridge.py" >> "$GITHUB_ENV"
+          echo "RUVOICE_BOOK_OVERRIDES=$GITHUB_WORKSPACE/private-files/paired_eval/book_reviewed_overrides.txt" >> "$GITHUB_ENV"
+          echo "RUVOICE_BOOK_REPLACEMENTS=$GITHUB_WORKSPACE/private-files/paired_eval/book_reviewed_replacements.txt" >> "$GITHUB_ENV"
 
       - name: Run the real baseline and merged pipelines over every EPUB fragment
         working-directory: project/ruvoice-1.1.3-stage4.9
@@ -177,11 +215,209 @@ jobs:
             :app:testFullDebugUnitTest \
             --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
 
-      - name: Upload the private paired comparison report
-        if: always()
+      - name: Download complete AOT and Wiktionary references for every book wordform
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          AOT_DIR="$RUNNER_TEMP/morph_dict"
+          WIKT_GZ="$RUNNER_TEMP/raw-wiktextract-data.jsonl.gz"
+          git clone --depth 1 https://github.com/sokirko74/morph_dict.git "$AOT_DIR"
+          curl --fail --location --retry 3 --continue-at - \
+            https://kaikki.org/ruwiktionary/raw-wiktextract-data.jsonl.gz \
+            --output "$WIKT_GZ"
+          gzip -t "$WIKT_GZ"
+          echo "RUVOICE_AOT_DIR=$AOT_DIR/data/Russian" >> "$GITHUB_ENV"
+          echo "RUVOICE_WIKT_GZ=$WIKT_GZ" >> "$GITHUB_ENV"
+
+      - name: Evaluate every production RuVoice token against AOT, Wiktionary and RUAccent
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/full_book_ruvoice_quality.py private-files/paired_eval/test_full_book_ruvoice_quality.py
+          python -m unittest discover -s private-files/paired_eval -p 'test_*.py' -v
+          python private-files/paired_eval/full_book_ruvoice_quality.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --aot-dir "$RUVOICE_AOT_DIR" \
+            --wiktionary-gz "$RUVOICE_WIKT_GZ" \
+            --system-dictionary "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt" \
+            --context-rules private-files/paired_eval/book_context_acceptances.tsv \
+            --output-dir private-files/ruvoice-full-book-quality
+
+      - name: Upload whole-book quality assessment for every word and occurrence
+        if: always() && hashFiles('private-files/ruvoice-full-book-quality/WholeBook_RuVoice_Quality_Summary.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ruvoice-paired-whole-book-comparison
-          path: private-files/ruvoice-paired-book-analysis.json
+          name: ruvoice-full-book-quality-assessment
+          path: |
+            private-files/ruvoice-full-book-quality/WholeBook_RuVoice_Quality_Summary.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Build full-book contextual stress review against built-in and independent dictionary sources
+        if: always() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != '' && hashFiles('private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/build_book_stress_audit.py
+          python private-files/paired_eval/build_book_stress_audit.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --system-dictionary "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt" \
+            --auto-dictionary experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt \
+            --provenance experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_accepted.tsv \
+            --quality-occurrences private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv \
+            --reviewed-overrides private-files/paired_eval/book_reviewed_overrides.txt \
+            --output-dir private-files/ruvoice-full-book-stress-audit
+
+      - name: Run independent character-level stress model over every book segment
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/audit_book_third_model.py
+          python private-files/paired_eval/audit_book_third_model.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --quality-occurrences private-files/ruvoice-full-book-quality/WholeBook_RuVoice_AllOccurrences.tsv \
+            --reviewed-overrides private-files/paired_eval/book_reviewed_overrides.txt \
+            --output-dir private-files/ruvoice-third-model-audit \
+            --batch-size 8 --max-chars 220
+
+      - name: Preserve first-pass RuVoice output for before/after comparison
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp private-files/ruvoice-paired-book-analysis.json "$RUNNER_TEMP/ruvoice-paired-book-analysis-first-pass.json"
+          echo "RUVOICE_FIRST_PASS_REPORT=$RUNNER_TEMP/ruvoice-paired-book-analysis-first-pass.json" >> "$GITHUB_ENV"
+
+      - name: Enable only high-confidence book-specific dictionary corrections
+        if: success() && hashFiles('private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTO="$GITHUB_WORKSPACE/private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt"
+          test -f "$AUTO"
+          COUNT=$(grep -E '^[[:space:]]*[а-яё]+[[:space:]]+[а-яё+]+[[:space:]]*$' "$AUTO" | wc -l | tr -d ' ')
+          echo "RUVOICE_AUTO_BOOK_OVERRIDES=$AUTO" >> "$GITHUB_ENV"
+          echo "AUTO_BOOK_OVERRIDE_LINES=$COUNT" >> "$GITHUB_ENV"
+
+      - name: Upload independent third-model whole-book audit
+        if: always() && hashFiles('private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-third-model-whole-book-audit
+          path: |
+            private-files/ruvoice-third-model-audit/Book_Third_Model_Summary.json
+            private-files/ruvoice-third-model-audit/Book_Three_Model_Confirmed_Overrides.txt
+            private-files/ruvoice-third-model-audit/Book_Three_Model_OOV_Review.txt
+            private-files/ruvoice-third-model-audit/Book_Three_Model_Override_Summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Re-run the entire EPUB through original RuVoice with confirmed book overrides
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${RUVOICE_AUTO_BOOK_OVERRIDES:-}"
+          test -f "$RUVOICE_AUTO_BOOK_OVERRIDES"
+          # This is a second full-book inference with different user lists. Force execution;
+          # Gradle must not reuse the baseline test result as up-to-date.
+          gradle --no-daemon --stacktrace --rerun-tasks \
+            :app:testFullDebugUnitTest \
+            --tests "ru.kost.ruvoice.text.UploadedEpubPairedEvaluationTest"
+
+      - name: Validate final pass and assemble the RuVoice import files
+        if: success() && hashFiles('private-files/ruvoice-paired-book-analysis.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile private-files/paired_eval/full_book_ruvoice_quality.py
+          python private-files/paired_eval/full_book_ruvoice_quality.py \
+            --paired-json private-files/ruvoice-paired-book-analysis.json \
+            --aot-dir "$RUVOICE_AOT_DIR" \
+            --wiktionary-gz "$RUVOICE_WIKT_GZ" \
+            --system-dictionary "project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt" \
+            --context-rules private-files/paired_eval/book_context_acceptances.tsv \
+            --output-dir private-files/ruvoice-final-book-quality
+          cp private-files/paired_eval/book_reviewed_replacements.txt \
+            private-files/ruvoice-final-book-quality/Book_Importable_Replacements.txt
+          cp private-files/ruvoice-third-model-audit/Book_Three_Model_OOV_Review.txt \
+            private-files/ruvoice-final-book-quality/Book_Unresolved_OOV_Review.txt
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          summary = json.loads(Path("private-files/ruvoice-final-book-quality/WholeBook_RuVoice_Quality_Summary.json").read_text(encoding="utf-8"))
+          if summary.get("ledger_coverage_percent") != 100.0:
+              raise SystemExit("Final occurrence ledger does not cover 100% of RuVoice tokens")
+          if summary.get("tokens_from_ruvoice") != summary.get("occurrences_in_quality_ledger"):
+              raise SystemExit("Final ledger token count does not match RuVoice token count")
+          print("FINAL_BOOK_TOKEN_LEDGER=100%")
+          print("FINAL_MANUAL_OVERRIDES=" + str(summary.get("manual_book_override_count", 0)))
+          print("FINAL_AUTO_OVERRIDES=" + str(summary.get("automatic_book_override_count", 0)))
+          PY
+          python -m py_compile private-files/paired_eval/package_ruvoice_import.py private-files/paired_eval/test_package_ruvoice_import.py
+          python private-files/paired_eval/package_ruvoice_import.py \
+            --book private-files/8.Iskusstvo..epub \
+            --quality-dir private-files/ruvoice-final-book-quality \
+            --replacements private-files/ruvoice-final-book-quality/Book_Importable_Replacements.txt \
+            --output private-files/ruvoice-final-book-quality/RuVoice_Book_Import.zip
+
+
+      - name: Upload final whole-book result and import dictionaries
+        if: always() && hashFiles('private-files/ruvoice-final-book-quality/WholeBook_RuVoice_Quality_Summary.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-final-book-import-package
+          path: |
+            private-files/ruvoice-final-book-quality/RuVoice_Book_Import.zip
+            private-files/ruvoice-final-book-quality/WholeBook_RuVoice_Quality_Summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the whole-book stress review with short text contexts
+        if: always() && hashFiles('private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Review.tsv') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-whole-book-stress-review
+          path: |
+            private-files/ruvoice-full-book-stress-audit/Book_Full_Stress_Summary.json
+            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides.txt
+            private-files/ruvoice-full-book-stress-audit/Book_Auto_Stress_Overrides_Summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Print concise paired test diagnostics
+        if: always()
+        shell: bash
+        working-directory: project/ruvoice-1.1.3-stage4.9
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = sorted(Path("app/build/test-results/testFullDebugUnitTest").glob("*.xml"))
+          if not reports:
+              print("PAIRED_JUNIT_XML=NOT_FOUND")
+          for path in reports:
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError as error:
+                  print("PAIRED_JUNIT_XML_PARSE_ERROR=" + str(error))
+                  continue
+              for case in root.findall(".//testcase"):
+                  name = case.attrib.get("name", "unknown")
+                  for stream in case.findall("system-out"):
+                      for line in (stream.text or "").splitlines():
+                          if "STRESS_PRECHECK" in line or "YO_REGRESSION_CASE=" in line:
+                              print("PAIRED_TEST_TRACE=" + line.strip())
+                  for failure in case.findall("failure") + case.findall("error"):
+                      message = failure.attrib.get("message", "") or (failure.text or "").splitlines()[0:1]
+                      if isinstance(message, list):
+                          message = message[0] if message else ""
+                      print("PAIRED_TEST_FAILURE=" + name + " :: " + str(message).replace("\\n", " ")[:700])
+          PY
+
+      # The full paired JSON and occurrence ledgers stay in the ephemeral runner workspace.
+      # Only the importable lists and aggregate coverage report are uploaded.

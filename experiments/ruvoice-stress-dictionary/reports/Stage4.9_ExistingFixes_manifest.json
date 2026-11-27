@@ -1,0 +1,11 @@
+{
+  "generated_utc": "2026-11-24T00:00:00Z",
+  "source_repository": "Eugene4190/RuVoice",
+  "source_path": "project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt",
+  "source_blob_sha": "49b834f69731264d6aa0e144cb04098f3a8c38c9",
+  "source_bytes": 154644,
+  "parsed_assignments": 1924,
+  "accepted_unique_entries": 1924,
+  "rejected_or_conflicting": 3,
+  "note": "Snapshot of existing Stage 4.9 fixes. This is not a measured improvement over an APK already built from the same Stage 4.9 source."
+}

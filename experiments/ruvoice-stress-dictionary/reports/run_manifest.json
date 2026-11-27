@@ -1,0 +1,16 @@
+{
+  "generated_utc": "2026-11-24T19:08:30.210035+00:00",
+  "output": "/home/runner/work/RuVoice/RuVoice/experiments/ruvoice-stress-dictionary/output/RuVoice_AutoStress.txt",
+  "review_report": "/home/runner/work/RuVoice/RuVoice/experiments/ruvoice-stress-dictionary/reports/RuVoice_AutoStress_review.tsv",
+  "entry_count": 4587,
+  "source_entry_count": 5210,
+  "automatic_candidate_count": 2661,
+  "withheld_or_rejected_count": 3,
+  "minimum_candidate_observations": 3,
+  "inputs": [
+    "/home/runner/work/RuVoice/RuVoice/project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt",
+    "/home/runner/work/RuVoice/RuVoice/experiments/ruvoice-stress-dictionary/data/curated/reviewed_overrides.txt",
+    "/tmp/ruvoice-stress.DOJJ1q/ruvoice-tts/tools/stress_fixes.txt"
+  ],
+  "warning": "Observation counts are not calibrated probabilities. Validate against real text before relying on every entry."
+}

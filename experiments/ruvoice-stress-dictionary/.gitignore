@@ -1,0 +1,15 @@
+# Downloaded source dictionaries and large temporary artifacts
+.cache/
+data/raw/*
+!data/raw/README.md
+.venv/
+__pycache__/
+*.py[cod]
+
+# Temporary pipeline directories
+.work/
+*.tmp
+
+# Book excerpts may contain copyrighted text; keep scans local only.
+output/books/
+reports/book_scans/

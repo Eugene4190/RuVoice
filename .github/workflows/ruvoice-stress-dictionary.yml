@@ -1,0 +1,220 @@
+name: RuVoice stress dictionary tools
+
+on:
+  pull_request:
+    paths:
+      - "experiments/ruvoice-stress-dictionary/**"
+      - ".github/workflows/ruvoice-stress-dictionary.yml"
+      - "private-files/paired_eval/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python tools
+        run: |
+          python -m py_compile \
+            experiments/ruvoice-stress-dictionary/portable_stdio.py \
+            experiments/ruvoice-stress-dictionary/test_portable_stdio.py \
+            experiments/ruvoice-stress-dictionary/desktop_runtime/ruvoice_model_worker.py \
+            experiments/ruvoice-stress-dictionary/book_tool_paths.py \
+            experiments/ruvoice-stress-dictionary/private_book_server.py \
+            experiments/ruvoice-stress-dictionary/local_full_book_workflow.py \
+            experiments/ruvoice-stress-dictionary/test_local_full_book_workflow.py \
+            experiments/ruvoice-stress-dictionary/personal_book_workflow.py \
+            experiments/ruvoice-stress-dictionary/test_book_tool_paths.py \
+            experiments/ruvoice-stress-dictionary/test_private_book_server.py \
+            experiments/ruvoice-stress-dictionary/build_dictionary.py \
+            experiments/ruvoice-stress-dictionary/analyze_book.py \
+            experiments/ruvoice-stress-dictionary/build_book_dictionary.py \
+            experiments/ruvoice-stress-dictionary/approve_book_entries.py \
+            experiments/ruvoice-stress-dictionary/test_build_dictionary.py \
+            experiments/ruvoice-stress-dictionary/test_analyze_book.py \
+            experiments/ruvoice-stress-dictionary/test_build_book_dictionary.py \
+            experiments/ruvoice-stress-dictionary/test_approve_book_entries.py \
+            experiments/ruvoice-stress-dictionary/evaluate_gold_set.py \
+            experiments/ruvoice-stress-dictionary/test_evaluate_gold_set.py \
+            experiments/ruvoice-stress-dictionary/extract_ruwiktionary_forms.py \
+            experiments/ruvoice-stress-dictionary/test_extract_ruwiktionary_forms.py
+
+      - name: Run unit tests
+        run: |
+          python -m unittest discover \
+            -s experiments/ruvoice-stress-dictionary \
+            -p "test_*.py" -v
+
+      - name: Validate independent stress gold set
+        run: |
+          python experiments/ruvoice-stress-dictionary/evaluate_gold_set.py \
+            --json-out "$RUNNER_TEMP/ruvoice-gold-seed-validation.json"
+
+      - name: Compile private paired-evaluation Python tools
+        run: |
+          python -m py_compile \
+            private-files/paired_eval/apply_book_phrase_override.py \
+            private-files/paired_eval/build_book_stress_audit.py \
+            private-files/paired_eval/full_book_ruvoice_quality.py \
+            private-files/paired_eval/test_apply_book_phrase_override.py \
+            private-files/paired_eval/test_build_book_stress_audit.py \
+            private-files/paired_eval/test_full_book_ruvoice_quality.py \
+            private-files/paired_eval/torch_lite_bridge.py \
+            private-files/paired_eval/audit_book_third_model.py \
+            private-files/paired_eval/test_audit_book_third_model.py
+
+      - name: Run private paired-evaluation unit tests
+        run: |
+          python -m unittest discover \
+            -s private-files/paired_eval \
+            -p "test_*.py" -v
+
+      - name: Require a private repository before processing the personal reference EPUB
+        if: hashFiles('private-files/8.Iskusstvo..epub') != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repository_private="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.private')"
+          echo "REPOSITORY_PRIVATE=${repository_private}"
+          echo "RUVOICE_REFERENCE_BOOK_PRIVATE=${repository_private}" >> "$GITHUB_ENV"
+          if [[ "${repository_private}" != "true" ]]; then
+            echo "::warning::Skipping personal EPUB analysis and reports because this repository is public."
+          fi
+
+      - name: Build a book-specific supplement from the reference EPUB
+        if: success() && env.RUVOICE_REFERENCE_BOOK_PRIVATE == 'true' && hashFiles('private-files/8.Iskusstvo..epub') != ''
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/ruvoice-book-first"
+          python experiments/ruvoice-stress-dictionary/build_book_dictionary.py \
+            "private-files/8.Iskusstvo..epub" \
+            --output-dir "$OUT"
+          python - "$OUT/Book_Report.json" <<'PY'
+          import json, pathlib, sys
+          data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print("BOOK_FIRST_DICTIONARY_SUMMARY=" + json.dumps(data, ensure_ascii=False, sort_keys=True))
+          assert data["new_candidate_forms"] == 1
+          assert data["withheld_by_context_rules_forms"] == 4
+          assert data["cumulative_approved_entries"] == 0
+          PY
+
+      - name: Upload book-specific candidate and aggregate reports
+        if: success() && env.RUVOICE_REFERENCE_BOOK_PRIVATE == 'true' && hashFiles('private-files/8.Iskusstvo..epub') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-book-first-reference-output
+          path: ${{ runner.temp }}/ruvoice-book-first/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Validate shell syntax
+        run: bash -n experiments/ruvoice-stress-dictionary/run_pipeline.sh
+
+      - name: Validate dictionary snapshot
+        run: |
+          python experiments/ruvoice-stress-dictionary/build_dictionary.py \
+            --source-list project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt \
+            --output "$RUNNER_TEMP/RuVoice_Stage4.9_ExistingFixes.txt" \
+            --report "$RUNNER_TEMP/Stage4.9_review.tsv" \
+            --manifest "$RUNNER_TEMP/Stage4.9_manifest.json"
+
+      - name: Validate curated stress overrides
+        run: |
+          set -euo pipefail
+          python experiments/ruvoice-stress-dictionary/build_dictionary.py \
+            --source-list project/ruvoice-1.1.3-stage4.9/tools/stress_fixes.txt \
+            --source-list experiments/ruvoice-stress-dictionary/data/curated/reviewed_overrides.txt \
+            --output "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt" \
+            --report "$RUNNER_TEMP/ReviewedOverrides_review.tsv" \
+            --manifest "$RUNNER_TEMP/ReviewedOverrides_manifest.json"
+          grep -Fxq 'трёхгорке трёхг+орке' "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt"
+          grep -Fxq 'трёхгорку трёхг+орку' "$RUNNER_TEMP/RuVoice_WithReviewedOverrides.txt"
+
+      - name: Scan uploaded book against Stage 4.9 correction list
+        if: success() && env.RUVOICE_REFERENCE_BOOK_PRIVATE == 'true' && hashFiles('private-files/8.Iskusstvo..epub') != ''
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/ruvoice-book-scan"
+          python experiments/ruvoice-stress-dictionary/analyze_book.py \
+            "private-files/8.Iskusstvo..epub" \
+            --dictionary experiments/ruvoice-stress-dictionary/output/RuVoice_Stage4.9_ExistingFixes.txt \
+            --min-frequency 3 \
+            --output-dir "$OUT"
+          python - "$OUT" <<'PY'
+          import csv, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          data = json.loads((root / "coverage.json").read_text(encoding="utf-8"))
+          print("BOOK_SCAN_SUMMARY=" + json.dumps(data, ensure_ascii=False, sort_keys=True))
+          with (root / "missing_words.tsv").open(encoding="utf-8-sig", newline="") as f:
+              rows = list(csv.DictReader(f, delimiter="\t"))
+          print("TOP_UNMATCHED_WORD_FORMS_BEGIN")
+          for row in rows[:40]:
+              print(row["word"] + "\t" + row["frequency"])
+          print("TOP_UNMATCHED_WORD_FORMS_END")
+          with (root / "dictionary_conflicts.tsv").open(encoding="utf-8-sig", newline="") as f:
+              conflicts = list(csv.DictReader(f, delimiter="\t"))
+          print("CORRECTION_LIST_CONFLICTS_BEGIN")
+          for row in conflicts:
+              print(row["conflict"])
+          print("CORRECTION_LIST_CONFLICTS_END")
+          with (root / "dictionary_hits.tsv").open(encoding="utf-8-sig", newline="") as f:
+              hits = list(csv.DictReader(f, delimiter="\t"))
+          hits.sort(key=lambda row: int(row["frequency"]), reverse=True)
+          print("TOP_CORRECTION_HITS_BEGIN")
+          for row in hits[:40]:
+              print(row["word"] + "\t" + row["dictionary_stress"] + "\t" + row["frequency"])
+          print("TOP_CORRECTION_HITS_END")
+          PY
+
+      - name: Scan uploaded book against the complete built-in stress dictionary
+        if: success() && env.RUVOICE_REFERENCE_BOOK_PRIVATE == 'true' && hashFiles('private-files/8.Iskusstvo..epub') != ''
+        run: |
+          set -euo pipefail
+          DICT="project/ruvoice-1.1.3-stage4.9/app/src/main/assets/dicts/stress/Системный.txt"
+          test -s "$DICT"
+          echo "FULL_SYSTEM_TREKH_GORKA_ROWS_BEGIN"
+          grep -nE '^трёхгорк(е|у) ' "$DICT" || true
+          echo "FULL_SYSTEM_TREKH_GORKA_ROWS_END"
+          OUT="$RUNNER_TEMP/ruvoice-full-system-book-scan"
+          python experiments/ruvoice-stress-dictionary/analyze_book.py \
+            "private-files/8.Iskusstvo..epub" \
+            --dictionary "$DICT" \
+            --min-frequency 3 \
+            --output-dir "$OUT"
+          python - "$OUT" <<'PY'
+          import csv, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          data = json.loads((root / "coverage.json").read_text(encoding="utf-8"))
+          print("FULL_SYSTEM_BOOK_SCAN_SUMMARY=" + json.dumps(data, ensure_ascii=False, sort_keys=True))
+          with (root / "missing_words.tsv").open(encoding="utf-8-sig", newline="") as f:
+              rows = list(csv.DictReader(f, delimiter="\t"))
+          print("FULL_SYSTEM_TOP_UNMATCHED_WORD_FORMS_BEGIN")
+          for row in rows[:40]:
+              print(row["word"] + "\t" + row["frequency"])
+          print("FULL_SYSTEM_TOP_UNMATCHED_WORD_FORMS_END")
+          with (root / "dictionary_conflicts.tsv").open(encoding="utf-8-sig", newline="") as f:
+              conflicts = list(csv.DictReader(f, delimiter="\t"))
+          print("FULL_SYSTEM_DICTIONARY_CONFLICTS_BEGIN")
+          for row in conflicts:
+              print(row["conflict"])
+          print("FULL_SYSTEM_DICTIONARY_CONFLICTS_END")
+          with (root / "dictionary_hits.tsv").open(encoding="utf-8-sig", newline="") as f:
+              hits = list(csv.DictReader(f, delimiter="\t"))
+          hits.sort(key=lambda row: int(row["frequency"]), reverse=True)
+          print("FULL_SYSTEM_TOP_DICTIONARY_HITS_BEGIN")
+          for row in hits[:40]:
+              print(row["word"] + "\t" + row["dictionary_stress"] + "\t" + row["frequency"])
+          print("FULL_SYSTEM_TOP_DICTIONARY_HITS_END")
+          PY
