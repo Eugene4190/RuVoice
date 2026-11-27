@@ -115,6 +115,7 @@ def package(
     quality_dir: Path,
     replacements_path: Path,
     output: Path,
+    third_model_dir: Path | None = None,
 ) -> dict[str, Any]:
     summary_path = quality_dir / "WholeBook_RuVoice_Quality_Summary.json"
     stress_path = quality_dir / "Book_Importable_Stress_Overrides.txt"
@@ -156,6 +157,58 @@ def package(
     summary["total_imported_stress_overrides"] = len(stress)
     summary["manual_book_corrections"] = raw_summary.get("manual_book_override_count", 0)
     summary["automatic_high_confidence_book_corrections"] = raw_summary.get("automatic_book_override_count", 0)
+
+    third_model_files: dict[str, Path] = {}
+    if third_model_dir is not None:
+        third_model_dir = Path(third_model_dir)
+        third_model_summary_path = third_model_dir / "Book_Third_Model_Summary.json"
+        if not third_model_summary_path.is_file():
+            raise FileNotFoundError("Не найден полный отчёт независимой третьей модели.")
+        third_model_summary = json.loads(third_model_summary_path.read_text(encoding="utf-8"))
+        coverage = float(third_model_summary.get("multisyllabic_occurrence_coverage_percent", -1))
+        missing = int(third_model_summary.get("missing_multisyllabic_occurrences", -1))
+        if (
+            third_model_summary.get("all_segments_mode") is not True
+            or coverage != 100.0
+            or missing != 0
+        ):
+            raise ValueError(
+                "Нельзя собрать ZIP без полного отчёта третьей модели: "
+                f"all_segments_mode={third_model_summary.get('all_segments_mode')}, "
+                f"coverage={coverage}, missing={missing}"
+            )
+        required_third_model_reports = {
+            "Third_Model_Summary.json": "Book_Third_Model_Summary.json",
+            "Third_Model_AllOccurrences.tsv": "Book_Third_Model_AllOccurrences.tsv",
+            "Third_Model_Disagreements.tsv": "Book_Third_Model_Disagreements.tsv",
+            "Three_Model_Confirmed_Overrides.txt": "Book_Three_Model_Confirmed_Overrides.txt",
+            "Three_Model_OOV_Review.txt": "Book_Three_Model_OOV_Review.txt",
+            "Three_Model_Override_Evidence.tsv": "Book_Three_Model_Override_Evidence.tsv",
+            "Three_Model_Override_Summary.json": "Book_Three_Model_Override_Summary.json",
+        }
+        for archive_name, source_name in required_third_model_reports.items():
+            source = third_model_dir / source_name
+            if not source.is_file():
+                raise FileNotFoundError(f"Не найден отчёт третьей модели: {source_name}")
+            third_model_files[archive_name] = source
+        override_summary = third_model_summary.get("auto_override_summary", {})
+        summary["third_model_audit"] = {
+            "model": third_model_summary.get("model"),
+            "all_book_segments": third_model_summary.get("all_book_segments"),
+            "segments_inferred": third_model_summary.get("segments"),
+            "expected_multisyllabic_occurrences": third_model_summary.get("expected_multisyllabic_occurrences"),
+            "aligned_multisyllabic_occurrences": third_model_summary.get("aligned_multisyllabic_occurrences"),
+            "missing_multisyllabic_occurrences": missing,
+            "multisyllabic_occurrence_coverage_percent": coverage,
+            "third_model_disagreement_occurrences": third_model_summary.get("third_model_disagreement_occurrences", 0),
+            "unique_disagreement_groups": third_model_summary.get("unique_disagreement_groups", 0),
+            "confirmed_override_wordforms": override_summary.get("confirmed_wordforms", 0),
+            "oov_review_wordforms": override_summary.get("repeated_oov_review_wordforms", 0),
+            "note": (
+                "Третья модель — независимое свидетельство, а не нормативный эталон. "
+                "OOV-файл является очередью ручной проверки и не предназначен для импорта."
+            ),
+        }
 
     prefix = f"{safe_stem(book_name)}_{book_sha[:8]}"
     stress_name = f"{prefix}_Stress.txt"
@@ -199,6 +252,13 @@ def package(
         archive.writestr("Book_Quality_Summary.json", safe_summary)
         archive.write(occurrence_path, "WholeBook_RuVoice_AllOccurrences.tsv")
         archive.write(unique_path, "WholeBook_RuVoice_UniqueWords.tsv")
+        for archive_name, source_path in third_model_files.items():
+            archive.write(source_path, archive_name)
+    zip_members = [
+        stress_name, replacements_name, "IMPORT.txt", "Book_Quality_Summary.json",
+        "WholeBook_RuVoice_AllOccurrences.tsv", "WholeBook_RuVoice_UniqueWords.tsv",
+        *third_model_files.keys(),
+    ]
     return {
         "output": str(output),
         "book_sha256": book_sha,
@@ -206,10 +266,7 @@ def package(
         "replacement_rules": len(replacements),
         "ledger_rows": ledger_rows,
         "ledger_coverage_percent": summary["ledger_coverage_percent"],
-        "zip_members": [
-            stress_name, replacements_name, "IMPORT.txt", "Book_Quality_Summary.json",
-            "WholeBook_RuVoice_AllOccurrences.tsv", "WholeBook_RuVoice_UniqueWords.tsv",
-        ],
+        "zip_members": zip_members,
     }
 
 

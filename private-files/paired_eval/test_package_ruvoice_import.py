@@ -61,6 +61,40 @@ class PackageRuVoiceImportTests(unittest.TestCase):
         )
         return book, quality, replacements
 
+    def make_third_model_fixture(self, root: Path, *, coverage: float = 100.0, missing: int = 0):
+        third = root / "third-model"
+        third.mkdir()
+        (third / "Book_Third_Model_Summary.json").write_text(
+            json.dumps({
+                "model": "ruaccent-predictor 1.2.0",
+                "all_book_segments": 20,
+                "segments": 20,
+                "expected_multisyllabic_occurrences": 150,
+                "aligned_multisyllabic_occurrences": 150 - missing,
+                "missing_multisyllabic_occurrences": missing,
+                "multisyllabic_occurrence_coverage_percent": coverage,
+                "all_segments_mode": True,
+                "third_model_disagreement_occurrences": 12,
+                "unique_disagreement_groups": 5,
+                "auto_override_summary": {
+                    "confirmed_wordforms": 2,
+                    "repeated_oov_review_wordforms": 1,
+                },
+            }),
+            encoding="utf-8",
+        )
+        reports = {
+            "Book_Third_Model_AllOccurrences.tsv": "segment_index\\tword_index\\n0\\t0\\n",
+            "Book_Third_Model_Disagreements.tsv": "word\\truvoice_position\\nпример\\t0\\n",
+            "Book_Three_Model_Confirmed_Overrides.txt": "пример прим+ер\\n",
+            "Book_Three_Model_OOV_Review.txt": "редкое р+едкое\\n",
+            "Book_Three_Model_Override_Evidence.tsv": "tier\\tword\\nONE_DICTIONARY_PLUS_TWO_MODELS\\tпример\\n",
+            "Book_Three_Model_Override_Summary.json": "{\\\"confirmed_wordforms\\\": 2}\\n",
+        }
+        for name, text in reports.items():
+            (third / name).write_text(text, encoding="utf-8")
+        return third
+
     def test_package_contains_import_lists_full_occurrence_ledger_and_summary(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -92,6 +126,43 @@ class PackageRuVoiceImportTests(unittest.TestCase):
                 self.assertEqual(report["occurrences_in_full_context_ledger"], 100)
                 self.assertEqual(report["total_imported_stress_overrides"], 2)
                 self.assertNotIn("context", report)
+
+    def test_package_includes_full_third_model_evidence_and_oov_review(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            book, quality, replacements = self.make_fixture(root)
+            third = self.make_third_model_fixture(root)
+            output = root / "result.zip"
+            result = package.package(
+                book_path=book, quality_dir=quality,
+                replacements_path=replacements, output=output,
+                third_model_dir=third,
+            )
+            with zipfile.ZipFile(output) as archive:
+                names = set(archive.namelist())
+                self.assertEqual(len(names), 13)
+                self.assertIn("Third_Model_AllOccurrences.tsv", names)
+                self.assertIn("Three_Model_OOV_Review.txt", names)
+                self.assertIn("Three_Model_Override_Evidence.tsv", names)
+                report = json.loads(archive.read("Book_Quality_Summary.json"))
+                self.assertEqual(
+                    report["third_model_audit"]["multisyllabic_occurrence_coverage_percent"],
+                    100.0,
+                )
+                self.assertEqual(report["third_model_audit"]["confirmed_override_wordforms"], 2)
+                self.assertIn("не нормативный эталон", report["third_model_audit"]["note"].lower())
+
+    def test_package_refuses_incomplete_third_model_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            book, quality, replacements = self.make_fixture(root)
+            third = self.make_third_model_fixture(root, coverage=99.0, missing=1)
+            with self.assertRaisesRegex(ValueError, "без полного отчёта третьей модели"):
+                package.package(
+                    book_path=book, quality_dir=quality,
+                    replacements_path=replacements, output=root / "result.zip",
+                    third_model_dir=third,
+                )
 
     def test_package_refuses_a_ledger_that_does_not_match_the_summary(self):
         with tempfile.TemporaryDirectory() as temp:

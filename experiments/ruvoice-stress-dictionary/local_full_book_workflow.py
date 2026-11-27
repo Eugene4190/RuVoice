@@ -481,6 +481,7 @@ def process_book(book: Path, *, private_home: Path, book_name: str | None = None
         package_result = package_ruvoice_import.package(
             book_path=book, quality_dir=final_quality,
             replacements_path=final_replacements, output=work_archive,
+            third_model_dir=third,
         )
         new_count, cumulative_count, previously_seen, archive = _update_private_history(
             private_home, digest, display_name, work_archive,
