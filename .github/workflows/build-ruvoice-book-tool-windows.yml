@@ -560,17 +560,17 @@ jobs:
               replacements = [n for n in names if n.endswith("_Replacements.txt")]
               assert len(stress) == 1 and len(replacements) == 1, sorted(names)
               required_third_model = {
-        "Third_Model_Summary.json", "Third_Model_AllOccurrences.tsv",
-        "Third_Model_Disagreements.tsv", "Three_Model_Confirmed_Overrides.txt",
-        "Three_Model_OOV_Review.txt", "Three_Model_Override_Evidence.tsv",
-        "Three_Model_Override_Summary.json",
-    }
-    assert required_third_model.issubset(names), sorted(names)
-    assert len(names) == 13, sorted(names)
-    third = json.loads(z.read("Third_Model_Summary.json"))
-    assert third["all_segments_mode"] is True, third
-    assert third["missing_multisyllabic_occurrences"] == 0, third
-    assert third["multisyllabic_occurrence_coverage_percent"] == 100.0, third
+                  "Third_Model_Summary.json", "Third_Model_AllOccurrences.tsv",
+                  "Third_Model_Disagreements.tsv", "Three_Model_Confirmed_Overrides.txt",
+                  "Three_Model_OOV_Review.txt", "Three_Model_Override_Evidence.tsv",
+                  "Three_Model_Override_Summary.json",
+              }
+              assert required_third_model.issubset(names), sorted(names)
+              assert len(names) == 13, sorted(names)
+              third = json.loads(z.read("Third_Model_Summary.json"))
+              assert third["all_segments_mode"] is True, third
+              assert third["missing_multisyllabic_occurrences"] == 0, third
+              assert third["multisyllabic_occurrence_coverage_percent"] == 100.0, third
               assert not any(n.lower().endswith(".epub") for n in names)
               summary = json.loads(z.read("Book_Quality_Summary.json"))
               assert summary["ledger_coverage_percent"] == 100.0, summary
