@@ -30,18 +30,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check whether private reference-book data may be used
-        id: privacy
+      - name: Select the reviewed reference EPUB for the real-book processing run
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          $private = gh api "repos/$env:GITHUB_REPOSITORY" --jq ".private"
-          if ($LASTEXITCODE -ne 0 -or ($private -ne "true" -and $private -ne "false")) {
-            throw "Could not establish repository privacy; refusing to process reference-book data."
+          $epub = Join-Path $env:GITHUB_WORKSPACE "private-files\8.Iskusstvo..epub"
+          $useReference = "false"
+          if (Test-Path -LiteralPath $epub -PathType Leaf) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $epub).Hash.ToLowerInvariant()
+            if ($hash -ne "114161f5c91caa7c39419c5b7979e34e5a1d34a9e84f21683f63131bd3a49119") {
+              throw "The reference EPUB does not match its reviewed SHA-256 manifest: $hash"
+            }
+            $useReference = "true"
           }
-          "RUVOICE_REFERENCE_BOOK_PRIVATE=$private" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "RUVOICE_REFERENCE_BOOK_PRIVATE=$private"
+          "RUVOICE_REFERENCE_BOOK_PRIVATE=$useReference" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "RUVOICE_REFERENCE_BOOK_SELECTED=$useReference"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -557,7 +559,18 @@ jobs:
               stress = [n for n in names if n.endswith("_Stress.txt")]
               replacements = [n for n in names if n.endswith("_Replacements.txt")]
               assert len(stress) == 1 and len(replacements) == 1, sorted(names)
-              assert len(names) == 6, sorted(names)
+              required_third_model = {
+        "Third_Model_Summary.json", "Third_Model_AllOccurrences.tsv",
+        "Third_Model_Disagreements.tsv", "Three_Model_Confirmed_Overrides.txt",
+        "Three_Model_OOV_Review.txt", "Three_Model_Override_Evidence.tsv",
+        "Three_Model_Override_Summary.json",
+    }
+    assert required_third_model.issubset(names), sorted(names)
+    assert len(names) == 13, sorted(names)
+    third = json.loads(z.read("Third_Model_Summary.json"))
+    assert third["all_segments_mode"] is True, third
+    assert third["missing_multisyllabic_occurrences"] == 0, third
+    assert third["multisyllabic_occurrence_coverage_percent"] == 100.0, third
               assert not any(n.lower().endswith(".epub") for n in names)
               summary = json.loads(z.read("Book_Quality_Summary.json"))
               assert summary["ledger_coverage_percent"] == 100.0, summary
@@ -635,6 +648,14 @@ jobs:
           print("PORTABLE_PACKAGE_BYTES=" + str(Path(archive_path).stat().st_size))
           '@ | python - $stage $archive
           if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "Portable ZIP was not created" }
+
+      - name: Upload generated book-specific RuVoice dictionaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruvoice-book-dictionaries
+          path: ${{ runner.temp }}/ruvoice-smoke-package-copy.zip
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload portable Windows ZIP
         uses: actions/upload-artifact@v4

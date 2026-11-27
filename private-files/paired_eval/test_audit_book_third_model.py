@@ -38,6 +38,47 @@ class ThirdModelAuditParsingTests(unittest.TestCase):
 
 
 
+class ThirdModelWordwiseFallbackTests(unittest.TestCase):
+    def test_uses_contextual_prediction_when_token_counts_match(self):
+        calls = []
+        def predictor(texts, format, batch_size):
+            calls.append(list(texts))
+            return ["При-мер — пример'ов."]
+
+        words, used_fallback = module.align_prediction_or_fallback_wordwise(
+            predictor, "При-мер — пример'ов.", "При-мер — пример'ов.", 8
+        )
+        self.assertEqual(words, ["При", "мер", "пример'ов"])
+        self.assertFalse(used_fallback)
+        self.assertEqual(calls, [])
+
+    def test_retries_each_word_when_sentence_prediction_loses_tokens(self):
+        calls = []
+        def predictor(texts, format, batch_size):
+            calls.append(list(texts))
+            if len(texts) == 1 and " " in texts[0]:
+                return ["Первое предложение"]
+            return [word + "'" if word == "слово" else word for word in texts]
+
+        words, used_fallback = module.align_prediction_or_fallback_wordwise(
+            predictor, "Это слово проверяется.", "Это предложение.", 8
+        )
+        self.assertTrue(used_fallback)
+        self.assertEqual(len(words), len(module.WORD_RE.findall("Это слово проверяется.")))
+        self.assertIn("слово'", words)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0], ["Это", "слово", "проверяется"])
+
+    def test_rejects_wordwise_prediction_that_changes_spelling(self):
+        def predictor(texts, format, batch_size):
+            return ["другое" for _ in texts]
+
+        with self.assertRaisesRegex(RuntimeError, "changed spelling"):
+            module.align_prediction_or_fallback_wordwise(
+                predictor, "Это слово.", "Это совсем другое.", 8
+            )
+
+
 class ThirdModelFullBookCoverageTests(unittest.TestCase):
     def test_accepts_complete_multisyllabic_occurrence_alignment(self):
         expected = {(0, 1), (0, 2), (4, 0)}

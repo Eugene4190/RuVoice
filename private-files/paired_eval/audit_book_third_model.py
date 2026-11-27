@@ -378,6 +378,58 @@ def require_full_model_occurrence_coverage(
         )
 
 
+def align_prediction_or_fallback_wordwise(
+    predictor: Any,
+    input_text: str,
+    predicted_text: str,
+    batch_size: int,
+) -> tuple[list[str], bool]:
+    """Keep contextual output when aligned; retry per token when the model changes token count.
+
+    The character model can omit or split a token in a long sentence. Dropping that
+    entire sentence makes full-book coverage incomplete. Retry only that window by
+    sending each original token independently; accept it only with one-to-one,
+    spelling-preserving output from the same model.
+    """
+    source_words = WORD_RE.findall(input_text)
+    predicted_words = WORD_RE.findall(predicted_text)
+    if len(source_words) == len(predicted_words):
+        return predicted_words, False
+    if not source_words:
+        return [], False
+
+    fallback = predictor(
+        source_words,
+        format="apostrophe",
+        batch_size=max(1, min(batch_size, len(source_words))),
+    )
+    if isinstance(fallback, str):
+        fallback = [fallback]
+    if not isinstance(fallback, (list, tuple)) or len(fallback) != len(source_words):
+        output_count = len(fallback) if isinstance(fallback, (list, tuple)) else type(fallback).__name__
+        raise RuntimeError(
+            "Third-model word-wise fallback returned an unaligned batch: "
+            f"input_words={len(source_words)}, outputs={output_count}"
+        )
+
+    aligned: list[str] = []
+    for index, (source_word, raw_output) in enumerate(zip(source_words, fallback)):
+        word_outputs = WORD_RE.findall(str(raw_output))
+        if len(word_outputs) != 1:
+            raise RuntimeError(
+                "Third-model word-wise fallback did not return exactly one token: "
+                f"index={index}, source={source_word!r}, output={str(raw_output)!r}"
+            )
+        output_word = word_outputs[0]
+        if norm(output_word.replace("'", "").replace("’", "")) != norm(source_word):
+            raise RuntimeError(
+                "Third-model word-wise fallback changed spelling: "
+                f"index={index}, source={source_word!r}, output={output_word!r}"
+            )
+        aligned.append(output_word)
+    return aligned, True
+
+
 def write_tsv(path: Path, rows: list[list[Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
@@ -472,6 +524,7 @@ def main() -> int:
         expected_segment_count += len(base_by_segment.get(index, []))
 
     predictions: list[str] = []
+    predictor = None
     if jobs:
         from ruaccent import load_accentor
         import torch
@@ -507,10 +560,12 @@ def main() -> int:
     for job, predicted_text in zip(jobs, predictions):
         segment_index, chunk_number, chunk_text, word_offset, expected_count = job
         input_words = WORD_RE.findall(chunk_text)
-        predicted_words = WORD_RE.findall(predicted_text)
-        if len(input_words) != len(predicted_words):
+        predicted_words, used_wordwise_fallback = align_prediction_or_fallback_wordwise(
+            predictor, chunk_text, predicted_text, args.batch_size
+        )
+        if used_wordwise_fallback:
             counters["window_token_count_mismatch"] += 1
-            continue
+            counters["wordwise_fallback_windows"] += 1
         expected_tokens = base_by_segment.get(segment_index, [])
         for local_index, (input_word, predicted_word) in enumerate(zip(input_words, predicted_words)):
             word_index = word_offset + local_index
