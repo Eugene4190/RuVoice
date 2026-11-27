@@ -2,7 +2,7 @@
 
 Дата актуализации: 2026-11-28.
 Рабочая ветка: `stress-dictionary-pipeline`.
-Проверенный кодовый commit: `4a72f73c0677b2bf1952092797e34a3ff1f38bf4`.
+Последняя рабочая версия: `58cd3bb564d9a78b073f2a6f4704d30cc708fdfe`; предыдущий реальный Windows smoke test выявил конфликт между regression fixture и контекстным правилом слова «раздроблен».
 PR #1: [Draft, не слит](https://github.com/Eugene4190/RuVoice/pull/1). `main` не изменён.
 
 ## Цель и правила
@@ -24,6 +24,10 @@ PR #1: [Draft, не слит](https://github.com/Eugene4190/RuVoice/pull/1). `ma
 - [Kotlin workflow 46075123607](https://github.com/Eugene4190/RuVoice/actions/runs/46075123607) — success: сборка desktop JVM runtime и focused Full/Lite JVM-тесты; все шаги задачи завершились успешно.
 - [Windows portable build 46075119099](https://github.com/Eugene4190/RuVoice/actions/runs/46075119099) — на момент актуализации выполняется шаг `Assemble the real production Kotlin desktop runtime`. Готовый EXE, ZIP и upload-to-ZIP smoke test ещё не подтверждены.
 - Тестовая книга в публичном CI — синтетическая. Workflow выставляет `RUVOICE_REFERENCE_BOOK_PRIVATE=false`; он не использует личный EPUB.
+
+## Последний реальный прогон и исправление
+
+Windows build дошёл до EPUB `8.Iskusstvo..epub` (SHA-256 совпал с манифестом), запустил оригинальный RuVoice, но smoke test остановился на `fragmented-01`: end-to-end regression fixture ожидал `ё` в слове «раздроблен». Для контекста «Если человек раздроблен…» уже существует контекстное правило, фиксирующее краткое прилагательное «раздро́блен», а не причастие «раздроблён». Fixture исправлен на `NO_YO`, а Python-тест теперь фиксирует это различие. Следующий Windows запуск должен подтвердить, проходит ли полный paired audit и дальнейшие стадии.
 
 ## Критические незакрытые критерии
 

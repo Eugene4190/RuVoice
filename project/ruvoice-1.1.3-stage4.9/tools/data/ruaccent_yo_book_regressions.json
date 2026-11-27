@@ -237,11 +237,11 @@
       "expect": [
         {
           "word": "раздроблен",
-          "label": "YO"
+          "label": "NO_YO"
         }
       ],
-      "rationale": "Contextually expected ё spelling.",
-      "expected_source": "FIXED_DICTIONARY"
+      "rationale": "Contextually this is the short adjective раздро́блен, not the masculine passive participle раздроблён. The book-specific context acceptance distinguishes the adjective from the participle.",
+      "expected_source": "CONTEXTUAL_ADJECTIVE"
     },
     {
       "id": "samoe-11",

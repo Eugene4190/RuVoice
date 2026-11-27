@@ -6,6 +6,12 @@ on:
       - stress-dictionary-pipeline
     paths:
       - ".github/workflows/build-ruvoice-book-tool-windows.yml"
+      - "private-files/paired_eval/UploadedEpubPairedEvaluation.kt"
+      - "private-files/paired_eval/book_context_acceptances.tsv"
+      - "private-files/paired_eval/audit_book_third_model.py"
+      - "private-files/paired_eval/full_book_ruvoice_quality.py"
+      - "private-files/paired_eval/package_ruvoice_import.py"
+      - "project/ruvoice-1.1.3-stage4.9/tools/data/ruaccent_yo_book_regressions.json"
   pull_request:
     branches:
       - main

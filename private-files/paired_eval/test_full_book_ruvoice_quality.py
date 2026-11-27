@@ -272,6 +272,18 @@ class WholeBookQualityVerdictTests(unittest.TestCase):
         self.assertNotEqual(negative, "CONTEXTUAL_VARIANT_ACCEPTED")
 
 
+    def test_fragmented_book_case_is_adjective_not_yo_participle(self) -> None:
+        rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
+        status, reason = quality.verdict(
+            "раздроблен", 1, 2,
+            {2: {"раздробить:participle"}},
+            {1: {"раздробленный:adjective"}, 2: {"раздроблённый:participle"}},
+            set(),
+            "Если человек раздроблен, ветвей может быть и несколько.",
+            rules,
+        )
+        self.assertEqual(status, "CONTEXTUAL_VARIANT_ACCEPTED")
+        self.assertIn("прилагательное", reason.lower())
     def test_final_review_contextual_variants_are_not_misclassified(self) -> None:
         rules = quality.load_context_acceptances(SOURCE.with_name("book_context_acceptances.tsv"))
         cases = [
