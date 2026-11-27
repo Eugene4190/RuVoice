@@ -84,12 +84,12 @@ class PackageRuVoiceImportTests(unittest.TestCase):
             encoding="utf-8",
         )
         reports = {
-            "Book_Third_Model_AllOccurrences.tsv": "segment_index\\tword_index\\n0\\t0\\n",
-            "Book_Third_Model_Disagreements.tsv": "word\\truvoice_position\\nпример\\t0\\n",
-            "Book_Three_Model_Confirmed_Overrides.txt": "пример прим+ер\\n",
-            "Book_Three_Model_OOV_Review.txt": "редкое р+едкое\\n",
-            "Book_Three_Model_Override_Evidence.tsv": "tier\\tword\\nONE_DICTIONARY_PLUS_TWO_MODELS\\tпример\\n",
-            "Book_Three_Model_Override_Summary.json": json.dumps({"confirmed_wordforms": 2}, ensure_ascii=False) + "\\n",
+            "Book_Third_Model_AllOccurrences.tsv": "segment_index\tword_index\n0\t0\n",
+            "Book_Third_Model_Disagreements.tsv": "word\truvoice_position\nпример\t0\n",
+            "Book_Three_Model_Confirmed_Overrides.txt": "пример прим+ер\n",
+            "Book_Three_Model_OOV_Review.txt": "редкое р+едкое\n",
+            "Book_Three_Model_Override_Evidence.tsv": "tier\tword\nONE_DICTIONARY_PLUS_TWO_MODELS\tпример\n",
+            "Book_Three_Model_Override_Summary.json": json.dumps({"confirmed_wordforms": 2}, ensure_ascii=False) + chr(10),
         }
         for name, text in reports.items():
             (third / name).write_text(text, encoding="utf-8")
