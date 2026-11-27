@@ -231,15 +231,15 @@ class ReviewedSecondPassTests(unittest.TestCase):
             replacements = root / "replacements.txt"
             manual = root / "manual.txt"
             auto = root / "auto-empty.txt"
-            auto.write_text("# no automatic overrides\\n", encoding="utf-8")
+            auto.write_text("# no automatic overrides", encoding="utf-8")
             context_rules = root / "context.tsv"
 
-            with patch.object(workflow, "_run_java") as run_java, \\
-                 patch.object(workflow, "_run_quality_module") as run_quality:
-                result = workflow._run_reviewed_second_pass(
-                    paths, book, paired, work, private_home, "sha256",
-                    replacements, manual, auto, context_rules,
-                )
+            with patch.object(workflow, "_run_java") as run_java:
+                with patch.object(workflow, "_run_quality_module") as run_quality:
+                    result = workflow._run_reviewed_second_pass(
+                        paths, book, paired, work, private_home, "sha256",
+                        replacements, manual, auto, context_rules,
+                    )
 
             self.assertEqual(result, work / "final-quality")
             run_java.assert_called_once_with(
