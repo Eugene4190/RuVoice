@@ -6,6 +6,14 @@ import runpy
 import sys
 from pathlib import Path
 
+from portable_stdio import configure_utf8_stdio
+
+# The predictor prints Unicode status messages (including emoji). PyInstaller's
+# Windows console otherwise inherits the legacy CP1252 code page and can abort
+# model initialization before the book audit starts. Configure the streams
+# before importing or invoking either model.
+configure_utf8_stdio()
+
 # Import at module scope so PyInstaller collects the native/runtime dependencies
 # for both modes into the same portable directory.
 import torch
