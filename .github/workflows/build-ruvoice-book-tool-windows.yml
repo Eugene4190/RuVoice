@@ -286,6 +286,9 @@ jobs:
             "--workpath", (Join-Path $out "work"),
             "--specpath", $out,
             "--paths", $tool,
+            # portable_stdio.py lives in the parent tool directory, not desktop_runtime.
+            # Add both search roots so PyInstaller bundles the UTF-8 bootstrap module.
+            "--paths", (Split-Path -Parent $tool),
             "--collect-all", "torch",
             "--collect-all", "ruaccent",
             "--collect-all", "numpy",

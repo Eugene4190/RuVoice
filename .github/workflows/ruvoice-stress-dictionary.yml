@@ -28,6 +28,7 @@ jobs:
           python -m py_compile \
             experiments/ruvoice-stress-dictionary/portable_stdio.py \
             experiments/ruvoice-stress-dictionary/test_portable_stdio.py \
+            experiments/ruvoice-stress-dictionary/desktop_runtime/ruvoice_model_worker.py \
             experiments/ruvoice-stress-dictionary/book_tool_paths.py \
             experiments/ruvoice-stress-dictionary/private_book_server.py \
             experiments/ruvoice-stress-dictionary/local_full_book_workflow.py \
